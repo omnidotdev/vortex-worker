@@ -16,7 +16,6 @@ import type {
   ConditionStep,
   DelayStep,
   Edge,
-  ExecutionContext,
   LoopStep,
   Step,
   SwitchStep,
@@ -25,10 +24,7 @@ import type {
 } from "../dsl/types";
 
 // Helper to create a minimal workflow definition
-function createWorkflow(
-  steps: Step[],
-  edges: Edge[] = [],
-): WorkflowDefinition {
+function createWorkflow(steps: Step[], edges: Edge[] = []): WorkflowDefinition {
   return {
     version: "1.0",
     steps,
@@ -358,7 +354,9 @@ describe("executeStep", () => {
         },
       };
       const def = createWorkflow([switchStep]);
-      const ctx = createExecutionContext("wf-1", "run-1", { status: "unknown" });
+      const ctx = createExecutionContext("wf-1", "run-1", {
+        status: "unknown",
+      });
 
       const { result } = await executeStep(def, switchStep, ctx);
 
@@ -474,7 +472,7 @@ describe("template expression resolution", () => {
       name: "Check Nested",
       position: { x: 0, y: 0 },
       condition: {
-        expression: "{{trigger.user.role}} === \"admin\"",
+        expression: '{{trigger.user.role}} === "admin"',
         trueBranch: "admin",
         falseBranch: "user",
       },
