@@ -192,7 +192,7 @@ export class MCPIntegrationClient {
       return {
         success: !result.isError,
         content,
-        isError: result.isError ?? false,
+        isError: Boolean(result.isError),
       };
     } catch (error) {
       return {
