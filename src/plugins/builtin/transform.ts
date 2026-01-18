@@ -60,7 +60,12 @@ const jsonPath = async (
   const startTime = performance.now();
 
   try {
-    const { data, path, first = false, resultKey } = inputs as JsonPathInput;
+    const {
+      data,
+      path,
+      first = false,
+      resultKey,
+    } = inputs as unknown as JsonPathInput;
 
     if (!path) {
       return {
@@ -107,7 +112,7 @@ const renderTemplate = async (
       variables,
       delimiterStart = "{{",
       delimiterEnd = "}}",
-    } = inputs as TemplateInput;
+    } = inputs as unknown as TemplateInput;
 
     if (!template) {
       return {
@@ -158,7 +163,7 @@ const mapData = async (
   const startTime = performance.now();
 
   try {
-    const { data, mapping } = inputs as MapInput;
+    const { data, mapping } = inputs as unknown as MapInput;
 
     if (!mapping || typeof mapping !== "object") {
       return {
@@ -209,7 +214,7 @@ const pick = async (
   const startTime = performance.now();
 
   try {
-    const { data, keys } = inputs as PickOmitInput;
+    const { data, keys } = inputs as unknown as PickOmitInput;
 
     if (!data || typeof data !== "object") {
       return {
@@ -258,7 +263,7 @@ const omit = async (
   const startTime = performance.now();
 
   try {
-    const { data, keys } = inputs as PickOmitInput;
+    const { data, keys } = inputs as unknown as PickOmitInput;
 
     if (!data || typeof data !== "object") {
       return {

@@ -68,7 +68,7 @@ const executeRequest = async (
       timeout = 30000,
       followRedirects = true,
       auth,
-    } = inputs as HttpRequestInput;
+    } = inputs as unknown as HttpRequestInput;
 
     if (!url) {
       return {

@@ -169,15 +169,21 @@ export class MCPIntegrationClient {
         arguments: args,
       });
 
-      const content: MCPContent[] = result.content.map((c) => {
+      const contentArray = result.content as Array<{
+        type: string;
+        text?: string;
+        data?: string;
+        mimeType?: string;
+      }>;
+      const content: MCPContent[] = contentArray.map((c) => {
         if (c.type === "text") {
-          return { type: "text" as const, text: c.text };
+          return { type: "text" as const, text: c.text ?? "" };
         }
         if (c.type === "image") {
           return {
             type: "image" as const,
-            data: c.data,
-            mimeType: c.mimeType,
+            data: c.data ?? "",
+            mimeType: c.mimeType ?? "image/png",
           };
         }
         return { type: "resource" as const };
@@ -186,7 +192,7 @@ export class MCPIntegrationClient {
       return {
         success: !result.isError,
         content,
-        isError: result.isError,
+        isError: result.isError ?? false,
       };
     } catch (error) {
       return {

@@ -30,6 +30,7 @@ import type {
 class ExtismLoadedPlugin implements LoadedPlugin {
   readonly id: string;
   readonly manifest: PluginManifest;
+  readonly loadedAt: Date;
   private plugin: ExtismPlugin | null;
 
   constructor(id: string, manifest: PluginManifest, plugin: ExtismPlugin) {
