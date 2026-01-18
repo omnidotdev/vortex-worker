@@ -86,22 +86,19 @@ export class HatchetExecutor implements WorkflowExecutor {
     try {
       // Use Hatchet v1 API to get run details
       const runDetails = await this.v1Client.runs.get(runId);
+      const run = runDetails.run;
 
-      const status = mapHatchetStatus(runDetails.status || "PENDING");
-      const startedAt = runDetails.startedAt
-        ? new Date(runDetails.startedAt)
-        : new Date();
-      const completedAt = runDetails.finishedAt
-        ? new Date(runDetails.finishedAt)
-        : undefined;
+      const status = mapHatchetStatus(run.status || "PENDING");
+      const startedAt = run.startedAt ? new Date(run.startedAt) : new Date();
+      const completedAt = run.finishedAt ? new Date(run.finishedAt) : undefined;
 
       // Map step results from Hatchet response
       const steps: StepResult[] = [];
       if (runDetails.tasks) {
         for (const task of runDetails.tasks) {
           steps.push({
-            stepId: task.taskExternalId || task.taskId || "",
-            stepName: task.displayName || task.taskId,
+            stepId: task.stepId || task.metadata.id,
+            stepName: task.displayName || task.metadata.id,
             status: mapHatchetStatus(task.status || "PENDING") as
               | "pending"
               | "running"
@@ -112,7 +109,7 @@ export class HatchetExecutor implements WorkflowExecutor {
             completedAt: task.finishedAt
               ? new Date(task.finishedAt)
               : undefined,
-            output: task.output,
+            output: task.output as Record<string, unknown> | undefined,
             error: task.errorMessage,
           });
         }
@@ -120,7 +117,7 @@ export class HatchetExecutor implements WorkflowExecutor {
 
       return {
         runId,
-        workflowId: runDetails.workflowName || runId,
+        workflowId: run.workflowId || runId,
         status,
         startedAt,
         completedAt,
@@ -128,11 +125,11 @@ export class HatchetExecutor implements WorkflowExecutor {
           ? completedAt.getTime() - startedAt.getTime()
           : undefined,
         steps,
-        output: runDetails.output as Record<string, unknown> | undefined,
-        error: runDetails.errorMessage
+        output: run.output as Record<string, unknown> | undefined,
+        error: run.errorMessage
           ? {
               code: "EXECUTION_ERROR",
-              message: runDetails.errorMessage,
+              message: run.errorMessage,
             }
           : undefined,
       };
