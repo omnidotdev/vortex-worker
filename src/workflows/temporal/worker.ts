@@ -5,7 +5,7 @@
  * The worker executes activities and workflows on the "vortex-dsl" task queue.
  */
 
-import { Worker, NativeConnection } from "@temporalio/worker";
+import { NativeConnection, Worker } from "@temporalio/worker";
 
 import * as activities from "./activities";
 
@@ -62,8 +62,6 @@ export async function runTemporalWorker(
   config: TemporalWorkerConfig = {},
 ): Promise<void> {
   const worker = await createTemporalWorker(config);
-
-  console.log("Temporal worker started, listening on task queue:", config.taskQueue || "vortex-dsl");
 
   // Run until shutdown signal
   await worker.run();

@@ -10,15 +10,15 @@
  */
 
 import {
-  proxyActivities,
-  defineSignal,
-  setHandler,
   condition,
+  defineSignal,
+  proxyActivities,
+  setHandler,
   sleep,
   workflowInfo,
 } from "@temporalio/workflow";
 
-import type { WorkflowDefinition, DelayStep, GateStep } from "../../dsl/types";
+import type { DelayStep, GateStep, WorkflowDefinition } from "../../dsl/types";
 import type * as activities from "./activities";
 
 // Proxy activities with retry policies
@@ -267,7 +267,7 @@ function parseDuration(duration: string): number {
   if (!match) {
     // Try parsing as number (assume milliseconds)
     const ms = parseInt(duration, 10);
-    return isNaN(ms) ? 30000 : ms;
+    return Number.isNaN(ms) ? 30000 : ms;
   }
 
   const [, value, unit] = match;

@@ -19,8 +19,10 @@ import {
   WorkflowExecutionAlreadyStartedError,
 } from "@temporalio/client";
 
+import { RunNotFoundError } from "../interface";
+
 import type { WorkflowDefinition } from "../../dsl/types";
-import { RunNotFoundError, type WorkflowExecutor } from "../interface";
+import type { WorkflowExecutor } from "../interface";
 import type {
   ExecuteOptions,
   ExecutionEvent,
@@ -168,7 +170,7 @@ export class TemporalExecutor implements WorkflowExecutor {
     if (status === "completed") {
       try {
         output = await handle.result();
-      } catch (e) {
+      } catch (_e) {
         // Result not available
       }
     } else if (status === "failed") {

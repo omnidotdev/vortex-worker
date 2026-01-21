@@ -24,8 +24,6 @@ export async function initializeMCPServers(): Promise<void> {
       .from(schema.mcpServerTable)
       .where(eq(schema.mcpServerTable.isEnabled, true));
 
-    console.log(`Found ${servers.length} enabled MCP server(s) to connect`);
-
     // Connect to each server
     const connectionResults = await Promise.allSettled(
       servers.map(async (server) => {
@@ -38,10 +36,7 @@ export async function initializeMCPServers(): Promise<void> {
           cwd: server.cwd ?? undefined,
           enabled: server.isEnabled,
         };
-
-        console.log(`Connecting to MCP server: ${server.name} (${server.id})`);
         await mcpClient.connect(config);
-        console.log(`Connected to MCP server: ${server.name}`);
 
         return { id: server.id, name: server.name };
       }),
@@ -54,7 +49,6 @@ export async function initializeMCPServers(): Promise<void> {
     const failed = connectionResults.filter((r) => r.status === "rejected");
 
     if (successful.length > 0) {
-      console.log(`Successfully connected to ${successful.length} MCP server(s)`);
     }
 
     if (failed.length > 0) {
@@ -112,7 +106,6 @@ export async function connectMCPServer(serverId: string): Promise<boolean> {
     };
 
     await mcpClient.connect(config);
-    console.log(`Connected to MCP server on-demand: ${server.name}`);
     return true;
   } catch (error) {
     console.error(`Failed to connect to MCP server ${serverId}:`, error);

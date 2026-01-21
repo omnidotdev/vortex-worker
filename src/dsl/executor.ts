@@ -1,13 +1,11 @@
 import { match } from "ts-pattern";
 
-import { getMCPClient } from "../mcp";
+import { connectMCPServer, getMCPClient } from "../mcp";
 import {
   executeBuiltinAction,
   getPluginHost,
   isBuiltinPlugin,
 } from "../plugins";
-
-import { connectMCPServer } from "../mcp";
 
 import type { PluginCallResult } from "../plugins/types";
 import type {

@@ -6,9 +6,9 @@
 
 // Export activities for use with Temporal Worker
 export * as activities from "./activities";
-
 // Export workflow for registration with Temporal
-export { dslWorkflow, approvalSignal, customSignal } from "./workflow";
+export { approvalSignal, customSignal, dslWorkflow } from "./workflow";
+
 export type {
   DSLWorkflowInput,
   DSLWorkflowOutput,

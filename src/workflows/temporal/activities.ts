@@ -180,8 +180,8 @@ export async function evaluateCondition(
  * Signal handler for gate steps that wait for external signals
  */
 export async function waitForSignal(
-  signalName: string,
-  timeoutMs?: number,
+  _signalName: string,
+  _timeoutMs?: number,
 ): Promise<{ received: boolean; payload?: unknown }> {
   // This is a placeholder - actual signal handling is done in the workflow
   // using Temporal's signal feature
