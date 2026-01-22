@@ -31,42 +31,258 @@ import type {
 
 /**
  * Map integration IDs to Activepieces connector package IDs.
+ *
+ * Most integrations follow the pattern: id -> @activepieces/piece-{id}
+ * Exceptions are noted with comments.
+ *
+ * Note: "claude" is the Activepieces package name for Anthropic's Claude API.
+ * We map both "claude" and "anthropic" to the same package for user convenience.
  */
 const INTEGRATION_TO_CONNECTOR: Record<string, string> = {
-  // Communication
+  // ===== Communication =====
   discord: "@activepieces/piece-discord",
   slack: "@activepieces/piece-slack",
-  telegram: "@activepieces/piece-telegram-bot",
+  telegram: "@activepieces/piece-telegram-bot", // note: -bot suffix
   twilio: "@activepieces/piece-twilio",
+  whatsapp: "@activepieces/piece-whatsapp",
+  "whatsapp-business": "@activepieces/piece-whatsapp-business",
+  intercom: "@activepieces/piece-intercom",
+  "facebook-messenger": "@activepieces/piece-facebook-messenger",
+  pushover: "@activepieces/piece-pushover",
+  ntfy: "@activepieces/piece-ntfy",
+  "matrix-chat": "@activepieces/piece-matrix",
+  mattermost: "@activepieces/piece-mattermost",
 
-  // Developer
+  // ===== Email =====
+  gmail: "@activepieces/piece-gmail",
+  "microsoft-outlook": "@activepieces/piece-microsoft-outlook",
+  sendgrid: "@activepieces/piece-sendgrid",
+  mailchimp: "@activepieces/piece-mailchimp",
+  mailgun: "@activepieces/piece-mailgun",
+  sendinblue: "@activepieces/piece-sendinblue",
+  postmark: "@activepieces/piece-postmark",
+  resend: "@activepieces/piece-resend",
+  smtp: "@activepieces/piece-smtp",
+  imap: "@activepieces/piece-imap",
+
+  // ===== Developer Tools =====
   github: "@activepieces/piece-github",
   gitlab: "@activepieces/piece-gitlab",
+  bitbucket: "@activepieces/piece-bitbucket",
   linear: "@activepieces/piece-linear",
+  jira: "@activepieces/piece-jira-cloud",
+  "jira-cloud": "@activepieces/piece-jira-cloud",
+  sentry: "@activepieces/piece-sentry",
+  datadog: "@activepieces/piece-datadog",
+  pagerduty: "@activepieces/piece-pagerduty",
+  vercel: "@activepieces/piece-vercel",
+  netlify: "@activepieces/piece-netlify",
+  "render-deploy": "@activepieces/piece-render",
+  heroku: "@activepieces/piece-heroku",
+  cloudflare: "@activepieces/piece-cloudflare",
+  "digitalocean-spaces": "@activepieces/piece-digitalocean-spaces",
 
-  // Productivity
+  // ===== Productivity & Project Management =====
   notion: "@activepieces/piece-notion",
+  asana: "@activepieces/piece-asana",
+  trello: "@activepieces/piece-trello",
+  todoist: "@activepieces/piece-todoist",
+  clickup: "@activepieces/piece-clickup",
+  monday: "@activepieces/piece-monday",
+  basecamp: "@activepieces/piece-basecamp",
+  "microsoft-to-do": "@activepieces/piece-microsoft-todo",
+  coda: "@activepieces/piece-coda",
+
+  // ===== Spreadsheets & Databases =====
   "google-sheets": "@activepieces/piece-google-sheets",
   airtable: "@activepieces/piece-airtable",
-  asana: "@activepieces/piece-asana",
-  todoist: "@activepieces/piece-todoist",
-  trello: "@activepieces/piece-trello",
+  "microsoft-excel": "@activepieces/piece-microsoft-excel-365",
+  supabase: "@activepieces/piece-supabase",
+  firebase: "@activepieces/piece-firebase",
+  mongodb: "@activepieces/piece-mongodb",
+  mysql: "@activepieces/piece-mysql",
+  postgres: "@activepieces/piece-postgres",
+  redis: "@activepieces/piece-redis",
+  snowflake: "@activepieces/piece-snowflake",
 
-  // Marketing & CRM
+  // ===== Cloud Storage =====
+  "google-drive": "@activepieces/piece-google-drive",
+  dropbox: "@activepieces/piece-dropbox",
+  box: "@activepieces/piece-box",
+  onedrive: "@activepieces/piece-microsoft-onedrive",
+  "microsoft-onedrive": "@activepieces/piece-microsoft-onedrive",
+  "amazon-s3": "@activepieces/piece-s3",
+  s3: "@activepieces/piece-s3",
+
+  // ===== CRM & Marketing =====
   hubspot: "@activepieces/piece-hubspot",
-  mailchimp: "@activepieces/piece-mailchimp",
-  sendgrid: "@activepieces/piece-sendgrid",
+  salesforce: "@activepieces/piece-salesforce",
+  pipedrive: "@activepieces/piece-pipedrive",
+  zoho: "@activepieces/piece-zoho-crm",
+  "zoho-crm": "@activepieces/piece-zoho-crm",
+  freshdesk: "@activepieces/piece-freshdesk",
+  freshsales: "@activepieces/piece-freshsales",
+  zendesk: "@activepieces/piece-zendesk",
+  "active-campaign": "@activepieces/piece-activecampaign",
+  activecampaign: "@activepieces/piece-activecampaign",
+  klaviyo: "@activepieces/piece-klaviyo",
+  convertkit: "@activepieces/piece-convertkit",
+  drip: "@activepieces/piece-drip",
+  "constant-contact": "@activepieces/piece-constant-contact",
+  beehiiv: "@activepieces/piece-beehiiv",
 
-  // Payments
+  // ===== Forms & Surveys =====
+  typeform: "@activepieces/piece-typeform",
+  "google-forms": "@activepieces/piece-google-forms",
+  jotform: "@activepieces/piece-jotform",
+  surveymonkey: "@activepieces/piece-surveymonkey",
+  tally: "@activepieces/piece-tally",
+
+  // ===== Payments & Finance =====
   stripe: "@activepieces/piece-stripe",
+  paypal: "@activepieces/piece-paypal",
+  square: "@activepieces/piece-square",
+  quickbooks: "@activepieces/piece-quickbooks",
+  "quickbooks-online": "@activepieces/piece-quickbooks",
+  xero: "@activepieces/piece-xero",
+  plaid: "@activepieces/piece-plaid",
+  lemonsqueezy: "@activepieces/piece-lemonsqueezy",
+  gumroad: "@activepieces/piece-gumroad",
+  paddle: "@activepieces/piece-paddle",
 
-  // AI
+  // ===== Calendar & Scheduling =====
+  "google-calendar": "@activepieces/piece-google-calendar",
+  "microsoft-teams": "@activepieces/piece-microsoft-teams",
+  calendly: "@activepieces/piece-calendly",
+  zoom: "@activepieces/piece-zoom",
+  cal: "@activepieces/piece-cal-com",
+  "cal-com": "@activepieces/piece-cal-com",
+
+  // ===== AI & Machine Learning =====
   openai: "@activepieces/piece-openai",
   claude: "@activepieces/piece-claude",
-  anthropic: "@activepieces/piece-claude", // alias
+  anthropic: "@activepieces/piece-claude", // alias - Activepieces uses "claude" as package name
   "google-gemini": "@activepieces/piece-google-gemini",
   groq: "@activepieces/piece-groq",
-  perplexity: "@activepieces/piece-perplexity",
+  perplexity: "@activepieces/piece-perplexity-ai",
+  "stability-ai": "@activepieces/piece-stability-ai",
+  replicate: "@activepieces/piece-replicate",
+  huggingface: "@activepieces/piece-huggingface",
+  cohere: "@activepieces/piece-cohere",
+  mistral: "@activepieces/piece-mistral-ai",
+  deepl: "@activepieces/piece-deepl",
+  elevenlabs: "@activepieces/piece-elevenlabs",
+  assemblyai: "@activepieces/piece-assemblyai",
+  "amazon-bedrock": "@activepieces/piece-amazon-bedrock",
+  "azure-openai": "@activepieces/piece-azure-openai",
+  ollama: "@activepieces/piece-ollama",
+
+  // ===== E-commerce =====
+  shopify: "@activepieces/piece-shopify",
+  woocommerce: "@activepieces/piece-woocommerce",
+  bigcommerce: "@activepieces/piece-bigcommerce",
+  magento: "@activepieces/piece-magento",
+  etsy: "@activepieces/piece-etsy",
+  printful: "@activepieces/piece-printful",
+
+  // ===== Social Media =====
+  twitter: "@activepieces/piece-twitter",
+  x: "@activepieces/piece-twitter", // alias - X is the new name for Twitter
+  facebook: "@activepieces/piece-facebook-pages",
+  "facebook-pages": "@activepieces/piece-facebook-pages",
+  instagram: "@activepieces/piece-instagram-business",
+  "instagram-business": "@activepieces/piece-instagram-business",
+  linkedin: "@activepieces/piece-linkedin",
+  youtube: "@activepieces/piece-youtube",
+  tiktok: "@activepieces/piece-tiktok",
+  pinterest: "@activepieces/piece-pinterest",
+  reddit: "@activepieces/piece-reddit",
+  mastodon: "@activepieces/piece-mastodon",
+  bluesky: "@activepieces/piece-bsky",
+  bsky: "@activepieces/piece-bsky",
+
+  // ===== Analytics =====
+  "google-analytics": "@activepieces/piece-google-analytics",
+  mixpanel: "@activepieces/piece-mixpanel",
+  segment: "@activepieces/piece-segment",
+  amplitude: "@activepieces/piece-amplitude",
+  posthog: "@activepieces/piece-posthog",
+  plausible: "@activepieces/piece-plausible",
+  "google-search-console": "@activepieces/piece-google-search-console",
+
+  // ===== Content Management =====
+  wordpress: "@activepieces/piece-wordpress",
+  webflow: "@activepieces/piece-webflow",
+  contentful: "@activepieces/piece-contentful",
+  strapi: "@activepieces/piece-strapi",
+  ghost: "@activepieces/piece-ghost",
+  medium: "@activepieces/piece-medium",
+  hashnode: "@activepieces/piece-hashnode",
+  "dev-to": "@activepieces/piece-dev-to",
+
+  // ===== Automation & Integration =====
+  http: "@activepieces/piece-http",
+  webhook: "@activepieces/piece-webhook",
+  webhooks: "@activepieces/piece-webhook",
+  "schedule-trigger": "@activepieces/piece-schedule",
+  schedule: "@activepieces/piece-schedule",
+  rss: "@activepieces/piece-rss",
+  xml: "@activepieces/piece-xml",
+  csv: "@activepieces/piece-csv",
+  json: "@activepieces/piece-json",
+  sftp: "@activepieces/piece-sftp",
+  ftp: "@activepieces/piece-ftp",
+
+  // ===== Document & File Processing =====
+  "google-docs": "@activepieces/piece-google-docs",
+  pdf: "@activepieces/piece-pdf",
+  "pdf-co": "@activepieces/piece-pdf-co",
+  docusign: "@activepieces/piece-docusign",
+  pandadoc: "@activepieces/piece-pandadoc",
+
+  // ===== Customer Support =====
+  freshchat: "@activepieces/piece-freshchat",
+  crisp: "@activepieces/piece-crisp",
+  "help-scout": "@activepieces/piece-help-scout",
+  helpscout: "@activepieces/piece-help-scout",
+  front: "@activepieces/piece-front",
+  "live-chat": "@activepieces/piece-livechat",
+  livechat: "@activepieces/piece-livechat",
+  drift: "@activepieces/piece-drift",
+
+  // ===== HR & Recruitment =====
+  bamboohr: "@activepieces/piece-bamboo-hr",
+  "bamboo-hr": "@activepieces/piece-bamboo-hr",
+  lever: "@activepieces/piece-lever",
+  greenhouse: "@activepieces/piece-greenhouse",
+  workable: "@activepieces/piece-workable",
+
+  // ===== No-code / Low-code Tools =====
+  "google-apps-script": "@activepieces/piece-google-apps-script",
+  retool: "@activepieces/piece-retool",
+  bubble: "@activepieces/piece-bubble",
+  glide: "@activepieces/piece-glide",
+
+  // ===== Miscellaneous =====
+  "open-router": "@activepieces/piece-open-router",
+  openrouter: "@activepieces/piece-open-router",
+  "ip-geo-location": "@activepieces/piece-ip-geolocation",
+  "text-helper": "@activepieces/piece-text-helper",
+  "date-helper": "@activepieces/piece-date-helper",
+  math: "@activepieces/piece-math-helper",
+  "math-helper": "@activepieces/piece-math-helper",
+  "data-mapper": "@activepieces/piece-data-mapper",
+  "store-piece": "@activepieces/piece-store",
+  store: "@activepieces/piece-store",
+  "delay-piece": "@activepieces/piece-delay",
+  delay: "@activepieces/piece-delay",
+  approval: "@activepieces/piece-approval",
+  "generate-banner": "@activepieces/piece-generatebanners",
+  qrcode: "@activepieces/piece-qrcode",
+  "image-helper": "@activepieces/piece-image-helper",
+  pastebin: "@activepieces/piece-pastebin",
+  "crypto-utils": "@activepieces/piece-crypto",
+  crypto: "@activepieces/piece-crypto",
 };
 
 export function findTriggerStep(steps: Step[]): TriggerStep | undefined {
@@ -200,15 +416,18 @@ const executeAction = async (
         action.integrationId,
       );
       if (auth) {
+        // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
         console.log(
           `[Executor] Loaded credentials for integration=${action.integrationId} org=${ctx.organizationId} type=${auth.type}`,
         );
       } else {
+        // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
         console.log(
           `[Executor] No credentials found for integration=${action.integrationId} org=${ctx.organizationId}`,
         );
       }
     } else {
+      // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
       console.log(
         `[Executor] No organizationId in context, skipping credential lookup for integration=${action.integrationId}`,
       );
@@ -428,7 +647,11 @@ async function executeLoop(
       if (Array.isArray(collection)) {
         for (let i = 0; i < collection.length && i < maxIterations; i++) {
           const iterationResult = await executeBodyOnce(i, collection[i]);
-          results.push({ index: i, item: collection[i], result: iterationResult });
+          results.push({
+            index: i,
+            item: collection[i],
+            result: iterationResult,
+          });
           iterations++;
         }
       }
@@ -585,9 +808,12 @@ async function executeParallel(
   };
 
   // Execute branches based on waitFor strategy
-  const branchCount = parallel.branches.length ||
+  const branchCount =
+    parallel.branches.length ||
     // Count branch handles if branches array is empty
-    def.edges.filter(e => e.source === step.id && e.sourceHandle?.startsWith("branch_")).length;
+    def.edges.filter(
+      (e) => e.source === step.id && e.sourceHandle?.startsWith("branch_"),
+    ).length;
 
   const branchPromises = Array.from({ length: branchCount }, (_, i) =>
     executeBranch(i),

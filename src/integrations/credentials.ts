@@ -8,9 +8,10 @@
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 
-import type { DecryptedCredentialValue } from "../connectors/types";
 import { DATABASE_URL } from "../lib/config/env.config";
 import { decryptJson, isEncrypted } from "../lib/crypto/encryption";
+
+import type { DecryptedCredentialValue } from "../connectors/types";
 
 // Define the schema types we need (avoiding circular import with vortex-api)
 interface Integration {
@@ -76,6 +77,7 @@ export async function getIntegrationCredentials(
   const integrations = integrationResult.rows as unknown as Integration[];
 
   if (integrations.length === 0) {
+    // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
     console.log(
       `[Credentials] No enabled integration found for org=${organizationId} type=${integrationType}`,
     );
@@ -99,6 +101,7 @@ export async function getIntegrationCredentials(
     const tokens = tokenResult.rows as unknown as OAuthToken[];
 
     if (tokens.length === 0) {
+      // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
       console.log(
         `[Credentials] No OAuth token found for integration=${integration.id}`,
       );
@@ -109,6 +112,7 @@ export async function getIntegrationCredentials(
 
     // Check if token is expired
     if (token.expiresAt && new Date(token.expiresAt) < new Date()) {
+      // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
       console.log(
         `[Credentials] OAuth token expired for integration=${integration.id}`,
       );
@@ -133,6 +137,7 @@ export async function getIntegrationCredentials(
   if (typeof rawConfig === "string" && isEncrypted(rawConfig)) {
     try {
       config = decryptJson<Record<string, unknown>>(rawConfig);
+      // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
       console.log(
         `[Credentials] Decrypted config for integration=${integration.id}`,
       );
@@ -148,8 +153,10 @@ export async function getIntegrationCredentials(
   }
 
   // Check for Twilio-style Basic Auth (accountSid + authToken)
-  const accountSid = (config.accountSid as string) || (config.account_sid as string);
-  const authToken = (config.authToken as string) || (config.auth_token as string);
+  const accountSid =
+    (config.accountSid as string) || (config.account_sid as string);
+  const authToken =
+    (config.authToken as string) || (config.auth_token as string);
   if (accountSid && authToken) {
     return {
       type: "basic_auth",
@@ -159,8 +166,8 @@ export async function getIntegrationCredentials(
   }
 
   // Check for generic username/password Basic Auth
-  const username = (config.username as string);
-  const password = (config.password as string);
+  const username = config.username as string;
+  const password = config.password as string;
   if (username && password) {
     return {
       type: "basic_auth",
@@ -198,6 +205,7 @@ export async function getIntegrationCredentials(
     };
   }
 
+  // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
   console.log(
     `[Credentials] No credentials found in integration config for integration=${integration.id}`,
   );

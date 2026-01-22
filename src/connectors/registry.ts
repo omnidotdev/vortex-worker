@@ -7,6 +7,7 @@
 
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+
 import type { Piece } from "@activepieces/pieces-framework";
 import type {
   ConnectorAction,
@@ -307,6 +308,7 @@ export async function discoverPieces(): Promise<string[]> {
       }
     }
 
+    // biome-ignore lint/suspicious/noConsole: Intentional startup logging
     console.log(`[Connectors] Discovered ${pieces.length} Activepieces pieces`);
   } catch (error) {
     console.warn("[Connectors] Failed to auto-discover pieces:", error);

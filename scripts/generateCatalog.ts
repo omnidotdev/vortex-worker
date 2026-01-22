@@ -12,7 +12,8 @@
  *   ../vortex-api/src/data/integrations/catalog.json
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Piece } from "@activepieces/pieces-framework";
 import { discoverPieces, loadConnector } from "../src/connectors/registry";
@@ -21,6 +22,48 @@ const OUTPUT_PATH = join(
   import.meta.dir,
   "../../vortex-api/src/data/integrations/catalog.json",
 );
+
+const CACHE_PATH = join(import.meta.dir, ".catalog-cache");
+const LOCK_PATH = join(import.meta.dir, "..", "bun.lock");
+
+/**
+ * Compute a hash of the lock file to detect dependency changes.
+ */
+async function computeLockHash(): Promise<string> {
+  try {
+    const lockContent = await readFile(LOCK_PATH, "utf-8");
+    return createHash("sha256").update(lockContent).digest("hex").slice(0, 16);
+  } catch {
+    // Lock file doesn't exist, return empty hash
+    return "";
+  }
+}
+
+/**
+ * Check if the catalog is up-to-date based on lock file hash.
+ */
+async function isCatalogCurrent(): Promise<boolean> {
+  try {
+    // Check if catalog exists
+    await stat(OUTPUT_PATH);
+
+    // Check if cache file exists and matches current lock hash
+    const cachedHash = await readFile(CACHE_PATH, "utf-8");
+    const currentHash = await computeLockHash();
+
+    return cachedHash.trim() === currentHash;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Save the current lock hash to the cache file.
+ */
+async function saveCacheHash(): Promise<void> {
+  const hash = await computeLockHash();
+  await writeFile(CACHE_PATH, hash);
+}
 
 interface CatalogAction {
   name: string;
@@ -185,6 +228,12 @@ function toSimpleId(packageId: string): string {
  * Main function.
  */
 async function main() {
+  // Check if catalog is already up-to-date
+  if (await isCatalogCurrent()) {
+    console.log("Catalog is up-to-date (dependencies unchanged). Skipping.");
+    return;
+  }
+
   console.log("Discovering installed Activepieces pieces...\n");
 
   const packageIds = await discoverPieces();
@@ -281,6 +330,9 @@ async function main() {
 
   await mkdir(dirname(OUTPUT_PATH), { recursive: true });
   await writeFile(OUTPUT_PATH, JSON.stringify(catalog, null, 2));
+
+  // Save cache hash for future runs
+  await saveCacheHash();
 
   console.log(`\nWrote catalog to: ${OUTPUT_PATH}`);
 }

@@ -84,12 +84,6 @@ function actionNodeToStep(node: ReactFlowNode): ActionStep {
   const inputs = (data.inputs as Record<string, unknown>) || {};
   const mergedInputs = { ...config, ...inputs };
 
-  // Debug logging
-  console.log("[actionNodeToStep] node.id:", node.id);
-  console.log("[actionNodeToStep] config:", JSON.stringify(config));
-  console.log("[actionNodeToStep] inputs:", JSON.stringify(inputs));
-  console.log("[actionNodeToStep] mergedInputs:", JSON.stringify(mergedInputs));
-
   return {
     id: node.id,
     type: "action",
