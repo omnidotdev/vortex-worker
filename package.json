@@ -23,6 +23,12 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@activepieces/piece-discord": "^0.4.0",
+    "@activepieces/piece-github": "^0.2.0",
+    "@activepieces/piece-openai": "^0.4.0",
+    "@activepieces/piece-slack": "^0.7.0",
+    "@activepieces/pieces-common": "^0.11.0",
+    "@activepieces/pieces-framework": "^0.23.0",
     "@extism/extism": "^2.0.0-rc13",
     "@hatchet-dev/typescript-sdk": "^1.10.5",
     "@modelcontextprotocol/sdk": "^1.25.2",
