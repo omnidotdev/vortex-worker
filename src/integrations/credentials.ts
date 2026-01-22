@@ -10,6 +10,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 
 import type { DecryptedCredentialValue } from "../connectors/types";
 import { DATABASE_URL } from "../lib/config/env.config";
+import { decryptJson, isEncrypted } from "../lib/crypto/encryption";
 
 // Define the schema types we need (avoiding circular import with vortex-api)
 interface Integration {
@@ -19,7 +20,7 @@ interface Integration {
   type: string;
   name: string;
   isEnabled: boolean;
-  config: Record<string, unknown>;
+  config: string | Record<string, unknown>; // May be encrypted string or object
   authMethod: string;
   oauthStatus: string | null;
 }
@@ -125,7 +126,48 @@ export async function getIntegrationCredentials(
   }
 
   // For API key or custom auth, use the config field
-  const config = integration.config || {};
+  // Config may be encrypted - decrypt if needed
+  let config: Record<string, unknown> = {};
+  const rawConfig = integration.config;
+
+  if (typeof rawConfig === "string" && isEncrypted(rawConfig)) {
+    try {
+      config = decryptJson<Record<string, unknown>>(rawConfig);
+      console.log(
+        `[Credentials] Decrypted config for integration=${integration.id}`,
+      );
+    } catch (err) {
+      console.error(
+        `[Credentials] Failed to decrypt config for integration=${integration.id}:`,
+        err,
+      );
+      return undefined;
+    }
+  } else if (typeof rawConfig === "object" && rawConfig !== null) {
+    config = rawConfig as Record<string, unknown>;
+  }
+
+  // Check for Twilio-style Basic Auth (accountSid + authToken)
+  const accountSid = (config.accountSid as string) || (config.account_sid as string);
+  const authToken = (config.authToken as string) || (config.auth_token as string);
+  if (accountSid && authToken) {
+    return {
+      type: "basic_auth",
+      username: accountSid,
+      password: authToken,
+    };
+  }
+
+  // Check for generic username/password Basic Auth
+  const username = (config.username as string);
+  const password = (config.password as string);
+  if (username && password) {
+    return {
+      type: "basic_auth",
+      username,
+      password,
+    };
+  }
 
   // Check common API key field names and return as secret_text
   const apiKey =

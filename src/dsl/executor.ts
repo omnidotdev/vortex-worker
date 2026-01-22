@@ -33,19 +33,31 @@ import type {
  * Map integration IDs to Activepieces connector package IDs.
  */
 const INTEGRATION_TO_CONNECTOR: Record<string, string> = {
+  // Communication
   discord: "@activepieces/piece-discord",
   slack: "@activepieces/piece-slack",
+  telegram: "@activepieces/piece-telegram-bot",
+  twilio: "@activepieces/piece-twilio",
+
+  // Developer
   github: "@activepieces/piece-github",
   gitlab: "@activepieces/piece-gitlab",
   linear: "@activepieces/piece-linear",
+
+  // Productivity
   notion: "@activepieces/piece-notion",
   "google-sheets": "@activepieces/piece-google-sheets",
   airtable: "@activepieces/piece-airtable",
+
+  // Marketing & CRM
   hubspot: "@activepieces/piece-hubspot",
   mailchimp: "@activepieces/piece-mailchimp",
+
+  // Payments
   stripe: "@activepieces/piece-stripe",
+
+  // AI
   openai: "@activepieces/piece-openai",
-  telegram: "@activepieces/piece-telegram-bot",
 };
 
 export function findTriggerStep(steps: Step[]): TriggerStep | undefined {
