@@ -2,9 +2,11 @@
  * Connector Registry
  *
  * Manages available connectors (Activepieces pieces).
- * Loads pieces from node_modules and extracts metadata.
+ * Auto-discovers installed pieces from node_modules.
  */
 
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { Piece } from "@activepieces/pieces-framework";
 import type {
   ConnectorAction,
@@ -22,30 +24,18 @@ import type {
 const loadedConnectors = new Map<string, LoadedConnector>();
 
 /**
- * List of available Activepieces piece packages.
- * Add new connectors here as dependencies are added.
+ * Cache of discovered piece package names.
  */
-const AVAILABLE_PIECES: string[] = [
-  // Communication
-  "@activepieces/piece-discord",
-  "@activepieces/piece-slack",
-  "@activepieces/piece-telegram-bot",
-  // Developer tools
-  "@activepieces/piece-github",
-  "@activepieces/piece-gitlab",
-  "@activepieces/piece-linear",
-  // Productivity
-  "@activepieces/piece-google-sheets",
-  "@activepieces/piece-notion",
-  "@activepieces/piece-airtable",
-  // CRM & Marketing
-  "@activepieces/piece-hubspot",
-  "@activepieces/piece-mailchimp",
-  // Payments
-  "@activepieces/piece-stripe",
-  // AI
-  "@activepieces/piece-openai",
-];
+let discoveredPieces: string[] | null = null;
+
+/**
+ * Packages to exclude from auto-discovery (not actual pieces).
+ */
+const EXCLUDED_PACKAGES = new Set([
+  "@activepieces/pieces-framework",
+  "@activepieces/pieces-common",
+  "@activepieces/pieces-apps",
+]);
 
 /**
  * Extract auth configuration from Activepieces piece.
@@ -212,6 +202,43 @@ function extractMetadata(packageId: string, piece: Piece): ConnectorMetadata {
 }
 
 /**
+ * Find the Piece instance from a module's exports.
+ * Activepieces pieces export the Piece instance as a named export (e.g., `discord`, `slack`).
+ */
+function findPieceExport(module: Record<string, unknown>): Piece | null {
+  // Look for an export that has the Piece class shape
+  for (const [key, value] of Object.entries(module)) {
+    // Skip internal properties
+    if (key === "__esModule" || key === "default") continue;
+
+    // Check if it looks like a Piece (has metadata and actions methods)
+    if (
+      value &&
+      typeof value === "object" &&
+      "metadata" in value &&
+      typeof (value as { metadata?: unknown }).metadata === "function" &&
+      "actions" in value &&
+      typeof (value as { actions?: unknown }).actions === "function"
+    ) {
+      return value as Piece;
+    }
+  }
+
+  // Fallback: try default export if it's a valid Piece
+  const defaultExport = module.default;
+  if (
+    defaultExport &&
+    typeof defaultExport === "object" &&
+    "metadata" in defaultExport &&
+    typeof (defaultExport as { metadata?: unknown }).metadata === "function"
+  ) {
+    return defaultExport as Piece;
+  }
+
+  return null;
+}
+
+/**
  * Load a connector from its npm package.
  */
 export async function loadConnector(
@@ -225,8 +252,8 @@ export async function loadConnector(
     // Dynamic import of the Activepieces piece
     const module = await import(packageId);
 
-    // Activepieces pieces export a default piece instance
-    const piece: Piece = module.default ?? module[Object.keys(module)[0]];
+    // Find the Piece export from the module
+    const piece = findPieceExport(module as Record<string, unknown>);
     if (!piece) {
       console.warn(`[Connectors] No piece exported from ${packageId}`);
       return null;
@@ -246,10 +273,55 @@ export async function loadConnector(
 }
 
 /**
- * Load all available connectors.
+ * Auto-discover installed Activepieces piece packages from node_modules.
+ * Scans @activepieces scope for piece-* packages.
+ */
+export async function discoverPieces(): Promise<string[]> {
+  if (discoveredPieces) return discoveredPieces;
+
+  const pieces: string[] = [];
+
+  try {
+    // Find the node_modules directory (works with bun/npm workspaces)
+    const nodeModulesPath = join(
+      import.meta.dirname ?? process.cwd(),
+      "..",
+      "..",
+      "node_modules",
+      "@activepieces",
+    );
+
+    const entries = await readdir(nodeModulesPath, { withFileTypes: true });
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+
+      const packageId = `@activepieces/${entry.name}`;
+
+      // Only include piece-* packages, exclude framework/common packages
+      if (
+        entry.name.startsWith("piece-") &&
+        !EXCLUDED_PACKAGES.has(packageId)
+      ) {
+        pieces.push(packageId);
+      }
+    }
+
+    console.log(`[Connectors] Discovered ${pieces.length} Activepieces pieces`);
+  } catch (error) {
+    console.warn("[Connectors] Failed to auto-discover pieces:", error);
+  }
+
+  discoveredPieces = pieces;
+  return pieces;
+}
+
+/**
+ * Load all available connectors via auto-discovery.
  */
 export async function loadAllConnectors(): Promise<LoadedConnector[]> {
-  const results = await Promise.all(AVAILABLE_PIECES.map(loadConnector));
+  const pieces = await discoverPieces();
+  const results = await Promise.all(pieces.map(loadConnector));
   return results.filter((c): c is LoadedConnector => c !== null);
 }
 
@@ -268,10 +340,10 @@ export function listConnectors(): LoadedConnector[] {
 }
 
 /**
- * List connector metadata (without loading pieces into memory).
+ * List discovered connector IDs (async, triggers discovery if needed).
  */
-export function listConnectorIds(): string[] {
-  return AVAILABLE_PIECES;
+export async function listConnectorIds(): Promise<string[]> {
+  return discoverPieces();
 }
 
 /**

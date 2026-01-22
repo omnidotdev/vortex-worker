@@ -31,8 +31,12 @@ export const dslWorkflow: Workflow = {
         const runId = ctx.workflowRunId();
 
         // Debug log the incoming definition
-        ctx.log(`Definition has nodes: ${Array.isArray((definition as Record<string, unknown>).nodes)}`);
-        ctx.log(`Definition has steps: ${Array.isArray((definition as Record<string, unknown>).steps)}`);
+        ctx.log(
+          `Definition has nodes: ${Array.isArray((definition as Record<string, unknown>).nodes)}`,
+        );
+        ctx.log(
+          `Definition has steps: ${Array.isArray((definition as Record<string, unknown>).steps)}`,
+        );
         ctx.log(`isReactFlowFormat: ${isReactFlowFormat(definition)}`);
 
         // Auto-detect and convert ReactFlow format to DSL format
@@ -44,13 +48,20 @@ export const dslWorkflow: Workflow = {
             rfDef.nodes as Parameters<typeof reactFlowToDsl>[0],
             rfDef.edges as Parameters<typeof reactFlowToDsl>[1],
           );
-          ctx.log(`Converted definition steps: ${JSON.stringify((definition as WorkflowDefinition).steps.map(s => ({ id: s.id, type: s.type })))}`);
+          ctx.log(
+            `Converted definition steps: ${JSON.stringify((definition as WorkflowDefinition).steps.map((s) => ({ id: s.id, type: s.type })))}`,
+          );
         }
 
         const dslDef = definition as WorkflowDefinition;
 
         // Create execution context
-        const execCtx = createExecutionContext(workflowId, runId, triggerData, organizationId);
+        const execCtx = createExecutionContext(
+          workflowId,
+          runId,
+          triggerData,
+          organizationId,
+        );
 
         // Find trigger step
         const triggerStep = findTriggerStep(dslDef.steps);

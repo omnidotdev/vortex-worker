@@ -166,13 +166,10 @@ async function waitForTask(taskUid: number): Promise<void> {
   const startTime = Date.now();
 
   while (Date.now() - startTime < TASK_POLL_TIMEOUT_MS) {
-    const response = await fetch(
-      `${MEILISEARCH_URL}/tasks/${taskUid}`,
-      {
-        headers: { Authorization: `Bearer ${MEILISEARCH_MASTER_KEY}` },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-      },
-    );
+    const response = await fetch(`${MEILISEARCH_URL}/tasks/${taskUid}`, {
+      headers: { Authorization: `Bearer ${MEILISEARCH_MASTER_KEY}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
 
     if (!response.ok) {
       throw new Error(`Failed to get task status: ${response.status}`);

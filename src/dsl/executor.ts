@@ -159,7 +159,9 @@ const executeAction = async (
     }
 
     // Fetch credentials from database if organizationId is available
-    let auth: import("../connectors/types").DecryptedCredentialValue | undefined;
+    let auth:
+      | import("../connectors/types").DecryptedCredentialValue
+      | undefined;
     if (ctx.organizationId) {
       auth = await getIntegrationCredentials(
         ctx.organizationId,
