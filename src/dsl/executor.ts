@@ -1,5 +1,6 @@
 import { match } from "ts-pattern";
 
+import { executeConnectorAction } from "../connectors/executor";
 import { connectMCPServer, getMCPClient } from "../mcp";
 import {
   executeBuiltinAction,
@@ -26,6 +27,25 @@ import type {
   TriggerStep,
   WorkflowDefinition,
 } from "./types";
+
+/**
+ * Map integration IDs to Activepieces connector package IDs.
+ */
+const INTEGRATION_TO_CONNECTOR: Record<string, string> = {
+  discord: "@activepieces/piece-discord",
+  slack: "@activepieces/piece-slack",
+  github: "@activepieces/piece-github",
+  gitlab: "@activepieces/piece-gitlab",
+  linear: "@activepieces/piece-linear",
+  notion: "@activepieces/piece-notion",
+  "google-sheets": "@activepieces/piece-google-sheets",
+  airtable: "@activepieces/piece-airtable",
+  hubspot: "@activepieces/piece-hubspot",
+  mailchimp: "@activepieces/piece-mailchimp",
+  stripe: "@activepieces/piece-stripe",
+  openai: "@activepieces/piece-openai",
+  telegram: "@activepieces/piece-telegram-bot",
+};
 
 export function findTriggerStep(steps: Step[]): TriggerStep | undefined {
   return steps.find((s): s is TriggerStep => s.type === "trigger");
@@ -114,14 +134,6 @@ const executeAction = async (
 ): Promise<unknown> => {
   const { action } = step;
 
-  // Require pluginId for action nodes - no silent no-ops
-  if (!action.pluginId) {
-    throw new Error(
-      `Action step "${step.name || step.id}" is missing pluginId. ` +
-        "All action nodes must specify a plugin to execute.",
-    );
-  }
-
   // Resolve input expressions from context
   const resolvedInputs = resolveInputs(action.inputs, ctx);
 
@@ -136,41 +148,74 @@ const executeAction = async (
   let output: Record<string, unknown>;
   let durationMs: number;
 
-  if (isBuiltinPlugin(action.pluginId)) {
-    const callResult = await executeBuiltinAction(
-      action.pluginId,
+  // Handle integrationId (vendor integrations via Activepieces connectors)
+  if (action.integrationId) {
+    const connectorId = INTEGRATION_TO_CONNECTOR[action.integrationId];
+    if (!connectorId) {
+      throw new Error(`Unknown integration: ${action.integrationId}`);
+    }
+
+    // TODO: In future, fetch credentials from database based on workflow's organization
+    // For now, the connector will work with actions that don't require auth
+    // or use credentials from environment variables
+
+    const callResult = await executeConnectorAction(
+      connectorId,
       action.operation,
       resolvedInputs,
       pluginContext,
+      undefined, // auth - to be loaded from DB
     );
 
     if (!callResult.success) {
-      throw new Error(`Action execution failed: ${callResult.error}`);
+      throw new Error(`Integration action failed: ${callResult.error}`);
     }
 
     output = callResult.output || { success: true };
     durationMs = callResult.durationMs;
+  } else if (action.pluginId) {
+    // Handle pluginId (builtin or WASM plugins)
+    if (isBuiltinPlugin(action.pluginId)) {
+      const callResult = await executeBuiltinAction(
+        action.pluginId,
+        action.operation,
+        resolvedInputs,
+        pluginContext,
+      );
+
+      if (!callResult.success) {
+        throw new Error(`Action execution failed: ${callResult.error}`);
+      }
+
+      output = callResult.output || { success: true };
+      durationMs = callResult.durationMs;
+    } else {
+      // WASM plugin
+      const host = getPluginHost();
+      const loadedPlugin = host.get(action.pluginId);
+
+      if (!loadedPlugin) {
+        throw new Error(`Plugin not loaded: ${action.pluginId}`);
+      }
+
+      const callResult = await loadedPlugin.call(
+        action.operation,
+        resolvedInputs,
+        pluginContext,
+      );
+
+      if (!callResult.success) {
+        throw new Error(`Action execution failed: ${callResult.error}`);
+      }
+
+      output = callResult.output || { success: true };
+      durationMs = callResult.durationMs;
+    }
   } else {
-    // WASM plugin
-    const host = getPluginHost();
-    const loadedPlugin = host.get(action.pluginId);
-
-    if (!loadedPlugin) {
-      throw new Error(`Plugin not loaded: ${action.pluginId}`);
-    }
-
-    const callResult = await loadedPlugin.call(
-      action.operation,
-      resolvedInputs,
-      pluginContext,
+    throw new Error(
+      `Action step "${step.name || step.id}" is missing both integrationId and pluginId. ` +
+        "All action nodes must specify either an integration or a plugin to execute.",
     );
-
-    if (!callResult.success) {
-      throw new Error(`Action execution failed: ${callResult.error}`);
-    }
-
-    output = callResult.output || { success: true };
-    durationMs = callResult.durationMs;
   }
 
   const result = {

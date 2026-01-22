@@ -77,6 +77,19 @@ function triggerNodeToStep(node: ReactFlowNode): TriggerStep {
 
 function actionNodeToStep(node: ReactFlowNode): ActionStep {
   const data = node.data;
+
+  // Merge config and inputs - inputs override config values
+  // This allows UI to store defaults in config and user-entered values in inputs
+  const config = (data.config as Record<string, unknown>) || {};
+  const inputs = (data.inputs as Record<string, unknown>) || {};
+  const mergedInputs = { ...config, ...inputs };
+
+  // Debug logging
+  console.log("[actionNodeToStep] node.id:", node.id);
+  console.log("[actionNodeToStep] config:", JSON.stringify(config));
+  console.log("[actionNodeToStep] inputs:", JSON.stringify(inputs));
+  console.log("[actionNodeToStep] mergedInputs:", JSON.stringify(mergedInputs));
+
   return {
     id: node.id,
     type: "action",
@@ -88,10 +101,7 @@ function actionNodeToStep(node: ReactFlowNode): ActionStep {
       pluginId: data.pluginId as string | undefined,
       operation:
         (data.operation as string) || (data.label as string) || "execute",
-      inputs:
-        (data.inputs as Record<string, unknown>) ||
-        (data.config as Record<string, unknown>) ||
-        {},
+      inputs: mergedInputs,
       outputs: data.outputs as Record<string, string> | undefined,
     },
   };

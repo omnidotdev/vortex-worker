@@ -16,6 +16,9 @@ const {
   TEMPORAL_TASK_QUEUE,
   // Warden (AuthZ PDP)
   WARDEN_API_URL,
+  // Meilisearch (unified search service)
+  MEILISEARCH_URL,
+  MEILISEARCH_MASTER_KEY,
   // Encryption key for tokens
   ENCRYPTION_KEY,
   // OAuth provider credentials
@@ -79,6 +82,9 @@ export {
   TEMPORAL_NAMESPACE,
   TEMPORAL_TASK_QUEUE,
   WARDEN_API_URL,
+  // Meilisearch
+  MEILISEARCH_URL,
+  MEILISEARCH_MASTER_KEY,
   // Encryption
   ENCRYPTION_KEY,
   // OAuth provider credentials

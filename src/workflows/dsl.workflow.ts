@@ -29,6 +29,11 @@ export const dslWorkflow: Workflow = {
         let { definition } = input;
         const runId = ctx.workflowRunId();
 
+        // Debug log the incoming definition
+        ctx.log(`Definition has nodes: ${Array.isArray((definition as Record<string, unknown>).nodes)}`);
+        ctx.log(`Definition has steps: ${Array.isArray((definition as Record<string, unknown>).steps)}`);
+        ctx.log(`isReactFlowFormat: ${isReactFlowFormat(definition)}`);
+
         // Auto-detect and convert ReactFlow format to DSL format
         // This enables workflows created in the UI to be executed via API/webhook
         if (isReactFlowFormat(definition)) {
@@ -38,6 +43,7 @@ export const dslWorkflow: Workflow = {
             rfDef.nodes as Parameters<typeof reactFlowToDsl>[0],
             rfDef.edges as Parameters<typeof reactFlowToDsl>[1],
           );
+          ctx.log(`Converted definition steps: ${JSON.stringify((definition as WorkflowDefinition).steps.map(s => ({ id: s.id, type: s.type })))}`);
         }
 
         const dslDef = definition as WorkflowDefinition;
