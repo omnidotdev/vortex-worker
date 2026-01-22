@@ -48,16 +48,25 @@ const INTEGRATION_TO_CONNECTOR: Record<string, string> = {
   notion: "@activepieces/piece-notion",
   "google-sheets": "@activepieces/piece-google-sheets",
   airtable: "@activepieces/piece-airtable",
+  asana: "@activepieces/piece-asana",
+  todoist: "@activepieces/piece-todoist",
+  trello: "@activepieces/piece-trello",
 
   // Marketing & CRM
   hubspot: "@activepieces/piece-hubspot",
   mailchimp: "@activepieces/piece-mailchimp",
+  sendgrid: "@activepieces/piece-sendgrid",
 
   // Payments
   stripe: "@activepieces/piece-stripe",
 
   // AI
   openai: "@activepieces/piece-openai",
+  claude: "@activepieces/piece-claude",
+  anthropic: "@activepieces/piece-claude", // alias
+  "google-gemini": "@activepieces/piece-google-gemini",
+  groq: "@activepieces/piece-groq",
+  perplexity: "@activepieces/piece-perplexity",
 };
 
 export function findTriggerStep(steps: Step[]): TriggerStep | undefined {
@@ -128,6 +137,17 @@ export async function executeStep(
     .with({ type: "switch" }, () => {
       const switchResult = result as { case: string };
       return switchResult.case;
+    })
+    .with({ type: "loop" }, () => {
+      // After loop completes, follow "done" handle
+      // First try "done", then fall back to default (no handle)
+      const doneSteps = findNextSteps(def, step.id, "done");
+      return doneSteps.length > 0 ? "done" : undefined;
+    })
+    .with({ type: "parallel" }, () => {
+      // After parallel completes, follow "done" handle
+      const doneSteps = findNextSteps(def, step.id, "done");
+      return doneSteps.length > 0 ? "done" : undefined;
     })
     .otherwise(() => undefined);
 
@@ -327,13 +347,77 @@ async function executeDelay(
 async function executeLoop(
   step: LoopStep,
   ctx: ExecutionContext,
-  _def: WorkflowDefinition,
+  def: WorkflowDefinition,
 ): Promise<{ iterations: number; results: unknown[] }> {
   const { loop } = step;
 
   const results: unknown[] = [];
   let iterations = 0;
   const maxIterations = loop.maxIterations ?? 1000;
+
+  // Find body steps - steps connected from loop node via "body" or default handle
+  const bodySteps = findNextSteps(def, step.id, "body");
+  // If no "body" handle, try default connection (for simpler loop setups)
+  const defaultBodySteps =
+    bodySteps.length > 0 ? bodySteps : findNextSteps(def, step.id);
+
+  // Helper to execute body steps for one iteration
+  const executeBodyOnce = async (
+    iterationIndex: number,
+    item?: unknown,
+  ): Promise<unknown> => {
+    // Set loop variables
+    ctx.variables[loop.indexVariable || "index"] = iterationIndex;
+    if (item !== undefined) {
+      ctx.variables[loop.itemVariable || "item"] = item;
+    }
+    // Also expose as loop.index and loop.item for convenience
+    ctx.variables.loop = {
+      index: iterationIndex,
+      item,
+      iteration: iterationIndex + 1,
+    };
+
+    // Execute body steps in sequence (BFS within body)
+    const bodyResults: unknown[] = [];
+    const bodyQueue = [...defaultBodySteps];
+    const bodyVisited = new Set<string>();
+
+    while (bodyQueue.length > 0) {
+      const bodyStep = bodyQueue.shift()!;
+
+      // Stop if we hit a step that's not part of the loop body
+      // (detected by checking if it has "loop-exit" marker or is the loop step itself)
+      if (bodyVisited.has(bodyStep.id) || bodyStep.id === step.id) {
+        continue;
+      }
+
+      // Check if this step exits the loop (connected via "done" or "exit" handle from loop)
+      const exitSteps = findNextSteps(def, step.id, "done");
+      if (exitSteps.some((s) => s.id === bodyStep.id)) {
+        continue; // Skip exit steps during body execution
+      }
+
+      bodyVisited.add(bodyStep.id);
+
+      const { nextSteps, result } = await executeStepInternal(
+        def,
+        bodyStep,
+        ctx,
+      );
+      bodyResults.push(result);
+
+      // Only continue to next steps that are still within the loop body
+      // Don't add steps that would exit the loop
+      for (const nextStep of nextSteps) {
+        if (!exitSteps.some((s) => s.id === nextStep.id)) {
+          bodyQueue.push(nextStep);
+        }
+      }
+    }
+
+    return bodyResults;
+  };
 
   switch (loop.type) {
     case "forEach": {
@@ -343,9 +427,8 @@ async function executeLoop(
       ) as unknown[];
       if (Array.isArray(collection)) {
         for (let i = 0; i < collection.length && i < maxIterations; i++) {
-          ctx.variables[loop.itemVariable || "item"] = collection[i];
-          ctx.variables[loop.indexVariable || "index"] = i;
-          results.push({ index: i, item: collection[i] });
+          const iterationResult = await executeBodyOnce(i, collection[i]);
+          results.push({ index: i, item: collection[i], result: iterationResult });
           iterations++;
         }
       }
@@ -354,8 +437,8 @@ async function executeLoop(
     case "times": {
       const count = loop.count ?? 0;
       for (let i = 0; i < count && i < maxIterations; i++) {
-        ctx.variables[loop.indexVariable || "index"] = i;
-        results.push({ index: i });
+        const iterationResult = await executeBodyOnce(i);
+        results.push({ index: i, result: iterationResult });
         iterations++;
       }
       break;
@@ -364,28 +447,151 @@ async function executeLoop(
       while (iterations < maxIterations) {
         const continueLoop = evaluateExpression(loop.condition || "false", ctx);
         if (!continueLoop) break;
-        ctx.variables[loop.indexVariable || "index"] = iterations;
-        results.push({ index: iterations });
+        const iterationResult = await executeBodyOnce(iterations);
+        results.push({ index: iterations, result: iterationResult });
         iterations++;
       }
       break;
     }
   }
 
+  // Clean up loop context variable
+  delete ctx.variables.loop;
+
   return { iterations, results };
+}
+
+/**
+ * Internal step execution without modifying stepResults (for nested execution)
+ */
+async function executeStepInternal(
+  def: WorkflowDefinition,
+  step: Step,
+  ctx: ExecutionContext,
+): Promise<{ nextSteps: Step[]; result: unknown }> {
+  const result = await match(step)
+    .with({ type: "trigger" }, (s) => executeTrigger(s, ctx))
+    .with({ type: "action" }, (s) => executeAction(s, ctx))
+    .with({ type: "condition" }, (s) => executeCondition(s, ctx, def))
+    .with({ type: "switch" }, (s) => executeSwitch(s, ctx, def))
+    .with({ type: "delay" }, (s) => executeDelay(s, ctx))
+    .with({ type: "loop" }, (s) => executeLoop(s, ctx, def))
+    .with({ type: "parallel" }, (s) => executeParallel(s, ctx, def))
+    .with({ type: "gate" }, (s) => executeGate(s, ctx))
+    .with({ type: "plugin" }, (s) => executePlugin(s, ctx))
+    .with({ type: "mcp" }, (s) => executeMCP(s, ctx))
+    .with({ type: "llm" }, (s) => executeLLM(s, ctx))
+    .with({ type: "code" }, (s) => executeCode(s, ctx))
+    .with({ type: "database" }, (s) => executeDatabase(s, ctx))
+    .exhaustive();
+
+  // Store result
+  ctx.stepResults[step.id] = result;
+
+  // Determine the source handle for finding next steps
+  const sourceHandle = match(step)
+    .with({ type: "condition" }, () => {
+      const condResult = result as { branch: string };
+      return condResult.branch;
+    })
+    .with({ type: "switch" }, () => {
+      const switchResult = result as { case: string };
+      return switchResult.case;
+    })
+    .with({ type: "loop" }, () => {
+      // After loop completes, follow "done" handle
+      return "done";
+    })
+    .otherwise(() => undefined);
+
+  const nextSteps = findNextSteps(def, step.id, sourceHandle);
+
+  return { nextSteps, result };
 }
 
 async function executeParallel(
   step: ParallelStep,
-  _ctx: ExecutionContext,
-  _def: WorkflowDefinition,
+  ctx: ExecutionContext,
+  def: WorkflowDefinition,
 ): Promise<{ branches: number; results: unknown[] }> {
   const { parallel } = step;
 
-  // Execute each branch and collect results
-  const branchPromises = parallel.branches.map(async (branchStepIds, index) => {
-    return { branch: index, stepIds: branchStepIds, completed: true };
-  });
+  // Find branch steps - steps connected from parallel node via "branch_0", "branch_1", etc.
+  // or if branches array contains step IDs, use those directly
+  const getBranchSteps = (branchIndex: number): Step[] => {
+    // First try to find steps connected via branch handle
+    const handleSteps = findNextSteps(def, step.id, `branch_${branchIndex}`);
+    if (handleSteps.length > 0) {
+      return handleSteps;
+    }
+
+    // Fall back to branches array if it contains step IDs
+    if (parallel.branches[branchIndex]) {
+      const branchStepIds = parallel.branches[branchIndex];
+      if (Array.isArray(branchStepIds)) {
+        return branchStepIds
+          .map((id) => def.steps.find((s) => s.id === id))
+          .filter((s): s is Step => s !== undefined);
+      }
+    }
+
+    return [];
+  };
+
+  // Helper to execute a single branch
+  const executeBranch = async (
+    branchIndex: number,
+  ): Promise<{ branch: number; results: unknown[] }> => {
+    const branchSteps = getBranchSteps(branchIndex);
+    const branchResults: unknown[] = [];
+
+    // Execute branch steps in sequence (BFS within branch)
+    const branchQueue = [...branchSteps];
+    const branchVisited = new Set<string>();
+
+    // Find the "join" or "done" steps that exit the parallel
+    const joinSteps = findNextSteps(def, step.id, "done");
+
+    while (branchQueue.length > 0) {
+      const branchStep = branchQueue.shift()!;
+
+      if (branchVisited.has(branchStep.id) || branchStep.id === step.id) {
+        continue;
+      }
+
+      // Skip join steps during branch execution
+      if (joinSteps.some((s) => s.id === branchStep.id)) {
+        continue;
+      }
+
+      branchVisited.add(branchStep.id);
+
+      const { nextSteps, result } = await executeStepInternal(
+        def,
+        branchStep,
+        ctx,
+      );
+      branchResults.push(result);
+
+      // Continue to next steps within branch (but not join steps)
+      for (const nextStep of nextSteps) {
+        if (!joinSteps.some((s) => s.id === nextStep.id)) {
+          branchQueue.push(nextStep);
+        }
+      }
+    }
+
+    return { branch: branchIndex, results: branchResults };
+  };
+
+  // Execute branches based on waitFor strategy
+  const branchCount = parallel.branches.length ||
+    // Count branch handles if branches array is empty
+    def.edges.filter(e => e.source === step.id && e.sourceHandle?.startsWith("branch_")).length;
+
+  const branchPromises = Array.from({ length: branchCount }, (_, i) =>
+    executeBranch(i),
+  );
 
   const waitFor = parallel.waitFor;
   let results: unknown[];
@@ -399,11 +605,11 @@ async function executeParallel(
     const allResults = await Promise.all(branchPromises);
     results = allResults.slice(0, waitFor);
   } else {
-    // Wait for all branches
+    // Wait for all branches (default)
     results = await Promise.all(branchPromises);
   }
 
-  return { branches: parallel.branches.length, results };
+  return { branches: branchCount, results };
 }
 
 async function executeGate(
