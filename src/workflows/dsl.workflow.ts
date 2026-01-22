@@ -10,6 +10,7 @@ import type { WorkflowDefinition } from "../dsl/types";
 
 interface DSLWorkflowInput {
   workflowId: string;
+  organizationId?: string;
   triggerData: Record<string, unknown>;
   definition: WorkflowDefinition | Record<string, unknown>;
 }
@@ -25,7 +26,7 @@ export const dslWorkflow: Workflow = {
       name: "execute-dsl",
       run: async (ctx) => {
         const input = ctx.workflowInput() as DSLWorkflowInput;
-        const { workflowId, triggerData } = input;
+        const { workflowId, organizationId, triggerData } = input;
         let { definition } = input;
         const runId = ctx.workflowRunId();
 
@@ -49,7 +50,7 @@ export const dslWorkflow: Workflow = {
         const dslDef = definition as WorkflowDefinition;
 
         // Create execution context
-        const execCtx = createExecutionContext(workflowId, runId, triggerData);
+        const execCtx = createExecutionContext(workflowId, runId, triggerData, organizationId);
 
         // Find trigger step
         const triggerStep = findTriggerStep(dslDef.steps);

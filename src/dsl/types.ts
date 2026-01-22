@@ -284,6 +284,7 @@ export type WorkflowDefinition = z.infer<typeof WorkflowDefinition>;
 export interface ExecutionContext {
   workflowId: string;
   runId: string;
+  organizationId?: string;
   triggerData: Record<string, unknown>;
   variables: Record<string, unknown>;
   stepResults: Record<string, unknown>;

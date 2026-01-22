@@ -1,6 +1,7 @@
 import { match } from "ts-pattern";
 
 import { executeConnectorAction } from "../connectors/executor";
+import { getIntegrationCredentials } from "../integrations/credentials";
 import { connectMCPServer, getMCPClient } from "../mcp";
 import {
   executeBuiltinAction,
@@ -71,10 +72,12 @@ export function createExecutionContext(
   workflowId: string,
   runId: string,
   triggerData: Record<string, unknown>,
+  organizationId?: string,
 ): ExecutionContext {
   return {
     workflowId,
     runId,
+    organizationId,
     triggerData,
     variables: {},
     stepResults: {},
@@ -155,16 +158,34 @@ const executeAction = async (
       throw new Error(`Unknown integration: ${action.integrationId}`);
     }
 
-    // TODO: In future, fetch credentials from database based on workflow's organization
-    // For now, the connector will work with actions that don't require auth
-    // or use credentials from environment variables
+    // Fetch credentials from database if organizationId is available
+    let auth: import("../connectors/types").DecryptedCredentialValue | undefined;
+    if (ctx.organizationId) {
+      auth = await getIntegrationCredentials(
+        ctx.organizationId,
+        action.integrationId,
+      );
+      if (auth) {
+        console.log(
+          `[Executor] Loaded credentials for integration=${action.integrationId} org=${ctx.organizationId} type=${auth.type}`,
+        );
+      } else {
+        console.log(
+          `[Executor] No credentials found for integration=${action.integrationId} org=${ctx.organizationId}`,
+        );
+      }
+    } else {
+      console.log(
+        `[Executor] No organizationId in context, skipping credential lookup for integration=${action.integrationId}`,
+      );
+    }
 
     const callResult = await executeConnectorAction(
       connectorId,
       action.operation,
       resolvedInputs,
       pluginContext,
-      undefined, // auth - to be loaded from DB
+      auth,
     );
 
     if (!callResult.success) {
