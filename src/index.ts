@@ -11,6 +11,7 @@ import Hatchet from "@hatchet-dev/typescript-sdk";
 
 import { initializeMCPServers } from "./mcp";
 import { authzSyncWorkflow } from "./workflows/authz.workflow";
+import { chronicleAuditWorkflow } from "./workflows/chronicle.workflow";
 import { dslWorkflow } from "./workflows/dsl.workflow";
 import { searchBootstrapWorkflow } from "./workflows/searchBootstrap.workflow";
 import { tokenRefreshWorkflow } from "./workflows/tokenRefresh.workflow";
@@ -22,8 +23,9 @@ async function main() {
   const hatchet = Hatchet.init();
   const worker = await hatchet.worker("vortex-dsl-worker", {
     workflows: [
-      dslWorkflow,
       authzSyncWorkflow,
+      chronicleAuditWorkflow,
+      dslWorkflow,
       searchBootstrapWorkflow,
       tokenRefreshWorkflow,
     ],
