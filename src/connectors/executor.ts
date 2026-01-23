@@ -57,7 +57,7 @@ function toActivepiecesAuth(
 
   switch (auth.type) {
     case "secret_text":
-      return auth.secret;
+      return { secret_text: auth.secret };
     case "basic_auth":
       return {
         username: auth.username,

@@ -18,7 +18,7 @@ import {
  */
 export const mcpServerTable = pgTable("mcp_server", {
   id: uuid().primaryKey().defaultRandom(),
-  workspaceId: uuid("workspace_id").notNull(),
+  organizationId: text("organization_id").notNull(),
   name: text().notNull(),
   type: text().notNull().default("custom"),
   command: text().notNull(),
