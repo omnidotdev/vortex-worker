@@ -278,6 +278,8 @@ export const WorkflowDefinition = z.object({
   edges: z.array(Edge),
   variables: z.record(z.string(), VariableDefinition).optional(),
   settings: WorkflowSettings.optional(),
+  /** Mapping from human-readable step names to step IDs for template resolution */
+  stepNameToId: z.record(z.string(), z.string()).optional(),
 });
 export type WorkflowDefinition = z.infer<typeof WorkflowDefinition>;
 
@@ -288,4 +290,6 @@ export interface ExecutionContext {
   triggerData: Record<string, unknown>;
   variables: Record<string, unknown>;
   stepResults: Record<string, unknown>;
+  /** Mapping from human-readable step names to step IDs (node IDs) */
+  stepNameToId: Record<string, string>;
 }

@@ -17,6 +17,7 @@ import {
   executeStep,
   findTriggerStep,
 } from "../../dsl/executor";
+import { isReactFlowFormat, reactFlowToDsl } from "../../dsl/reactFlowToDsl";
 
 import type { Step, WorkflowDefinition } from "../../dsl/types";
 import type { WorkflowExecutor } from "../interface";
@@ -40,6 +41,8 @@ const runStore = new Map<
     steps: StepResult[];
     output?: Record<string, unknown>;
     error?: ExecutionResult["error"];
+    /** Mapping from step names to step IDs */
+    stepNameToId: Record<string, string>;
   }
 >();
 
@@ -50,21 +53,83 @@ export class LocalExecutor implements WorkflowExecutor {
   readonly name = "local";
 
   async execute(
-    definition: WorkflowDefinition,
+    definition: WorkflowDefinition | Record<string, unknown>,
     triggerData?: Record<string, unknown>,
     options?: ExecuteOptions,
   ): Promise<{ runId: string }> {
     const workflowId = options?.idempotencyKey || `wf-${Date.now()}`;
     const runId = `local-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
+    // Extract step name mapping and convert ReactFlow format if needed
+    const stepNameToId: Record<string, string> = {};
+    let dslDefinition: WorkflowDefinition;
+
+    if (isReactFlowFormat(definition)) {
+      const rfDef = definition as {
+        nodes: Array<{
+          id: string;
+          type?: string;
+          data?: {
+            stepName?: string;
+            label?: string;
+            integrationDefinitionId?: string;
+            pluginId?: string;
+          };
+        }>;
+        edges: unknown[];
+      };
+
+      // Build step name to node ID mapping
+      // Generate step names for nodes that don't have them (backwards compatibility)
+      const usedNames = new Set<string>();
+
+      for (const node of rfDef.nodes) {
+        // Skip trigger nodes
+        if (node.type === "triggerNode") continue;
+
+        let stepName = node.data?.stepName;
+
+        // Generate step name if missing
+        if (!stepName) {
+          const baseName =
+            node.data?.label ||
+            (node.data?.integrationDefinitionId
+              ? node.data.integrationDefinitionId.charAt(0).toUpperCase() +
+                node.data.integrationDefinitionId.slice(1)
+              : null) ||
+            (node.data?.pluginId === "builtin:http" ? "HTTP Request" : null) ||
+            "Step";
+
+          // Ensure uniqueness
+          stepName = baseName;
+          let counter = 2;
+          while (usedNames.has(stepName)) {
+            stepName = `${baseName} ${counter}`;
+            counter++;
+          }
+        }
+
+        usedNames.add(stepName);
+        stepNameToId[stepName] = node.id;
+      }
+
+      dslDefinition = reactFlowToDsl(
+        rfDef.nodes as Parameters<typeof reactFlowToDsl>[0],
+        rfDef.edges as Parameters<typeof reactFlowToDsl>[1],
+      );
+    } else {
+      dslDefinition = definition as WorkflowDefinition;
+    }
+
     // Initialize run in store
     runStore.set(runId, {
       workflowId,
-      definition,
+      definition: dslDefinition,
       triggerData: triggerData || {},
       status: "pending",
       startedAt: new Date(),
       steps: [],
+      stepNameToId,
     });
 
     // Emit run start event
@@ -213,11 +278,13 @@ export class LocalExecutor implements WorkflowExecutor {
       // Update status to running
       run.status = "running";
 
-      // Create execution context
+      // Create execution context with step name mapping
       const execCtx = createExecutionContext(
         run.workflowId,
         runId,
         run.triggerData,
+        undefined, // organizationId
+        run.stepNameToId,
       );
 
       // Find trigger step

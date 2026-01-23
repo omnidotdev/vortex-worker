@@ -30,20 +30,72 @@ export const dslWorkflow: Workflow = {
         let { definition } = input;
         const runId = ctx.workflowRunId();
 
-        // Debug log the incoming definition
-        ctx.log(
-          `Definition has nodes: ${Array.isArray((definition as Record<string, unknown>).nodes)}`,
-        );
-        ctx.log(
-          `Definition has steps: ${Array.isArray((definition as Record<string, unknown>).steps)}`,
-        );
-        ctx.log(`isReactFlowFormat: ${isReactFlowFormat(definition)}`);
+        // Extract step name mapping from ReactFlow nodes before conversion
+        let stepNameToId: Record<string, string> = {};
 
         // Auto-detect and convert ReactFlow format to DSL format
         // This enables workflows created in the UI to be executed via API/webhook
         if (isReactFlowFormat(definition)) {
           ctx.log("Converting ReactFlow format to DSL format");
-          const rfDef = definition as { nodes: unknown[]; edges: unknown[] };
+          const rfDef = definition as {
+            nodes: Array<{
+              id: string;
+              type?: string;
+              data?: {
+                stepName?: string;
+                label?: string;
+                integrationDefinitionId?: string;
+                pluginId?: string;
+              };
+            }>;
+            edges: unknown[];
+          };
+
+          // Build step name to node ID mapping
+          // Generate step names for nodes that don't have them (backwards compatibility)
+          const usedNames = new Set<string>();
+
+          ctx.log(`Number of nodes: ${rfDef.nodes.length}`);
+          for (const node of rfDef.nodes) {
+            ctx.log(
+              `Node: id=${node.id}, type=${node.type}, label=${node.data?.label}, stepName=${node.data?.stepName}`,
+            );
+            // Skip trigger nodes
+            if (node.type === "triggerNode") {
+              ctx.log(`  -> Skipping trigger node`);
+              continue;
+            }
+
+            let stepName = node.data?.stepName;
+
+            // Generate step name if missing
+            if (!stepName) {
+              // Use label, integration name, or fallback
+              const baseName =
+                node.data?.label ||
+                (node.data?.integrationDefinitionId
+                  ? node.data.integrationDefinitionId.charAt(0).toUpperCase() +
+                    node.data.integrationDefinitionId.slice(1)
+                  : null) ||
+                (node.data?.pluginId === "builtin:http"
+                  ? "HTTP Request"
+                  : null) ||
+                "Step";
+
+              // Ensure uniqueness
+              stepName = baseName;
+              let counter = 2;
+              while (usedNames.has(stepName)) {
+                stepName = `${baseName} ${counter}`;
+                counter++;
+              }
+            }
+
+            usedNames.add(stepName);
+            stepNameToId[stepName] = node.id;
+            ctx.log(`Step mapping: "${stepName}" -> ${node.id}`);
+          }
+
           definition = reactFlowToDsl(
             rfDef.nodes as Parameters<typeof reactFlowToDsl>[0],
             rfDef.edges as Parameters<typeof reactFlowToDsl>[1],
@@ -55,12 +107,21 @@ export const dslWorkflow: Workflow = {
 
         const dslDef = definition as WorkflowDefinition;
 
-        // Create execution context
+        // If definition already has stepNameToId (from prior conversion), use it
+        if (
+          dslDef.stepNameToId &&
+          Object.keys(dslDef.stepNameToId).length > 0
+        ) {
+          stepNameToId = dslDef.stepNameToId;
+        }
+
+        // Create execution context with step name mapping
         const execCtx = createExecutionContext(
           workflowId,
           runId,
           triggerData,
           organizationId,
+          stepNameToId,
         );
 
         // Find trigger step

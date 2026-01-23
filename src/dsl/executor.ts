@@ -310,6 +310,7 @@ export function createExecutionContext(
   runId: string,
   triggerData: Record<string, unknown>,
   organizationId?: string,
+  stepNameToId?: Record<string, string>,
 ): ExecutionContext {
   return {
     workflowId,
@@ -318,6 +319,7 @@ export function createExecutionContext(
     triggerData,
     variables: {},
     stepResults: {},
+    stepNameToId: stepNameToId || {},
   };
 }
 
@@ -1336,7 +1338,14 @@ function resolveValue(value: unknown, ctx: ExecutionContext): unknown {
   // Handle template expressions like {{trigger.data}} or {{steps.http_1.body}}
   if (value.startsWith("{{") && value.endsWith("}}")) {
     const path = value.slice(2, -2).trim();
-    return getValueByPath(ctx, path);
+    const resolved = getValueByPath(ctx, path);
+
+    // Return empty string for undefined to preserve the field in JSON output
+    if (resolved === undefined) {
+      return "";
+    }
+
+    return resolved;
   }
 
   // Handle strings with embedded templates like "Hello {{name}}"
@@ -1351,7 +1360,40 @@ function resolveValue(value: unknown, ctx: ExecutionContext): unknown {
 }
 
 function getValueByPath(ctx: ExecutionContext, path: string): unknown {
-  const parts = path.split(".");
+  // Handle bracket notation for step names: steps["Step Name"].output or steps['Step Name'].output
+  // Convert to a normalized format for processing
+  let normalizedPath = path;
+
+  // Check for steps["..."] or steps['...'] pattern and resolve step name to step ID
+  // Supports both single and double quotes for JSON compatibility
+  const stepNameMatch = path.match(/^steps\[["']([^"']+)["']\](.*)$/);
+  if (stepNameMatch) {
+    const stepName = stepNameMatch[1];
+    const remainder = stepNameMatch[2]; // e.g., ".output"
+
+    // Look up step ID from step name (try exact match first, then case-insensitive)
+    let stepId = ctx.stepNameToId[stepName];
+
+    if (!stepId) {
+      // Try case-insensitive match
+      const lowerStepName = stepName.toLowerCase();
+      for (const [name, id] of Object.entries(ctx.stepNameToId)) {
+        if (name.toLowerCase() === lowerStepName) {
+          stepId = id;
+          break;
+        }
+      }
+    }
+
+    if (stepId) {
+      normalizedPath = `steps.${stepId}${remainder}`;
+    } else {
+      // Step name not found in mapping - try using it as-is (maybe it's a step ID)
+      normalizedPath = `steps.${stepName}${remainder}`;
+    }
+  }
+
+  const parts = normalizedPath.split(".");
   const root = parts[0];
 
   // Build a context object with all accessible paths
@@ -1363,13 +1405,35 @@ function getValueByPath(ctx: ExecutionContext, path: string): unknown {
     stepResults: ctx.stepResults,
   };
 
-  // Map step results to be accessible as steps.{stepId}.{field}
-  // Step results contain the output from each step
+  // Map step results to be accessible as steps.{stepId}.output
+  // Keep the structure so that steps['id'].output works
   for (const [stepId, result] of Object.entries(ctx.stepResults)) {
     const stepResult = result as Record<string, unknown>;
-    // The output field contains the actual result data
-    (accessibleContext.steps as Record<string, unknown>)[stepId] =
-      stepResult.output || stepResult;
+    // Ensure there's an output property - if stepResult already has output, use it as-is
+    // Otherwise wrap the result so .output works
+    if (stepResult.output !== undefined) {
+      (accessibleContext.steps as Record<string, unknown>)[stepId] = stepResult;
+    } else {
+      (accessibleContext.steps as Record<string, unknown>)[stepId] = {
+        output: stepResult,
+      };
+    }
+  }
+
+  // Also map step results by step name for convenience
+  for (const [stepName, stepId] of Object.entries(ctx.stepNameToId)) {
+    const result = ctx.stepResults[stepId];
+    if (result) {
+      const stepResult = result as Record<string, unknown>;
+      if (stepResult.output !== undefined) {
+        (accessibleContext.steps as Record<string, unknown>)[stepName] =
+          stepResult;
+      } else {
+        (accessibleContext.steps as Record<string, unknown>)[stepName] = {
+          output: stepResult,
+        };
+      }
+    }
   }
 
   let current: unknown = accessibleContext[root];
