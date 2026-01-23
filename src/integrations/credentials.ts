@@ -188,7 +188,7 @@ export async function getIntegrationCredentials(
   if (apiKey) {
     return {
       type: "secret_text",
-      secret: apiKey,
+      secret: apiKey.trim(), // Ensure no whitespace
     };
   }
 
