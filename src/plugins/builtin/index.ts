@@ -54,6 +54,19 @@ export { modelRegistryPlugin } from "./modelRegistry";
 export { webhookVerifyPlugin } from "./webhookVerify";
 export { pdfPlugin } from "./pdf";
 export { rateLimitPlugin } from "./rateLimit";
+export { htmlPlugin } from "./html";
+export { dateTimePlugin } from "./dateTime";
+export { sshPlugin } from "./ssh";
+export { ftpPlugin } from "./ftp";
+export { imagePlugin } from "./image";
+export { databasePlugin } from "./database";
+export { storagePlugin } from "./storage";
+export { compressionPlugin } from "./compression";
+export { xmlPlugin } from "./xml";
+export { graphqlPlugin } from "./graphql";
+export { expressionPlugin } from "./expression";
+export { generatorPlugin } from "./generator";
+export { regexPlugin } from "./regex";
 export * from "./types";
 
 import { aggregatePlugin } from "./aggregate";
@@ -105,6 +118,19 @@ import { modelRegistryPlugin } from "./modelRegistry";
 import { webhookVerifyPlugin } from "./webhookVerify";
 import { pdfPlugin } from "./pdf";
 import { rateLimitPlugin } from "./rateLimit";
+import { htmlPlugin } from "./html";
+import { dateTimePlugin } from "./dateTime";
+import { sshPlugin } from "./ssh";
+import { ftpPlugin } from "./ftp";
+import { imagePlugin } from "./image";
+import { databasePlugin } from "./database";
+import { storagePlugin } from "./storage";
+import { compressionPlugin } from "./compression";
+import { xmlPlugin } from "./xml";
+import { graphqlPlugin } from "./graphql";
+import { expressionPlugin } from "./expression";
+import { generatorPlugin } from "./generator";
+import { regexPlugin } from "./regex";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinHandler, BuiltinPlugin } from "./types";
@@ -162,6 +188,19 @@ const builtinPlugins: Map<string, BuiltinPlugin> = new Map([
   [webhookVerifyPlugin.id, webhookVerifyPlugin],
   [pdfPlugin.id, pdfPlugin],
   [rateLimitPlugin.id, rateLimitPlugin],
+  [htmlPlugin.id, htmlPlugin],
+  [dateTimePlugin.id, dateTimePlugin],
+  [sshPlugin.id, sshPlugin],
+  [ftpPlugin.id, ftpPlugin],
+  [imagePlugin.id, imagePlugin],
+  [databasePlugin.id, databasePlugin],
+  [storagePlugin.id, storagePlugin],
+  [compressionPlugin.id, compressionPlugin],
+  [xmlPlugin.id, xmlPlugin],
+  [graphqlPlugin.id, graphqlPlugin],
+  [expressionPlugin.id, expressionPlugin],
+  [generatorPlugin.id, generatorPlugin],
+  [regexPlugin.id, regexPlugin],
 ]);
 
 /**
