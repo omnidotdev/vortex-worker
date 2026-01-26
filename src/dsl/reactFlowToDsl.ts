@@ -7,11 +7,14 @@
 
 import type {
   ActionStep,
+  AggregateStep,
+  CacheStep,
   CodeStep,
   ConditionStep,
   DatabaseStep,
   DelayStep,
   Edge as DslEdge,
+  EventStep,
   GateStep,
   LLMStep,
   LoopStep,
@@ -19,8 +22,10 @@ import type {
   ParallelStep,
   PluginStep,
   Step,
+  SubworkflowStep,
   SwitchStep,
   TriggerStep,
+  WaitStep,
   WorkflowDefinition,
 } from "./types";
 
@@ -56,6 +61,11 @@ const nodeTypeToStepType: Record<string, string> = {
   llmNode: "llm",
   codeNode: "code",
   databaseNode: "database",
+  subworkflowNode: "subworkflow",
+  waitNode: "wait",
+  eventNode: "event",
+  aggregateNode: "aggregate",
+  cacheNode: "cache",
 };
 
 function triggerNodeToStep(node: ReactFlowNode): TriggerStep {
@@ -340,6 +350,105 @@ function databaseNodeToStep(node: ReactFlowNode): DatabaseStep {
   };
 }
 
+function subworkflowNodeToStep(node: ReactFlowNode): SubworkflowStep {
+  const data = node.data;
+  return {
+    id: node.id,
+    type: "subworkflow",
+    name: (data.label as string) || "Subworkflow",
+    description: data.description as string | undefined,
+    position: node.position,
+    subworkflow: {
+      workflowId: (data.workflowId as string) || "",
+      inputs: (data.inputs as Record<string, unknown>) || {},
+      outputs: data.outputs as Record<string, string> | undefined,
+      waitForCompletion: (data.waitForCompletion as boolean) ?? true,
+      timeout: data.timeout as number | undefined,
+    },
+  };
+}
+
+function waitNodeToStep(node: ReactFlowNode): WaitStep {
+  const data = node.data;
+  return {
+    id: node.id,
+    type: "wait",
+    name: (data.label as string) || "Wait",
+    description: data.description as string | undefined,
+    position: node.position,
+    wait: {
+      resumeOn: (data.resumeOn as "webhook" | "event" | "timeout") || "timeout",
+      webhookSuffix: data.webhookSuffix as string | undefined,
+      eventName: data.eventName as string | undefined,
+      timeout: data.timeout as number | undefined,
+      timeoutUnit:
+        data.timeoutUnit as "seconds" | "minutes" | "hours" | "days" | undefined,
+      timeoutAction: (data.timeoutAction as "continue" | "error") || "error",
+      outputs: data.outputs as Record<string, string> | undefined,
+    },
+  };
+}
+
+function eventNodeToStep(node: ReactFlowNode): EventStep {
+  const data = node.data;
+  return {
+    id: node.id,
+    type: "event",
+    name: (data.label as string) || "Event",
+    description: data.description as string | undefined,
+    position: node.position,
+    event: {
+      operation: "emit",
+      eventName: (data.eventName as string) || "",
+      payload: data.payload as Record<string, unknown> | undefined,
+    },
+  };
+}
+
+function aggregateNodeToStep(node: ReactFlowNode): AggregateStep {
+  const data = node.data;
+  return {
+    id: node.id,
+    type: "aggregate",
+    name: (data.label as string) || "Aggregate",
+    description: data.description as string | undefined,
+    position: node.position,
+    aggregate: {
+      mode:
+        (data.mode as
+          | "collect"
+          | "merge"
+          | "concat"
+          | "sum"
+          | "first"
+          | "last") || "collect",
+      source: (data.source as string) || "",
+      groupBy: data.groupBy as string | undefined,
+      outputVariable: (data.outputVariable as string) || "aggregated",
+    },
+  };
+}
+
+function cacheNodeToStep(node: ReactFlowNode): CacheStep {
+  const data = node.data;
+  return {
+    id: node.id,
+    type: "cache",
+    name: (data.label as string) || "Cache",
+    description: data.description as string | undefined,
+    position: node.position,
+    cache: {
+      operation:
+        (data.operation as "get" | "set" | "delete" | "getOrSet") || "get",
+      key: (data.key as string) || "",
+      value: data.value,
+      ttl: data.ttl as number | undefined,
+      fallbackStep: data.fallbackStep as string | undefined,
+      outputVariable: data.outputVariable as string | undefined,
+    },
+  };
+}
+
 function nodeToStep(node: ReactFlowNode, edges: ReactFlowEdge[]): Step | null {
   const stepType = nodeTypeToStepType[node.type || ""] || node.type;
 
@@ -370,6 +479,16 @@ function nodeToStep(node: ReactFlowNode, edges: ReactFlowEdge[]): Step | null {
       return codeNodeToStep(node);
     case "database":
       return databaseNodeToStep(node);
+    case "subworkflow":
+      return subworkflowNodeToStep(node);
+    case "wait":
+      return waitNodeToStep(node);
+    case "event":
+      return eventNodeToStep(node);
+    case "aggregate":
+      return aggregateNodeToStep(node);
+    case "cache":
+      return cacheNodeToStep(node);
     default:
       console.warn("Unknown node type:", node.type);
       return null;

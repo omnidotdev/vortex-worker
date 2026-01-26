@@ -12,21 +12,70 @@ import {
 import type { PluginCallResult } from "../plugins/types";
 import type {
   ActionStep,
+  AgentStep,
+  AggregateStep,
+  ApprovalStep,
+  AssertStep,
+  AudioStep,
+  CacheStep,
+  ChatStep,
+  ChunkStep,
+  ClassifyStep,
   CodeStep,
   ConditionStep,
   DatabaseStep,
+  DecryptStep,
   DelayStep,
+  EmailStep,
+  EmbeddingStep,
+  EncryptStep,
+  ErrorStep,
+  EventStep,
   ExecutionContext,
+  FileStep,
+  FilterStep,
+  FlattenStep,
+  FormatStep,
   GateStep,
+  GroupStep,
+  HashStep,
+  InputStep,
+  JwtStep,
   LLMStep,
+  LogStep,
   LoopStep,
+  MapStep,
   MCPStep,
+  MergeStep,
+  NotificationStep,
   ParallelStep,
+  ParseStep,
   PluginStep,
+  PromptStep,
+  QueueStep,
+  RagStep,
+  ReduceStep,
+  RetryStep,
+  SetStep,
+  SignStep,
+  SleepStep,
+  SortStep,
+  SplitStep,
   Step,
+  SubworkflowStep,
+  SummarizeStep,
   SwitchStep,
+  TemplateStep,
+  TimeoutStep,
   TriggerStep,
+  UniqueStep,
+  ValidateStep,
+  VectorSearchStep,
+  VisionStep,
+  WaitStep,
+  WebhookResponseStep,
   WorkflowDefinition,
+  ZipStep,
 } from "./types";
 
 /**
@@ -342,6 +391,62 @@ export async function executeStep(
     .with({ type: "llm" }, (s) => executeLLM(s, ctx))
     .with({ type: "code" }, (s) => executeCode(s, ctx))
     .with({ type: "database" }, (s) => executeDatabase(s, ctx))
+    .with({ type: "subworkflow" }, (s) => executeSubworkflow(s, ctx))
+    .with({ type: "wait" }, (s) => executeWait(s, ctx))
+    .with({ type: "event" }, (s) => executeEvent(s, ctx))
+    .with({ type: "aggregate" }, (s) => executeAggregate(s, ctx))
+    .with({ type: "cache" }, (s) => executeCache(s, ctx))
+    .with({ type: "merge" }, (s) => executeMerge(s, ctx))
+    .with({ type: "split" }, (s) => executeSplit(s, ctx))
+    .with({ type: "filter" }, (s) => executeFilter(s, ctx))
+    .with({ type: "set" }, (s) => executeSet(s, ctx))
+    .with({ type: "error" }, (s) => executeError(s, ctx))
+    .with({ type: "retry" }, (s) => executeRetry(s, ctx))
+    .with({ type: "timeout" }, (s) => executeTimeout(s, ctx))
+    .with({ type: "email" }, (s) => executeEmail(s, ctx))
+    .with({ type: "webhookResponse" }, (s) => executeWebhookResponse(s, ctx))
+    .with({ type: "file" }, (s) => executeFile(s, ctx))
+    .with({ type: "queue" }, (s) => executeQueue(s, ctx))
+    .with({ type: "embedding" }, (s) => executeEmbedding(s, ctx))
+    .with({ type: "vectorSearch" }, (s) => executeVectorSearch(s, ctx))
+    .with({ type: "log" }, (s) => executeLog(s, ctx))
+    .with({ type: "assert" }, (s) => executeAssert(s, ctx))
+    .with({ type: "sleep" }, (s) => executeSleep(s, ctx))
+    // Additional core nodes - Data Transformation
+    .with({ type: "map" }, (s) => executeMap(s, ctx))
+    .with({ type: "reduce" }, (s) => executeReduce(s, ctx))
+    .with({ type: "sort" }, (s) => executeSort(s, ctx))
+    .with({ type: "unique" }, (s) => executeUnique(s, ctx))
+    .with({ type: "template" }, (s) => executeTemplate(s, ctx))
+    // Additional core nodes - AI/ML
+    .with({ type: "prompt" }, (s) => executePrompt(s, ctx))
+    .with({ type: "chat" }, (s) => executeChat(s, ctx))
+    .with({ type: "summarize" }, (s) => executeSummarize(s, ctx))
+    .with({ type: "classify" }, (s) => executeClassify(s, ctx))
+    // Additional core nodes - Human-in-the-Loop
+    .with({ type: "approval" }, (s) => executeApproval(s, ctx))
+    .with({ type: "input" }, (s) => executeInput(s, ctx))
+    .with({ type: "notification" }, (s) => executeNotification(s, ctx))
+    // Additional core nodes - Utility
+    .with({ type: "parse" }, (s) => executeParse(s, ctx))
+    .with({ type: "validate" }, (s) => executeValidate(s, ctx))
+    .with({ type: "format" }, (s) => executeFormat(s, ctx))
+    .with({ type: "hash" }, (s) => executeHash(s, ctx))
+    // Advanced core nodes - Array Operations
+    .with({ type: "group" }, (s) => executeGroup(s, ctx))
+    .with({ type: "flatten" }, (s) => executeFlatten(s, ctx))
+    .with({ type: "chunk" }, (s) => executeChunk(s, ctx))
+    .with({ type: "zip" }, (s) => executeZip(s, ctx))
+    // Advanced core nodes - Security
+    .with({ type: "encrypt" }, (s) => executeEncrypt(s, ctx))
+    .with({ type: "decrypt" }, (s) => executeDecrypt(s, ctx))
+    .with({ type: "sign" }, (s) => executeSign(s, ctx))
+    .with({ type: "jwt" }, (s) => executeJwt(s, ctx))
+    // Advanced core nodes - AI Extensions
+    .with({ type: "agent" }, (s) => executeAgent(s, ctx))
+    .with({ type: "rag" }, (s) => executeRag(s, ctx))
+    .with({ type: "vision" }, (s) => executeVision(s, ctx))
+    .with({ type: "audio" }, (s) => executeAudio(s, ctx))
     .exhaustive();
 
   ctx.stepResults[step.id] = result;
@@ -708,6 +813,62 @@ async function executeStepInternal(
     .with({ type: "llm" }, (s) => executeLLM(s, ctx))
     .with({ type: "code" }, (s) => executeCode(s, ctx))
     .with({ type: "database" }, (s) => executeDatabase(s, ctx))
+    .with({ type: "subworkflow" }, (s) => executeSubworkflow(s, ctx))
+    .with({ type: "wait" }, (s) => executeWait(s, ctx))
+    .with({ type: "event" }, (s) => executeEvent(s, ctx))
+    .with({ type: "aggregate" }, (s) => executeAggregate(s, ctx))
+    .with({ type: "cache" }, (s) => executeCache(s, ctx))
+    .with({ type: "merge" }, (s) => executeMerge(s, ctx))
+    .with({ type: "split" }, (s) => executeSplit(s, ctx))
+    .with({ type: "filter" }, (s) => executeFilter(s, ctx))
+    .with({ type: "set" }, (s) => executeSet(s, ctx))
+    .with({ type: "error" }, (s) => executeError(s, ctx))
+    .with({ type: "retry" }, (s) => executeRetry(s, ctx))
+    .with({ type: "timeout" }, (s) => executeTimeout(s, ctx))
+    .with({ type: "email" }, (s) => executeEmail(s, ctx))
+    .with({ type: "webhookResponse" }, (s) => executeWebhookResponse(s, ctx))
+    .with({ type: "file" }, (s) => executeFile(s, ctx))
+    .with({ type: "queue" }, (s) => executeQueue(s, ctx))
+    .with({ type: "embedding" }, (s) => executeEmbedding(s, ctx))
+    .with({ type: "vectorSearch" }, (s) => executeVectorSearch(s, ctx))
+    .with({ type: "log" }, (s) => executeLog(s, ctx))
+    .with({ type: "assert" }, (s) => executeAssert(s, ctx))
+    .with({ type: "sleep" }, (s) => executeSleep(s, ctx))
+    // Additional core nodes - Data Transformation
+    .with({ type: "map" }, (s) => executeMap(s, ctx))
+    .with({ type: "reduce" }, (s) => executeReduce(s, ctx))
+    .with({ type: "sort" }, (s) => executeSort(s, ctx))
+    .with({ type: "unique" }, (s) => executeUnique(s, ctx))
+    .with({ type: "template" }, (s) => executeTemplate(s, ctx))
+    // Additional core nodes - AI/ML
+    .with({ type: "prompt" }, (s) => executePrompt(s, ctx))
+    .with({ type: "chat" }, (s) => executeChat(s, ctx))
+    .with({ type: "summarize" }, (s) => executeSummarize(s, ctx))
+    .with({ type: "classify" }, (s) => executeClassify(s, ctx))
+    // Additional core nodes - Human-in-the-Loop
+    .with({ type: "approval" }, (s) => executeApproval(s, ctx))
+    .with({ type: "input" }, (s) => executeInput(s, ctx))
+    .with({ type: "notification" }, (s) => executeNotification(s, ctx))
+    // Additional core nodes - Utility
+    .with({ type: "parse" }, (s) => executeParse(s, ctx))
+    .with({ type: "validate" }, (s) => executeValidate(s, ctx))
+    .with({ type: "format" }, (s) => executeFormat(s, ctx))
+    .with({ type: "hash" }, (s) => executeHash(s, ctx))
+    // Advanced core nodes - Array Operations
+    .with({ type: "group" }, (s) => executeGroup(s, ctx))
+    .with({ type: "flatten" }, (s) => executeFlatten(s, ctx))
+    .with({ type: "chunk" }, (s) => executeChunk(s, ctx))
+    .with({ type: "zip" }, (s) => executeZip(s, ctx))
+    // Advanced core nodes - Security
+    .with({ type: "encrypt" }, (s) => executeEncrypt(s, ctx))
+    .with({ type: "decrypt" }, (s) => executeDecrypt(s, ctx))
+    .with({ type: "sign" }, (s) => executeSign(s, ctx))
+    .with({ type: "jwt" }, (s) => executeJwt(s, ctx))
+    // Advanced core nodes - AI Extensions
+    .with({ type: "agent" }, (s) => executeAgent(s, ctx))
+    .with({ type: "rag" }, (s) => executeRag(s, ctx))
+    .with({ type: "vision" }, (s) => executeVision(s, ctx))
+    .with({ type: "audio" }, (s) => executeAudio(s, ctx))
     .exhaustive();
 
   // Store result
@@ -1306,6 +1467,764 @@ const executeDatabase = async (
   return result;
 };
 
+/**
+ * Execute a Subworkflow step - triggers another workflow
+ */
+async function executeSubworkflow(
+  step: SubworkflowStep,
+  _ctx: ExecutionContext,
+): Promise<unknown> {
+  const { subworkflow } = step;
+  // TODO: Implement actual subworkflow execution
+  return {
+    workflowId: subworkflow.workflowId,
+    triggered: true,
+    waitForCompletion: subworkflow.waitForCompletion,
+  };
+}
+
+/**
+ * Execute a Wait step - pauses workflow execution
+ */
+async function executeWait(
+  step: WaitStep,
+  _ctx: ExecutionContext,
+): Promise<unknown> {
+  const { wait } = step;
+
+  if (wait.resumeOn === "timeout" && wait.timeout) {
+    const multipliers: Record<string, number> = {
+      seconds: 1000,
+      minutes: 60 * 1000,
+      hours: 60 * 60 * 1000,
+      days: 24 * 60 * 60 * 1000,
+    };
+    const ms =
+      wait.timeout * (multipliers[wait.timeoutUnit || "minutes"] || 60000);
+    const cappedMs = Math.min(ms, 60 * 60 * 1000); // Cap at 1 hour
+    await new Promise((resolve) => setTimeout(resolve, cappedMs));
+    return { status: "completed", waitedMs: cappedMs };
+  }
+
+  // For webhook/event, return waiting status (actual suspension handled by runtime)
+  return {
+    status: "waiting",
+    resumeOn: wait.resumeOn,
+    eventName: wait.eventName,
+  };
+}
+
+/**
+ * Execute an Event step - emits an event to the event bus
+ */
+async function executeEvent(
+  step: EventStep,
+  _ctx: ExecutionContext,
+): Promise<unknown> {
+  const { event } = step;
+  // TODO: Implement actual event bus integration
+  // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
+  console.log(`[Event] Emitting "${event.eventName}"`);
+  return {
+    eventName: event.eventName,
+    payload: event.payload,
+    emittedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Execute an Aggregate step - combines data from multiple sources
+ */
+async function executeAggregate(
+  step: AggregateStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { aggregate } = step;
+
+  // Resolve source from context
+  const source = resolveExpression(aggregate.source, ctx);
+  const items = Array.isArray(source) ? source : [source];
+
+  let result: unknown;
+  switch (aggregate.mode) {
+    case "collect":
+      result = items;
+      break;
+    case "merge":
+      result = Object.assign(
+        {},
+        ...items.filter(
+          (item) => typeof item === "object" && item !== null,
+        ),
+      );
+      break;
+    case "concat":
+      result = items.flat();
+      break;
+    case "sum":
+      result = items.reduce((acc, item) => {
+        const num = typeof item === "number" ? item : Number(item);
+        return acc + (Number.isNaN(num) ? 0 : num);
+      }, 0);
+      break;
+    case "first":
+      result = items[0];
+      break;
+    case "last":
+      result = items[items.length - 1];
+      break;
+    default:
+      result = items;
+  }
+
+  // Store in output variable
+  if (aggregate.outputVariable) {
+    ctx.variables[aggregate.outputVariable] = result;
+  }
+
+  return { result, mode: aggregate.mode, itemCount: items.length };
+}
+
+/**
+ * Execute a Cache step - get/set values in the cache
+ */
+async function executeCache(
+  step: CacheStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { cache } = step;
+
+  // Use the builtin cache plugin
+  const result = await executeBuiltinAction(
+    "builtin:cache",
+    "execute",
+    {
+      operation: cache.operation,
+      key: resolveExpression(cache.key, ctx),
+      value: cache.value,
+      ttl: cache.ttl,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  // Store in output variable if specified
+  if (cache.outputVariable && result.success && result.output) {
+    const output = result.output as Record<string, unknown>;
+    ctx.variables[cache.outputVariable] = output.value;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Merge step - combine data from multiple sources.
+ */
+async function executeMerge(
+  step: MergeStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { merge } = step;
+  const sources = merge.sources.map((s) => resolveValue(s, ctx));
+
+  // Map merge mode to plugin action.
+  const actionMap: Record<string, string> = {
+    object: "objects",
+    array: "arrays",
+    deep: "deep",
+  };
+  const action = actionMap[merge.mode] || "objects";
+
+  const result = await executeBuiltinAction(
+    "builtin:merge",
+    action,
+    {
+      sources,
+      conflictStrategy: merge.conflictStrategy,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  if (result.success && merge.outputVariable && result.output) {
+    ctx.variables[merge.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Split step - split array into individual items or batches.
+ */
+async function executeSplit(
+  step: SplitStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { split } = step;
+  const source = resolveValue(split.source, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:split",
+    "array",
+    {
+      source,
+      batchSize: split.batchSize,
+      maxItems: split.maxItems,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  if (result.success && result.output) {
+    const output = result.output as Record<string, unknown>;
+    // Store split items in variables for downstream access.
+    ctx.variables[split.itemVariable || "item"] = output.result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Filter step - filter array based on expression.
+ */
+async function executeFilter(
+  step: FilterStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { filter } = step;
+  const source = resolveValue(filter.source, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:filter",
+    "array",
+    {
+      source,
+      expression: filter.expression,
+      itemVariable: filter.itemVariable,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  if (result.success && filter.outputVariable && result.output) {
+    ctx.variables[filter.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Set step - set workflow variables.
+ */
+async function executeSet(
+  step: SetStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { set } = step;
+
+  // Resolve variable values.
+  const resolvedVariables: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(set.variables)) {
+    resolvedVariables[key] = resolveValue(value, ctx);
+  }
+
+  const result = await executeBuiltinAction(
+    "builtin:set",
+    "variables",
+    { variables: resolvedVariables },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  // Apply variables to context.
+  if (result.success && result.output) {
+    const output = result.output as Record<string, unknown>;
+    const vars = output.variables as Record<string, unknown>;
+    for (const [key, value] of Object.entries(vars)) {
+      ctx.variables[key] = value;
+    }
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute an Error step - throw a custom workflow error.
+ */
+async function executeError(
+  step: ErrorStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { error } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:error",
+    "throw",
+    {
+      errorType: resolveValue(error.errorType, ctx),
+      message: resolveValue(error.message, ctx),
+      data: error.data ? resolveInputs(error.data, ctx) : undefined,
+      fatal: error.fatal,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  // Error plugin returns success: false to signal error.
+  if (!result.success) {
+    const output = result.output as Record<string, unknown> | undefined;
+    if (output?.fatal) {
+      throw new Error(`Fatal workflow error: ${result.error}`);
+    }
+    throw new Error(result.error || "Workflow error");
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Retry step - configure retry behavior for a step.
+ */
+async function executeRetry(
+  step: RetryStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { retry } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:retry",
+    "execute",
+    {
+      maxAttempts: retry.maxAttempts,
+      initialDelayMs: retry.initialDelayMs,
+      backoff: retry.backoff,
+      maxDelayMs: retry.maxDelayMs,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  return result.output;
+}
+
+/**
+ * Execute a Timeout step - wrap operation with timeout handling.
+ */
+async function executeTimeout(
+  step: TimeoutStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { timeout } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:timeout",
+    "wrap",
+    {
+      durationMs: timeout.durationMs,
+      onTimeout: timeout.onTimeout,
+      fallbackValue: timeout.fallbackValue,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  return result.output;
+}
+
+/**
+ * Execute an Email step - send an email.
+ */
+async function executeEmail(
+  step: EmailStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { email } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:email",
+    "send",
+    {
+      to: resolveValue(email.to, ctx),
+      cc: email.cc ? resolveValue(email.cc, ctx) : undefined,
+      bcc: email.bcc ? resolveValue(email.bcc, ctx) : undefined,
+      subject: resolveValue(email.subject, ctx),
+      body: resolveValue(email.body, ctx),
+      contentType: email.contentType,
+      attachments: email.attachments,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  if (!result.success) {
+    throw new Error(`Email send failed: ${result.error}`);
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a WebhookResponse step - return data to webhook caller.
+ */
+async function executeWebhookResponse(
+  step: WebhookResponseStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { webhookResponse } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:webhookResponse",
+    "respond",
+    {
+      statusCode: webhookResponse.statusCode,
+      headers: webhookResponse.headers,
+      body: resolveValue(webhookResponse.body, ctx),
+      contentType: webhookResponse.contentType,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  return result.output;
+}
+
+/**
+ * Execute a File step - file operations.
+ */
+async function executeFile(
+  step: FileStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { file } = step;
+  const path = String(resolveValue(file.path, ctx));
+
+  const result = await executeBuiltinAction(
+    "builtin:file",
+    file.operation,
+    {
+      path,
+      content: file.content ? resolveValue(file.content, ctx) : undefined,
+      pattern: file.operation === "list" ? undefined : undefined,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  if (!result.success) {
+    throw new Error(`File operation failed: ${result.error}`);
+  }
+
+  if (result.success && file.outputVariable && result.output) {
+    const output = result.output as Record<string, unknown>;
+    // For read, store content; for list, store files; for exists, store exists boolean.
+    if (file.operation === "read") {
+      ctx.variables[file.outputVariable] = output.content;
+    } else if (file.operation === "list") {
+      ctx.variables[file.outputVariable] = output.files;
+    } else if (file.operation === "exists") {
+      ctx.variables[file.outputVariable] = output.exists;
+    } else {
+      ctx.variables[file.outputVariable] = output;
+    }
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Queue step - message queue operations.
+ */
+async function executeQueue(
+  step: QueueStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { queue } = step;
+
+  const inputs: Record<string, unknown> = {
+    queueName: resolveValue(queue.queueName, ctx),
+  };
+
+  if (queue.operation === "push") {
+    inputs.message = resolveValue(queue.message, ctx);
+    inputs.priority = queue.priority;
+    inputs.delayMs = queue.delayMs;
+  }
+
+  const result = await executeBuiltinAction(
+    "builtin:queue",
+    queue.operation,
+    inputs,
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  if (!result.success) {
+    throw new Error(`Queue operation failed: ${result.error}`);
+  }
+
+  if (result.success && queue.outputVariable && result.output) {
+    const output = result.output as Record<string, unknown>;
+    ctx.variables[queue.outputVariable] = output.message;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute an Embedding step - generate vector embeddings.
+ */
+async function executeEmbedding(
+  step: EmbeddingStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { embedding } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:embedding",
+    "generate",
+    {
+      input: resolveValue(embedding.input, ctx),
+      model: embedding.model,
+      dimensions: embedding.dimensions,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  if (!result.success) {
+    throw new Error(`Embedding generation failed: ${result.error}`);
+  }
+
+  if (result.success && embedding.outputVariable && result.output) {
+    const output = result.output as Record<string, unknown>;
+    ctx.variables[embedding.outputVariable] = output.embeddings;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a VectorSearch step - search vector database.
+ */
+async function executeVectorSearch(
+  step: VectorSearchStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { vectorSearch } = step;
+
+  // Resolve query vector (can be expression referencing embedding output).
+  const queryVector = resolveValue(vectorSearch.queryVector, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:vectorSearch",
+    "search",
+    {
+      queryVector,
+      indexName: vectorSearch.indexName,
+      topK: vectorSearch.topK,
+      minScore: vectorSearch.minScore,
+      filter: vectorSearch.filter
+        ? resolveInputs(vectorSearch.filter, ctx)
+        : undefined,
+      includeVectors: vectorSearch.includeVectors,
+      includeMetadata: vectorSearch.includeMetadata,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  if (!result.success) {
+    throw new Error(`Vector search failed: ${result.error}`);
+  }
+
+  if (result.success && vectorSearch.outputVariable && result.output) {
+    const output = result.output as Record<string, unknown>;
+    ctx.variables[vectorSearch.outputVariable] = output.results;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Log step - write structured log entry.
+ */
+async function executeLog(
+  step: LogStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { log } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:log",
+    "write",
+    {
+      level: log.level,
+      message: String(resolveValue(log.message, ctx)),
+      data: log.data ? resolveInputs(log.data, ctx) : undefined,
+      tags: log.tags,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  return result.output;
+}
+
+/**
+ * Execute an Assert step - validate expression or equality.
+ */
+async function executeAssert(
+  step: AssertStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { assert } = step;
+
+  // Resolve the expression with context values.
+  const expression = String(resolveValue(assert.expression, ctx));
+
+  const result = await executeBuiltinAction(
+    "builtin:assert",
+    "expression",
+    {
+      expression,
+      message: assert.message,
+      softFail: assert.softFail,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  if (!result.success && !assert.softFail) {
+    throw new Error(`Assertion failed: ${result.error}`);
+  }
+
+  if (result.success && assert.outputVariable && result.output) {
+    const output = result.output as Record<string, unknown>;
+    ctx.variables[assert.outputVariable] = output.passed;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Sleep step - pause workflow execution.
+ */
+async function executeSleep(
+  step: SleepStep,
+  _ctx: ExecutionContext,
+): Promise<unknown> {
+  const { sleep } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:sleep",
+    "wait",
+    {
+      duration: sleep.duration,
+      unit: sleep.unit,
+    },
+    {
+      workflowId: _ctx.workflowId,
+      runId: _ctx.runId,
+      stepId: step.id,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  return result.output;
+}
+
+/**
+ * Resolve an expression string to its value from the execution context.
+ */
+function resolveExpression(expression: string, ctx: ExecutionContext): unknown {
+  return resolveValue(expression, ctx);
+}
+
 // Helper functions
 
 function resolveInputs(
@@ -1525,4 +2444,909 @@ function convertToMs(duration: number, unit: string): number {
   };
 
   return duration * (multipliers[unit] ?? 1000);
+}
+
+/**
+ * Build plugin context from step and execution context.
+ */
+function buildPluginContext(
+  step: Step,
+  ctx: ExecutionContext,
+): {
+  workflowId: string;
+  runId: string;
+  stepId: string;
+  config: Record<string, unknown>;
+  secrets: Record<string, unknown>;
+} {
+  return {
+    workflowId: ctx.workflowId,
+    runId: ctx.runId,
+    stepId: step.id,
+    config: {},
+    secrets: {},
+  };
+}
+
+// ============================================================================
+// Additional Core Nodes - Data Transformation
+// ============================================================================
+
+/**
+ * Execute a Map step - transform each item in an array.
+ */
+async function executeMap(
+  step: MapStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { map } = step;
+  const source = resolveValue(map.source, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:map",
+    "transform",
+    {
+      source,
+      expression: map.expression,
+      itemVariable: map.itemVariable,
+      indexVariable: map.indexVariable,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && map.outputVariable && result.output) {
+    ctx.variables[map.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Reduce step - aggregate array items into a single value.
+ */
+async function executeReduce(
+  step: ReduceStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { reduce } = step;
+  const source = resolveValue(reduce.source, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:reduce",
+    "aggregate",
+    {
+      source,
+      expression: reduce.expression,
+      initialValue: reduce.initialValue,
+      accumulatorVariable: reduce.accumulatorVariable,
+      itemVariable: reduce.itemVariable,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && reduce.outputVariable && result.output) {
+    ctx.variables[reduce.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Sort step - sort array items.
+ */
+async function executeSort(
+  step: SortStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { sort } = step;
+  const source = resolveValue(sort.source, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:sort",
+    "array",
+    {
+      source,
+      key: sort.key,
+      direction: sort.direction,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && sort.outputVariable && result.output) {
+    ctx.variables[sort.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Unique step - remove duplicate items from array.
+ */
+async function executeUnique(
+  step: UniqueStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { unique } = step;
+  const source = resolveValue(unique.source, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:unique",
+    "array",
+    {
+      source,
+      key: unique.key,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && unique.outputVariable && result.output) {
+    ctx.variables[unique.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Template step - render text template with variables.
+ */
+async function executeTemplate(
+  step: TemplateStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { template } = step;
+
+  const variables = Object.assign({}, ctx.variables, template.variables || {});
+
+  const result = await executeBuiltinAction(
+    "builtin:template",
+    "render",
+    {
+      content: template.content,
+      variables,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && template.outputVariable && result.output) {
+    ctx.variables[template.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+// ============================================================================
+// Additional Core Nodes - AI/ML
+// ============================================================================
+
+/**
+ * Execute a Prompt step - execute a prompt template with an AI model.
+ */
+async function executePrompt(
+  step: PromptStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { prompt } = step;
+
+  const variables = Object.assign({}, ctx.variables, prompt.variables || {});
+
+  const result = await executeBuiltinAction(
+    "builtin:prompt",
+    "execute",
+    {
+      serverId: prompt.serverId,
+      model: prompt.model,
+      template: prompt.template,
+      variables,
+      temperature: prompt.temperature,
+      maxTokens: prompt.maxTokens,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && prompt.outputVariable && result.output) {
+    ctx.variables[prompt.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).response;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Chat step - multi-turn conversation with AI model.
+ */
+async function executeChat(
+  step: ChatStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { chat } = step;
+
+  let messages = chat.messages || [];
+  if (chat.historyVariable && ctx.variables[chat.historyVariable]) {
+    const history = ctx.variables[chat.historyVariable];
+    if (Array.isArray(history)) {
+      messages = [...history, ...messages];
+    }
+  }
+
+  const result = await executeBuiltinAction(
+    "builtin:chat",
+    "send",
+    {
+      serverId: chat.serverId,
+      model: chat.model,
+      messages,
+      temperature: chat.temperature,
+      maxTokens: chat.maxTokens,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && chat.outputVariable && result.output) {
+    ctx.variables[chat.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).response;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Summarize step - summarize text using AI.
+ */
+async function executeSummarize(
+  step: SummarizeStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { summarize } = step;
+  const input = resolveValue(summarize.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:summarize",
+    "text",
+    {
+      serverId: summarize.serverId,
+      model: summarize.model,
+      input: String(input),
+      maxLength: summarize.maxLength,
+      style: summarize.style,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && summarize.outputVariable && result.output) {
+    ctx.variables[summarize.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).summary;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Classify step - classify text into categories using AI.
+ */
+async function executeClassify(
+  step: ClassifyStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { classify } = step;
+  const input = resolveValue(classify.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:classify",
+    "text",
+    {
+      serverId: classify.serverId,
+      model: classify.model,
+      input: String(input),
+      categories: classify.categories,
+      multiLabel: classify.multiLabel,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && classify.outputVariable && result.output) {
+    ctx.variables[classify.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).categories;
+  }
+
+  return result.output;
+}
+
+// ============================================================================
+// Additional Core Nodes - Human-in-the-Loop
+// ============================================================================
+
+/**
+ * Execute an Approval step - request human approval.
+ */
+async function executeApproval(
+  step: ApprovalStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { approval } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:approval",
+    "request",
+    {
+      title: approval.title,
+      message: approval.message,
+      approvers: approval.approvers,
+      timeout: approval.timeout,
+      timeoutAction: approval.timeoutAction,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && approval.outputVariable && result.output) {
+    ctx.variables[approval.outputVariable] = result.output;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute an Input step - request human input.
+ */
+async function executeInput(
+  step: InputStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { input } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:input",
+    "request",
+    {
+      title: input.title,
+      message: input.message,
+      fields: input.fields,
+      assignees: input.assignees,
+      timeout: input.timeout,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && input.outputVariable && result.output) {
+    ctx.variables[input.outputVariable] = result.output;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Notification step - send notification to users.
+ */
+async function executeNotification(
+  step: NotificationStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { notification } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:notification",
+    "send",
+    {
+      channel: notification.channel,
+      recipients: notification.recipients,
+      title: notification.title,
+      message: notification.message,
+      priority: notification.priority,
+      data: notification.data,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  return result.output;
+}
+
+// ============================================================================
+// Additional Core Nodes - Utility
+// ============================================================================
+
+/**
+ * Execute a Parse step - parse data from various formats.
+ */
+async function executeParse(
+  step: ParseStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { parse } = step;
+  const input = resolveValue(parse.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:parse",
+    "data",
+    {
+      input: String(input),
+      format: parse.format,
+      options: parse.options,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && parse.outputVariable && result.output) {
+    ctx.variables[parse.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Validate step - validate data against schema.
+ */
+async function executeValidate(
+  step: ValidateStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { validate } = step;
+  const input = resolveValue(validate.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:validate",
+    "schema",
+    {
+      input,
+      schema: validate.schema,
+      strict: validate.strict,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && validate.outputVariable && result.output) {
+    ctx.variables[validate.outputVariable] = result.output;
+  }
+
+  if (!result.success) {
+    throw new Error(result.error || "Validation failed");
+  }
+
+  const output = result.output as Record<string, unknown>;
+  if (!output.valid) {
+    throw new Error(`Validation failed: ${JSON.stringify(output.errors)}`);
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Format step - format data to various output formats.
+ */
+async function executeFormat(
+  step: FormatStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { format } = step;
+  const input = resolveValue(format.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:format",
+    "data",
+    {
+      input,
+      type: format.type,
+      options: format.options,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && format.outputVariable && result.output) {
+    ctx.variables[format.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Hash step - compute hash of input data.
+ */
+async function executeHash(
+  step: HashStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { hash } = step;
+  const input = resolveValue(hash.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:hash",
+    "compute",
+    {
+      input: String(input),
+      algorithm: hash.algorithm,
+      encoding: hash.encoding,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && hash.outputVariable && result.output) {
+    ctx.variables[hash.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).hash;
+  }
+
+  return result.output;
+}
+
+// Array Operations handlers
+
+/**
+ * Execute a Group step - group array items by key expression.
+ */
+async function executeGroup(
+  step: GroupStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { group } = step;
+  const source = resolveValue(group.source, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:group",
+    "array",
+    {
+      source,
+      keyExpression: group.keyExpression,
+      itemVariable: group.itemVariable,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && group.outputVariable && result.output) {
+    ctx.variables[group.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Flatten step - flatten nested arrays.
+ */
+async function executeFlatten(
+  step: FlattenStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { flatten } = step;
+  const source = resolveValue(flatten.source, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:flatten",
+    "array",
+    {
+      source,
+      depth: flatten.depth,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && flatten.outputVariable && result.output) {
+    ctx.variables[flatten.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Chunk step - split array into chunks of specified size.
+ */
+async function executeChunk(
+  step: ChunkStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { chunk } = step;
+  const source = resolveValue(chunk.source, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:chunk",
+    "array",
+    {
+      source,
+      size: chunk.size,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && chunk.outputVariable && result.output) {
+    ctx.variables[chunk.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Zip step - combine multiple arrays element-wise.
+ */
+async function executeZip(
+  step: ZipStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { zip } = step;
+  const sources = zip.sources.map((s) => resolveValue(s, ctx));
+
+  const result = await executeBuiltinAction(
+    "builtin:zip",
+    "arrays",
+    { sources },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && zip.outputVariable && result.output) {
+    ctx.variables[zip.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+// Security handlers
+
+/**
+ * Execute an Encrypt step - encrypt data with specified algorithm.
+ */
+async function executeEncrypt(
+  step: EncryptStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { encrypt } = step;
+  const input = resolveValue(encrypt.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:encrypt",
+    "data",
+    {
+      input: String(input),
+      key: encrypt.key,
+      algorithm: encrypt.algorithm,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && encrypt.outputVariable && result.output) {
+    ctx.variables[encrypt.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Decrypt step - decrypt data with specified algorithm.
+ */
+async function executeDecrypt(
+  step: DecryptStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { decrypt } = step;
+  const input = resolveValue(decrypt.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:decrypt",
+    "data",
+    {
+      input: String(input),
+      key: decrypt.key,
+      algorithm: decrypt.algorithm,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && decrypt.outputVariable && result.output) {
+    ctx.variables[decrypt.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Sign step - sign data with specified algorithm.
+ */
+async function executeSign(
+  step: SignStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { sign } = step;
+  const input = resolveValue(sign.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:sign",
+    "data",
+    {
+      input: String(input),
+      key: sign.key,
+      algorithm: sign.algorithm,
+      encoding: sign.encoding,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && sign.outputVariable && result.output) {
+    ctx.variables[sign.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).signature;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a JWT step - create or verify JWT tokens.
+ */
+async function executeJwt(
+  step: JwtStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { jwt } = step;
+  const input = resolveValue(jwt.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:jwt",
+    "token",
+    {
+      operation: jwt.operation,
+      input: String(input),
+      secret: jwt.secret,
+      algorithm: jwt.algorithm,
+      expiresIn: jwt.expiresIn,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && jwt.outputVariable && result.output) {
+    ctx.variables[jwt.outputVariable] = result.output;
+  }
+
+  return result.output;
+}
+
+// AI Extensions handlers
+
+/**
+ * Execute an Agent step - run an AI agent with tools.
+ */
+async function executeAgent(
+  step: AgentStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { agent } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:agent",
+    "execute",
+    {
+      serverId: agent.serverId,
+      model: agent.model,
+      goal: agent.goal,
+      tools: agent.tools,
+      maxIterations: agent.maxIterations,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && agent.outputVariable && result.output) {
+    ctx.variables[agent.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).result;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a RAG step - retrieval-augmented generation.
+ */
+async function executeRag(
+  step: RagStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { rag } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:rag",
+    "query",
+    {
+      serverId: rag.serverId,
+      model: rag.model,
+      query: rag.query,
+      collection: rag.collection,
+      topK: rag.topK,
+      promptTemplate: rag.promptTemplate,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && rag.outputVariable && result.output) {
+    ctx.variables[rag.outputVariable] = (
+      result.output as Record<string, unknown>
+    ).answer;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Vision step - analyze images with AI.
+ */
+async function executeVision(
+  step: VisionStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { vision } = step;
+  const image = resolveValue(vision.image, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:vision",
+    "analyze",
+    {
+      serverId: vision.serverId,
+      model: vision.model,
+      image: String(image),
+      task: vision.task,
+      prompt: vision.prompt,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && vision.outputVariable && result.output) {
+    ctx.variables[vision.outputVariable] = result.output;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute an Audio step - process audio with AI.
+ */
+async function executeAudio(
+  step: AudioStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { audio } = step;
+  const input = resolveValue(audio.input, ctx);
+
+  const result = await executeBuiltinAction(
+    "builtin:audio",
+    "process",
+    {
+      serverId: audio.serverId,
+      model: audio.model,
+      task: audio.task,
+      input: String(input),
+      language: audio.language,
+      voice: audio.voice,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (result.success && audio.outputVariable && result.output) {
+    const output = result.output as Record<string, unknown>;
+    ctx.variables[audio.outputVariable] =
+      audio.task === "transcribe" ? output.text : output.audioUrl;
+  }
+
+  return result.output;
 }
