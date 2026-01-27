@@ -16,6 +16,9 @@ const {
   TEMPORAL_TASK_QUEUE,
   // Warden (AuthZ PDP)
   WARDEN_API_URL,
+  WARDEN_SERVICE_KEY,
+  // App API URLs (for reconciliation)
+  RUNA_API_URL,
   // Chronicle (Audit logging)
   CHRONICLE_API_URL,
   // Meilisearch (unified search service)
@@ -84,6 +87,8 @@ export {
   TEMPORAL_NAMESPACE,
   TEMPORAL_TASK_QUEUE,
   WARDEN_API_URL,
+  WARDEN_SERVICE_KEY,
+  RUNA_API_URL,
   // Chronicle
   CHRONICLE_API_URL,
   // Meilisearch

@@ -1,0 +1,151 @@
+/**
+ * AuthZ Reconciliation Workflow
+ *
+ * Periodically reconciles authorization tuples between app databases and Warden PDP.
+ * Runs daily via Hatchet cron trigger.
+ *
+ * Flow:
+ * 1. Call each app's /authz/reconcile endpoint
+ * 2. Log results for observability
+ * 3. Alert on errors (via workflow failure)
+ *
+ * Currently supports: Runa
+ * TODO: Add Backfeed, Gaia when they have reconcile endpoints
+ */
+
+import {
+  RUNA_API_URL,
+  WARDEN_SERVICE_KEY,
+} from "../lib/config/env.config";
+
+import type { Workflow } from "@hatchet-dev/typescript-sdk";
+
+/** Request timeout for reconcile calls */
+const REQUEST_TIMEOUT_MS = 60000; // 60s - reconcile can be slow
+
+interface ReconcileResult {
+  app: string;
+  success: boolean;
+  expected?: number;
+  actual?: number;
+  written?: number;
+  deleted?: number;
+  errors?: string[];
+  error?: string;
+}
+
+/**
+ * Call an app's reconcile endpoint.
+ */
+async function reconcileApp(
+  app: string,
+  apiUrl: string,
+  serviceKey: string,
+): Promise<ReconcileResult> {
+  try {
+    const response = await fetch(`${apiUrl}/authz/reconcile`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Service-Key": serviceKey,
+      },
+      body: JSON.stringify({ deleteOrphans: false }), // Conservative: don't auto-delete
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => "Unknown error");
+      return {
+        app,
+        success: false,
+        error: `HTTP ${response.status}: ${errorText}`,
+      };
+    }
+
+    const data = (await response.json()) as {
+      success: boolean;
+      expected?: number;
+      actual?: number;
+      written?: number;
+      deleted?: number;
+      errors?: string[];
+    };
+
+    return {
+      app,
+      success: data.success,
+      expected: data.expected,
+      actual: data.actual,
+      written: data.written,
+      deleted: data.deleted,
+      errors: data.errors,
+    };
+  } catch (err) {
+    return {
+      app,
+      success: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export const authzReconcileWorkflow: Workflow = {
+  id: "authz-reconcile",
+  description: "Reconcile authorization tuples across all apps",
+  on: {
+    cron: "0 3 * * *", // Daily at 3 AM UTC
+  },
+  steps: [
+    {
+      name: "reconcile-apps",
+      timeout: "5m",
+      retries: 2,
+      run: async (ctx) => {
+        const results: ReconcileResult[] = [];
+
+        // Reconcile Runa
+        if (RUNA_API_URL && WARDEN_SERVICE_KEY) {
+          ctx.log("Reconciling Runa...");
+          const runaResult = await reconcileApp(
+            "runa",
+            RUNA_API_URL,
+            WARDEN_SERVICE_KEY,
+          );
+          results.push(runaResult);
+
+          if (runaResult.success) {
+            ctx.log(
+              `Runa: expected=${runaResult.expected}, actual=${runaResult.actual}, written=${runaResult.written}`,
+            );
+          } else {
+            ctx.log(`Runa reconcile failed: ${runaResult.error}`);
+          }
+        } else {
+          ctx.log("Skipping Runa: RUNA_API_URL or WARDEN_SERVICE_KEY not set");
+        }
+
+        // TODO: Add more apps as they implement /authz/reconcile
+        // - Backfeed
+        // - Gaia
+
+        // Check for any failures
+        const failures = results.filter((r) => !r.success);
+        if (failures.length > 0) {
+          const failedApps = failures.map((f) => f.app).join(", ");
+          throw new Error(`Reconciliation failed for: ${failedApps}`);
+        }
+
+        // Summary
+        const totalWritten = results.reduce((sum, r) => sum + (r.written ?? 0), 0);
+        ctx.log(`Reconciliation complete. Total tuples written: ${totalWritten}`);
+
+        return {
+          success: true,
+          results,
+          totalWritten,
+          reconciledAt: new Date().toISOString(),
+        };
+      },
+    },
+  ],
+};
