@@ -88,7 +88,7 @@ export const StepType = z.enum([
 ]);
 export type StepType = z.infer<typeof StepType>;
 
-export const TriggerType = z.enum(["webhook", "cron", "event", "manual"]);
+export const TriggerType = z.enum(["webhook", "cron", "event", "manual", "omni", "polling", "kafka", "sqs", "s3", "cdc"]);
 export type TriggerType = z.infer<typeof TriggerType>;
 
 export const Position = z.object({
