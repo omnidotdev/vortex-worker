@@ -83,6 +83,8 @@ export const StepType = z.enum([
   // Flow control
   "try_catch",
   "race",
+  // Documentation
+  "comment",
 ]);
 export type StepType = z.infer<typeof StepType>;
 
@@ -1252,6 +1254,18 @@ export const RaceStep = BaseStep.extend({
 });
 export type RaceStep = z.infer<typeof RaceStep>;
 
+/** Visual-only comment, skipped during execution */
+export const CommentStep = BaseStep.extend({
+  type: z.literal("comment"),
+  comment: z
+    .object({
+      note: z.string().optional(),
+      color: z.string().optional(),
+    })
+    .optional(),
+});
+export type CommentStep = z.infer<typeof CommentStep>;
+
 export const Step = z.discriminatedUnion("type", [
   TriggerStep,
   ActionStep,
@@ -1333,6 +1347,8 @@ export const Step = z.discriminatedUnion("type", [
   // Flow control
   TryCatchStep,
   RaceStep,
+  // Documentation
+  CommentStep,
 ]);
 export type Step = z.infer<typeof Step>;
 

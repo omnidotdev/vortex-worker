@@ -468,6 +468,8 @@ export async function executeStep(
     // Flow control
     .with({ type: "try_catch" }, (s) => executeTryCatch(s, ctx, def))
     .with({ type: "race" }, (s) => executeRace(s, ctx, def))
+    // Documentation (skip during execution)
+    .with({ type: "comment" }, () => ({ skipped: true, type: "comment" }))
     .exhaustive();
 
   ctx.stepResults[step.id] = result;
@@ -904,6 +906,8 @@ async function executeStepInternal(
     // Flow control
     .with({ type: "try_catch" }, (s) => executeTryCatch(s, ctx, def))
     .with({ type: "race" }, (s) => executeRace(s, ctx, def))
+    // Documentation (skip during execution)
+    .with({ type: "comment" }, () => ({ skipped: true, type: "comment" }))
     .exhaustive();
 
   // Store result
