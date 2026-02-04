@@ -63,44 +63,6 @@ const executeWithRetry = async (
 };
 
 /**
- * Calculate delay for a retry attempt based on backoff strategy.
- * @param attempt - Current attempt number (1-based).
- * @param initialDelayMs - Initial delay in milliseconds.
- * @param backoff - Backoff strategy to use.
- * @param maxDelayMs - Maximum delay cap in milliseconds.
- * @returns Delay in milliseconds for this attempt.
- */
-export const calculateDelay = (
-  attempt: number,
-  initialDelayMs: number,
-  backoff: BackoffStrategy,
-  maxDelayMs: number,
-): number => {
-  let delay: number;
-
-  switch (backoff) {
-    case "fixed":
-      delay = initialDelayMs;
-      break;
-    case "linear":
-      delay = initialDelayMs * attempt;
-      break;
-    case "exponential":
-      delay = initialDelayMs * 2 ** (attempt - 1);
-      break;
-  }
-
-  return Math.min(delay, maxDelayMs);
-};
-
-/**
- * Sleep for a specified duration.
- * @param ms - Duration in milliseconds.
- */
-export const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
  * Retry built-in plugin definition.
  */
 export const retryPlugin: BuiltinPlugin = {
