@@ -85,6 +85,10 @@ export const StepType = z.enum([
   "race",
   // Documentation
   "comment",
+  // State management
+  "state_get",
+  "state_set",
+  "state_wait",
 ]);
 export type StepType = z.infer<typeof StepType>;
 
@@ -1266,6 +1270,42 @@ export const CommentStep = BaseStep.extend({
 });
 export type CommentStep = z.infer<typeof CommentStep>;
 
+// State management steps
+
+/** Get a value from the cross-workflow state store */
+export const StateGetStep = BaseStep.extend({
+  type: z.literal("state_get"),
+  stateGet: z.object({
+    key: z.string(),
+    outputVariable: z.string(),
+  }),
+});
+export type StateGetStep = z.infer<typeof StateGetStep>;
+
+/** Set a value in the cross-workflow state store */
+export const StateSetStep = BaseStep.extend({
+  type: z.literal("state_set"),
+  stateSet: z.object({
+    key: z.string(),
+    value: z.unknown(),
+    ttl: z.number().optional(),
+  }),
+});
+export type StateSetStep = z.infer<typeof StateSetStep>;
+
+/** Wait for a state condition to be met */
+export const StateWaitStep = BaseStep.extend({
+  type: z.literal("state_wait"),
+  stateWait: z.object({
+    key: z.string(),
+    condition: z.enum(["exists", "equals", "changed"]),
+    value: z.unknown().optional(),
+    timeout: z.string(),
+    outputVariable: z.string().optional(),
+  }),
+});
+export type StateWaitStep = z.infer<typeof StateWaitStep>;
+
 export const Step = z.discriminatedUnion("type", [
   TriggerStep,
   ActionStep,
@@ -1349,6 +1389,10 @@ export const Step = z.discriminatedUnion("type", [
   RaceStep,
   // Documentation
   CommentStep,
+  // State management
+  StateGetStep,
+  StateSetStep,
+  StateWaitStep,
 ]);
 export type Step = z.infer<typeof Step>;
 
