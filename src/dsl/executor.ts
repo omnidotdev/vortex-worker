@@ -58,6 +58,7 @@ import type {
   PluginStep,
   PromptStep,
   QueueStep,
+  RaceStep,
   RagStep,
   ReduceStep,
   RetryStep,
@@ -73,6 +74,7 @@ import type {
   TemplateStep,
   TimeoutStep,
   TriggerStep,
+  TryCatchStep,
   UniqueStep,
   ValidateStep,
   VectorSearchStep,
@@ -452,6 +454,20 @@ export async function executeStep(
     .with({ type: "rag" }, (s) => executeRag(s, ctx))
     .with({ type: "vision" }, (s) => executeVision(s, ctx))
     .with({ type: "audio" }, (s) => executeAudio(s, ctx))
+    // Integration steps (TODO: implement)
+    .with({ type: "spreadsheet" }, () => executeNotImplemented("spreadsheet"))
+    .with({ type: "googleSheets" }, () => executeNotImplemented("googleSheets"))
+    .with({ type: "modelRegistry" }, () =>
+      executeNotImplemented("modelRegistry"),
+    )
+    .with({ type: "webhookVerify" }, () =>
+      executeNotImplemented("webhookVerify"),
+    )
+    .with({ type: "pdf" }, () => executeNotImplemented("pdf"))
+    .with({ type: "rateLimit" }, () => executeNotImplemented("rateLimit"))
+    // Flow control
+    .with({ type: "try_catch" }, (s) => executeTryCatch(s, ctx, def))
+    .with({ type: "race" }, (s) => executeRace(s, ctx, def))
     .exhaustive();
 
   ctx.stepResults[step.id] = result;
@@ -874,6 +890,20 @@ async function executeStepInternal(
     .with({ type: "rag" }, (s) => executeRag(s, ctx))
     .with({ type: "vision" }, (s) => executeVision(s, ctx))
     .with({ type: "audio" }, (s) => executeAudio(s, ctx))
+    // Integration steps (TODO: implement)
+    .with({ type: "spreadsheet" }, () => executeNotImplemented("spreadsheet"))
+    .with({ type: "googleSheets" }, () => executeNotImplemented("googleSheets"))
+    .with({ type: "modelRegistry" }, () =>
+      executeNotImplemented("modelRegistry"),
+    )
+    .with({ type: "webhookVerify" }, () =>
+      executeNotImplemented("webhookVerify"),
+    )
+    .with({ type: "pdf" }, () => executeNotImplemented("pdf"))
+    .with({ type: "rateLimit" }, () => executeNotImplemented("rateLimit"))
+    // Flow control
+    .with({ type: "try_catch" }, (s) => executeTryCatch(s, ctx, def))
+    .with({ type: "race" }, (s) => executeRace(s, ctx, def))
     .exhaustive();
 
   // Store result
@@ -2554,6 +2584,16 @@ function convertToMs(duration: number, unit: string): number {
 }
 
 /**
+ * Placeholder for unimplemented step types
+ */
+async function executeNotImplemented(
+  stepType: string,
+): Promise<{ error: string }> {
+  console.warn(`[Executor] Step type "${stepType}" is not yet implemented`);
+  return { error: `Step type "${stepType}" is not yet implemented` };
+}
+
+/**
  * Build plugin context from step and execution context.
  */
 function buildPluginContext(
@@ -3456,4 +3496,207 @@ async function executeAudio(
   }
 
   return result.output;
+}
+
+// ============================================================================
+// Flow Control Steps
+// ============================================================================
+
+/**
+ * Parse a delay string like "1s", "500ms", "2m" into milliseconds
+ */
+function parseDelay(delay: string): number {
+  const match = delay.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m|h)?$/i);
+  if (!match) {
+    return 1000; // Default 1 second
+  }
+
+  const value = Number.parseFloat(match[1]);
+  const unit = (match[2] || "ms").toLowerCase();
+
+  switch (unit) {
+    case "ms":
+      return value;
+    case "s":
+      return value * 1000;
+    case "m":
+      return value * 60 * 1000;
+    case "h":
+      return value * 60 * 60 * 1000;
+    default:
+      return value;
+  }
+}
+
+/**
+ * Sleep for a specified number of milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Execute a Try/Catch step - wrap execution with error handling and optional retries
+ *
+ * Executes the try branch, and if it fails, runs the catch branch with error info
+ */
+async function executeTryCatch(
+  step: TryCatchStep,
+  ctx: ExecutionContext,
+  def: WorkflowDefinition,
+): Promise<{ success: boolean; handled?: boolean; attempts: number }> {
+  const { tryCatch } = step;
+  const maxRetries = tryCatch.retries ?? 0;
+  let lastError: Error | null = null;
+
+  // Helper to execute a branch (array of step IDs)
+  const executeBranch = async (stepIds: string[]): Promise<unknown[]> => {
+    const branchResults: unknown[] = [];
+
+    for (const stepId of stepIds) {
+      const targetStep = def.steps.find((s) => s.id === stepId);
+      if (!targetStep) {
+        throw new Error(`Step not found in try/catch branch: ${stepId}`);
+      }
+
+      const { result } = await executeStepInternal(def, targetStep, ctx);
+      branchResults.push(result);
+    }
+
+    return branchResults;
+  };
+
+  // Try branch with retries
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      await executeBranch(tryCatch.tryBranch);
+
+      return {
+        success: true,
+        attempts: attempt + 1,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      // Log retry attempt
+      if (attempt < maxRetries) {
+        // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
+        console.log(
+          `[TryCatch] Attempt ${attempt + 1} failed, retrying... Error: ${lastError.message}`,
+        );
+
+        if (tryCatch.retryDelay) {
+          await sleep(parseDelay(tryCatch.retryDelay));
+        }
+      }
+    }
+  }
+
+  // All retries exhausted, run catch branch
+  // Store error information in the specified output variable
+  ctx.variables[tryCatch.errorOutput] = {
+    message: lastError?.message,
+    name: lastError?.name,
+    stack: lastError?.stack,
+    attempts: maxRetries + 1,
+  };
+
+  // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
+  console.log(
+    `[TryCatch] All ${maxRetries + 1} attempts failed, running catch branch`,
+  );
+
+  try {
+    await executeBranch(tryCatch.catchBranch);
+  } catch (catchError) {
+    // If catch branch also fails, propagate the error
+    const catchErr =
+      catchError instanceof Error ? catchError : new Error(String(catchError));
+    console.error(`[TryCatch] Catch branch failed: ${catchErr.message}`);
+    throw catchErr;
+  }
+
+  return {
+    success: false,
+    handled: true,
+    attempts: maxRetries + 1,
+  };
+}
+
+/**
+ * Execute a Race step - run multiple branches in parallel, first to complete wins
+ *
+ * All branches start simultaneously, but only the first to complete determines
+ * the result. Note: Other branches will continue running (cannot truly cancel)
+ */
+async function executeRace(
+  step: RaceStep,
+  ctx: ExecutionContext,
+  def: WorkflowDefinition,
+): Promise<{ winnerIndex: number; result: unknown }> {
+  const { race } = step;
+
+  // Helper to execute a single branch
+  const executeBranch = async (
+    branchStepIds: string[],
+    branchIndex: number,
+  ): Promise<{ index: number; result: unknown }> => {
+    // Create a copy of variables for branch isolation
+    const branchCtx: ExecutionContext = {
+      ...ctx,
+      variables: { ...ctx.variables },
+      stepResults: { ...ctx.stepResults },
+    };
+
+    let lastResult: unknown = null;
+
+    for (const stepId of branchStepIds) {
+      const targetStep = def.steps.find((s) => s.id === stepId);
+      if (!targetStep) {
+        throw new Error(`Step not found in race branch: ${stepId}`);
+      }
+
+      const { result } = await executeStepInternal(def, targetStep, branchCtx);
+      lastResult = result;
+    }
+
+    // Return result from the last step in the branch
+    const lastStepId = branchStepIds[branchStepIds.length - 1];
+    return {
+      index: branchIndex,
+      result: branchCtx.stepResults[lastStepId] ?? lastResult,
+    };
+  };
+
+  // Start all branches in parallel
+  const branchPromises = race.branches.map((branchStepIds, index) =>
+    executeBranch(branchStepIds, index),
+  );
+
+  // Add timeout if specified
+  let winner: { index: number; result: unknown };
+
+  if (race.timeout) {
+    const timeoutMs = parseDelay(race.timeout);
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Race timeout exceeded")), timeoutMs);
+    });
+
+    winner = await Promise.race([...branchPromises, timeoutPromise]);
+  } else {
+    winner = await Promise.race(branchPromises);
+  }
+
+  // Store results in context variables
+  ctx.variables[race.output] = winner.result;
+  ctx.variables[race.winnerIndex] = winner.index;
+
+  // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
+  console.log(`[Race] Branch ${winner.index} won`);
+
+  return {
+    winnerIndex: winner.index,
+    result: winner.result,
+  };
 }

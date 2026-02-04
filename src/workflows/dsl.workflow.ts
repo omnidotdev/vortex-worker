@@ -1,10 +1,4 @@
 import {
-  createExecutionContext,
-  executeStep,
-  findTriggerStep,
-} from "../dsl/executor";
-import { isReactFlowFormat, reactFlowToDsl } from "../dsl/reactFlowToDsl";
-import {
   createWorkflowRun,
   logStepComplete,
   logStepFailed,
@@ -12,6 +6,12 @@ import {
   markRunComplete,
   markRunFailed,
 } from "../db/runLogger";
+import {
+  createExecutionContext,
+  executeStep,
+  findTriggerStep,
+} from "../dsl/executor";
+import { isReactFlowFormat, reactFlowToDsl } from "../dsl/reactFlowToDsl";
 
 import type { Workflow } from "@hatchet-dev/typescript-sdk";
 import type { WorkflowDefinition } from "../dsl/types";
@@ -159,7 +159,10 @@ export const dslWorkflow: Workflow = {
         // Find trigger step
         const triggerStep = findTriggerStep(dslDef.steps);
         if (!triggerStep) {
-          await markRunFailed(dbRunId, new Error("Workflow has no trigger step"));
+          await markRunFailed(
+            dbRunId,
+            new Error("Workflow has no trigger step"),
+          );
           throw new Error("Workflow has no trigger step");
         }
 

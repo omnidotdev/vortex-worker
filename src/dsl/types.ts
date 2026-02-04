@@ -80,6 +80,9 @@ export const StepType = z.enum([
   // Tier 2
   "pdf",
   "rateLimit",
+  // Flow control
+  "try_catch",
+  "race",
 ]);
 export type StepType = z.infer<typeof StepType>;
 
@@ -1027,10 +1030,7 @@ export const SpreadsheetStep = BaseStep.extend({
     filter: z.string().optional(),
     sortBy: z.union([z.string(), z.array(z.string())]).optional(),
     sortDirection: z
-      .union([
-        z.enum(["asc", "desc"]),
-        z.array(z.enum(["asc", "desc"])),
-      ])
+      .union([z.enum(["asc", "desc"]), z.array(z.enum(["asc", "desc"]))])
       .optional(),
     limit: z.number().optional(),
     offset: z.number().optional(),
@@ -1086,7 +1086,9 @@ export const ModelRegistryStep = BaseStep.extend({
     connectionId: z.string().optional(),
     apiKey: z.string().optional(),
     model: z.string(),
-    operation: z.enum(["chat", "complete", "embed", "generate"]).default("chat"),
+    operation: z
+      .enum(["chat", "complete", "embed", "generate"])
+      .default("chat"),
     messages: z
       .array(
         z.object({
@@ -1175,7 +1177,9 @@ export const PdfStep = BaseStep.extend({
         }),
       )
       .optional(),
-    pageRanges: z.array(z.union([z.number(), z.tuple([z.number(), z.number()])])).optional(),
+    pageRanges: z
+      .array(z.union([z.number(), z.tuple([z.number(), z.number()])]))
+      .optional(),
     watermarkText: z.string().optional(),
     watermarkOptions: z
       .object({
@@ -1198,7 +1202,9 @@ export const RateLimitStep = BaseStep.extend({
     key: z.string(),
     limit: z.number().optional(),
     windowSeconds: z.number().optional(),
-    algorithm: z.enum(["token_bucket", "sliding_window", "fixed_window"]).optional(),
+    algorithm: z
+      .enum(["token_bucket", "sliding_window", "fixed_window"])
+      .optional(),
     burstCapacity: z.number().optional(),
     refillRate: z.number().optional(),
     tokens: z.number().optional(),
@@ -1209,6 +1215,42 @@ export const RateLimitStep = BaseStep.extend({
   }),
 });
 export type RateLimitStep = z.infer<typeof RateLimitStep>;
+
+// Flow control steps
+
+/** Try/catch error handling with optional retries */
+export const TryCatchStep = BaseStep.extend({
+  type: z.literal("try_catch"),
+  tryCatch: z.object({
+    /** Step IDs to execute in the try branch */
+    tryBranch: z.array(z.string()),
+    /** Step IDs to execute if try branch fails */
+    catchBranch: z.array(z.string()),
+    /** Variable name to store error information */
+    errorOutput: z.string(),
+    /** Number of retry attempts before running catch branch */
+    retries: z.number().optional(),
+    /** Delay between retry attempts (e.g., "1s", "500ms", "2m") */
+    retryDelay: z.string().optional(),
+  }),
+});
+export type TryCatchStep = z.infer<typeof TryCatchStep>;
+
+/** Race multiple branches, first to complete wins */
+export const RaceStep = BaseStep.extend({
+  type: z.literal("race"),
+  race: z.object({
+    /** Array of branches, each branch is an array of step IDs */
+    branches: z.array(z.array(z.string())),
+    /** Optional timeout for the race */
+    timeout: z.string().optional(),
+    /** Variable name to store the winning result */
+    output: z.string(),
+    /** Variable name to store the index of winning branch */
+    winnerIndex: z.string(),
+  }),
+});
+export type RaceStep = z.infer<typeof RaceStep>;
 
 export const Step = z.discriminatedUnion("type", [
   TriggerStep,
@@ -1288,6 +1330,9 @@ export const Step = z.discriminatedUnion("type", [
   // Tier 2
   PdfStep,
   RateLimitStep,
+  // Flow control
+  TryCatchStep,
+  RaceStep,
 ]);
 export type Step = z.infer<typeof Step>;
 
