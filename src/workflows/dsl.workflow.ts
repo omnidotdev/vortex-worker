@@ -4,9 +4,30 @@ import {
   findTriggerStep,
 } from "../dsl/executor";
 import { isReactFlowFormat, reactFlowToDsl } from "../dsl/reactFlowToDsl";
+import {
+  createWorkflowRun,
+  logStepComplete,
+  logStepFailed,
+  logStepStart,
+  markRunComplete,
+  markRunFailed,
+} from "../db/runLogger";
 
 import type { Workflow } from "@hatchet-dev/typescript-sdk";
 import type { WorkflowDefinition } from "../dsl/types";
+
+/**
+ * Invert a stepNameToId map to get stepIdToName.
+ */
+function invertStepNameMap(
+  stepNameToId: Record<string, string>,
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [name, id] of Object.entries(stepNameToId)) {
+    result[id] = name;
+  }
+  return result;
+}
 
 interface DSLWorkflowInput {
   workflowId: string;
@@ -124,9 +145,21 @@ export const dslWorkflow: Workflow = {
           stepNameToId,
         );
 
+        // Create inverted map for looking up step names by ID
+        const stepIdToName = invertStepNameMap(stepNameToId);
+
+        // Create workflow run record for tracking
+        const dbRunId = await createWorkflowRun({
+          workflowId,
+          engineWorkflowId: "dsl-workflow",
+          engineRunId: runId,
+          input: triggerData,
+        });
+
         // Find trigger step
         const triggerStep = findTriggerStep(dslDef.steps);
         if (!triggerStep) {
+          await markRunFailed(dbRunId, new Error("Workflow has no trigger step"));
           throw new Error("Workflow has no trigger step");
         }
 
@@ -134,34 +167,64 @@ export const dslWorkflow: Workflow = {
         const queue: typeof dslDef.steps = [triggerStep];
         const visited = new Set<string>();
 
-        while (queue.length > 0) {
-          const step = queue.shift()!;
+        try {
+          while (queue.length > 0) {
+            const step = queue.shift()!;
 
-          if (visited.has(step.id)) {
-            continue;
+            if (visited.has(step.id)) {
+              continue;
+            }
+            visited.add(step.id);
+
+            // Get step name for logging (fallback to step type if not found)
+            const stepName = stepIdToName[step.id] || step.type;
+
+            ctx.log(`Executing step: ${step.id} (${step.type})`);
+
+            // Log step start
+            await logStepStart(dbRunId, {
+              stepId: step.id,
+              stepName,
+              stepType: step.type,
+              input: step.config,
+            });
+
+            try {
+              const { nextSteps, result } = await executeStep(
+                dslDef,
+                step,
+                execCtx,
+              );
+
+              // Log step completion
+              await logStepComplete(dbRunId, step.id, result);
+
+              ctx.log(
+                `Step ${step.id} completed with result: ${JSON.stringify(result)}`,
+              );
+
+              queue.push(...nextSteps);
+            } catch (stepError) {
+              // Log step failure
+              await logStepFailed(dbRunId, step.id, stepError);
+              throw stepError;
+            }
           }
-          visited.add(step.id);
 
-          ctx.log(`Executing step: ${step.id} (${step.type})`);
+          // Mark run as complete
+          await markRunComplete(dbRunId, execCtx.stepResults);
 
-          const { nextSteps, result } = await executeStep(
-            dslDef,
-            step,
-            execCtx,
-          );
-
-          ctx.log(
-            `Step ${step.id} completed with result: ${JSON.stringify(result)}`,
-          );
-
-          queue.push(...nextSteps);
+          return {
+            workflowId,
+            runId,
+            dbRunId,
+            completedSteps: Object.keys(execCtx.stepResults).length,
+          };
+        } catch (error) {
+          // Mark run as failed
+          await markRunFailed(dbRunId, error);
+          throw error;
         }
-
-        return {
-          workflowId,
-          runId,
-          completedSteps: Object.keys(execCtx.stepResults).length,
-        };
       },
     },
   ],

@@ -103,3 +103,82 @@ export const oauthTokenTable = pgTable(
 );
 
 export type OAuthToken = typeof oauthTokenTable.$inferSelect;
+
+/**
+ * Workflow table - stores workflow definitions.
+ * Mirrored from vortex-api for subworkflow lookup.
+ */
+export const workflowTable = pgTable("workflow", {
+  id: uuid().primaryKey().defaultRandom(),
+  organizationId: text("organization_id").notNull(),
+  name: text().notNull(),
+  definition: jsonb().notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+export type Workflow = typeof workflowTable.$inferSelect;
+
+/**
+ * Workflow run table - tracks workflow executions.
+ */
+export const workflowRunTable = pgTable(
+  "workflow_run",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workflowId: uuid("workflow_id").references(() => workflowTable.id, {
+      onDelete: "cascade",
+    }),
+    engineWorkflowId: text("engine_workflow_id").notNull(),
+    engineRunId: text("engine_run_id").notNull(),
+    status: text().notNull().default("pending"),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    input: jsonb(),
+    output: jsonb(),
+    error: text(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("workflow_run_workflow_id_idx").on(table.workflowId),
+    index("workflow_run_status_idx").on(table.status),
+    index("workflow_run_engine_workflow_id_idx").on(table.engineWorkflowId),
+  ],
+);
+
+export type WorkflowRun = typeof workflowRunTable.$inferSelect;
+export type NewWorkflowRun = typeof workflowRunTable.$inferInsert;
+
+/**
+ * Workflow step log table - detailed step-level execution tracking.
+ */
+export const workflowStepLogTable = pgTable(
+  "workflow_step_log",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workflowRunId: uuid("workflow_run_id")
+      .notNull()
+      .references(() => workflowRunTable.id, { onDelete: "cascade" }),
+    stepId: text("step_id").notNull(),
+    stepType: text("step_type").notNull(),
+    stepName: text("step_name").notNull(),
+    status: text().notNull().default("pending"),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    input: jsonb(),
+    output: jsonb(),
+    error: text(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("workflow_step_log_run_id_idx").on(table.workflowRunId),
+    index("workflow_step_log_step_id_idx").on(table.stepId),
+    index("workflow_step_log_status_idx").on(table.status),
+  ],
+);
+
+export type WorkflowStepLog = typeof workflowStepLogTable.$inferSelect;
+export type NewWorkflowStepLog = typeof workflowStepLogTable.$inferInsert;

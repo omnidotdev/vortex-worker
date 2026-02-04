@@ -1,6 +1,11 @@
+import Hatchet from "@hatchet-dev/typescript-sdk";
+import { eq } from "drizzle-orm";
 import { match } from "ts-pattern";
 
 import { executeConnectorAction } from "../connectors/executor";
+import { getDb } from "../db";
+import { createWorkflowRun } from "../db/runLogger";
+import { workflowRunTable, workflowTable } from "../db/schema";
 import { getIntegrationCredentials } from "../integrations/credentials";
 import { connectMCPServer, getMCPClient } from "../mcp";
 import {
@@ -44,8 +49,8 @@ import type {
   LLMStep,
   LogStep,
   LoopStep,
-  MapStep,
   MCPStep,
+  MapStep,
   MergeStep,
   NotificationStep,
   ParallelStep,
@@ -1472,15 +1477,119 @@ const executeDatabase = async (
  */
 async function executeSubworkflow(
   step: SubworkflowStep,
-  _ctx: ExecutionContext,
+  ctx: ExecutionContext,
 ): Promise<unknown> {
   const { subworkflow } = step;
-  // TODO: Implement actual subworkflow execution
-  return {
-    workflowId: subworkflow.workflowId,
-    triggered: true,
-    waitForCompletion: subworkflow.waitForCompletion,
-  };
+  const { workflowId, waitForCompletion = true, timeout } = subworkflow;
+
+  // Resolve template variables in inputs
+  const resolvedInputs = resolveInputs(
+    subworkflow.inputs as Record<string, unknown>,
+    ctx,
+  );
+
+  // Look up the target workflow by ID
+  const db = getDb();
+  const [targetWorkflow] = await db
+    .select()
+    .from(workflowTable)
+    .where(eq(workflowTable.id, workflowId))
+    .limit(1);
+
+  if (!targetWorkflow) {
+    throw new Error(`Subworkflow not found: ${workflowId}`);
+  }
+
+  if (!targetWorkflow.isActive) {
+    throw new Error(`Subworkflow is disabled: ${workflowId}`);
+  }
+
+  // Generate a unique run ID for the child workflow
+  const childRunId = `run-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+  // Create a workflow run record for tracking
+  const dbRunId = await createWorkflowRun({
+    workflowId,
+    engineWorkflowId: "dsl-workflow",
+    engineRunId: childRunId,
+    input: resolvedInputs,
+  });
+
+  // Initialize Hatchet client and trigger the child workflow
+  const hatchet = Hatchet.init();
+  await hatchet.event.push("workflow:execute", {
+    workflowId,
+    runId: childRunId,
+    organizationId: ctx.organizationId,
+    triggerData: resolvedInputs,
+    definition: targetWorkflow.definition,
+    parentRunId: ctx.runId,
+  });
+
+  // If fire-and-forget mode, return immediately
+  if (!waitForCompletion) {
+    return {
+      workflowId,
+      runId: childRunId,
+      dbRunId,
+      triggered: true,
+      waitForCompletion: false,
+      status: "triggered",
+    };
+  }
+
+  // Wait for child workflow to complete by polling the run status
+  const startTime = Date.now();
+  const timeoutMs = timeout || 5 * 60 * 1000; // Default 5 minutes
+  const pollIntervalMs = 1000; // Poll every second
+
+  while (Date.now() - startTime < timeoutMs) {
+    const [runStatus] = await db
+      .select()
+      .from(workflowRunTable)
+      .where(eq(workflowRunTable.id, dbRunId))
+      .limit(1);
+
+    if (!runStatus) {
+      throw new Error(`Workflow run record not found: ${dbRunId}`);
+    }
+
+    if (runStatus.status === "completed") {
+      // Map outputs to context variables if specified
+      if (subworkflow.outputs && runStatus.output) {
+        const output = runStatus.output as Record<string, unknown>;
+        for (const [outputKey, variableName] of Object.entries(
+          subworkflow.outputs,
+        )) {
+          ctx.variables[variableName] = output[outputKey];
+        }
+      }
+
+      return {
+        workflowId,
+        runId: childRunId,
+        dbRunId,
+        status: "completed",
+        output: runStatus.output,
+      };
+    }
+
+    if (runStatus.status === "failed") {
+      throw new Error(
+        `Subworkflow failed: ${runStatus.error || "Unknown error"}`,
+      );
+    }
+
+    if (runStatus.status === "cancelled") {
+      throw new Error("Subworkflow was cancelled");
+    }
+
+    // Wait before next poll
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  // Timeout reached
+  throw new Error(`Subworkflow timed out after ${timeoutMs}ms`);
 }
 
 /**
@@ -1553,9 +1662,7 @@ async function executeAggregate(
     case "merge":
       result = Object.assign(
         {},
-        ...items.filter(
-          (item) => typeof item === "object" && item !== null,
-        ),
+        ...items.filter((item) => typeof item === "object" && item !== null),
       );
       break;
     case "concat":
