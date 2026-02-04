@@ -13,6 +13,7 @@ import {
   getPluginHost,
   isBuiltinPlugin,
 } from "../plugins";
+import { stateStore } from "../state";
 
 import type { PluginCallResult } from "../plugins/types";
 import type {
@@ -67,6 +68,9 @@ import type {
   SleepStep,
   SortStep,
   SplitStep,
+  StateGetStep,
+  StateSetStep,
+  StateWaitStep,
   Step,
   SubworkflowStep,
   SummarizeStep,
@@ -470,6 +474,10 @@ export async function executeStep(
     .with({ type: "race" }, (s) => executeRace(s, ctx, def))
     // Documentation (skip during execution)
     .with({ type: "comment" }, () => ({ skipped: true, type: "comment" }))
+    // State management
+    .with({ type: "state_get" }, (s) => executeStateGet(s, ctx))
+    .with({ type: "state_set" }, (s) => executeStateSet(s, ctx))
+    .with({ type: "state_wait" }, (s) => executeStateWait(s, ctx))
     .exhaustive();
 
   ctx.stepResults[step.id] = result;
@@ -908,6 +916,10 @@ async function executeStepInternal(
     .with({ type: "race" }, (s) => executeRace(s, ctx, def))
     // Documentation (skip during execution)
     .with({ type: "comment" }, () => ({ skipped: true, type: "comment" }))
+    // State management
+    .with({ type: "state_get" }, (s) => executeStateGet(s, ctx))
+    .with({ type: "state_set" }, (s) => executeStateSet(s, ctx))
+    .with({ type: "state_wait" }, (s) => executeStateWait(s, ctx))
     .exhaustive();
 
   // Store result
@@ -3703,4 +3715,97 @@ async function executeRace(
     winnerIndex: winner.index,
     result: winner.result,
   };
+}
+
+// State management steps
+
+/**
+ * Execute a StateGet step - retrieve a value from the cross-workflow state store
+ */
+async function executeStateGet(
+  step: StateGetStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { stateGet } = step;
+  const orgId = ctx.organizationId ?? ctx.workflowId;
+  const key = String(resolveValue(stateGet.key, ctx));
+
+  const value = await stateStore.get(orgId, key);
+
+  // Store in output variable and step results
+  ctx.variables[stateGet.outputVariable] = value;
+  ctx.stepResults[step.id] = { value };
+
+  return { value };
+}
+
+/**
+ * Execute a StateSet step - store a value in the cross-workflow state store
+ */
+async function executeStateSet(
+  step: StateSetStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { stateSet } = step;
+  const orgId = ctx.organizationId ?? ctx.workflowId;
+  const key = String(resolveValue(stateSet.key, ctx));
+  const value = resolveValue(stateSet.value, ctx);
+
+  await stateStore.set(orgId, key, value, stateSet.ttl);
+
+  return { key, written: true };
+}
+
+/**
+ * Execute a StateWait step - poll the state store until a condition is met or timeout
+ */
+async function executeStateWait(
+  step: StateWaitStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { stateWait } = step;
+  const orgId = ctx.organizationId ?? ctx.workflowId;
+  const key = String(resolveValue(stateWait.key, ctx));
+  const timeoutMs = parseDelay(stateWait.timeout);
+  const pollIntervalMs = 1000;
+  const startTime = Date.now();
+
+  // Capture initial value for "changed" condition
+  let previousValue: unknown = null;
+  if (stateWait.condition === "changed") {
+    previousValue = await stateStore.get(orgId, key);
+  }
+
+  while (Date.now() - startTime < timeoutMs) {
+    const currentValue = await stateStore.get(orgId, key);
+    let conditionMet = false;
+
+    switch (stateWait.condition) {
+      case "exists":
+        conditionMet = currentValue !== null;
+        break;
+      case "equals":
+        conditionMet =
+          JSON.stringify(currentValue) ===
+          JSON.stringify(resolveValue(stateWait.value, ctx));
+        break;
+      case "changed":
+        conditionMet =
+          JSON.stringify(currentValue) !== JSON.stringify(previousValue);
+        break;
+    }
+
+    if (conditionMet) {
+      if (stateWait.outputVariable) {
+        ctx.variables[stateWait.outputVariable] = currentValue;
+      }
+      return { conditionMet: true, value: currentValue };
+    }
+
+    await sleep(pollIntervalMs);
+  }
+
+  throw new Error(
+    `State wait timed out after ${timeoutMs}ms waiting for key "${key}" condition "${stateWait.condition}"`,
+  );
 }
