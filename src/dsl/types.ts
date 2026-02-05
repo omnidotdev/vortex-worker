@@ -89,6 +89,15 @@ export const StepType = z.enum([
   "state_get",
   "state_set",
   "state_wait",
+  // Workflow primitives
+  "stop",
+  "noop",
+  "debounce",
+  "diff",
+  "change_detector",
+  "time_window",
+  "ai_transform",
+  "ai_guardrails",
 ]);
 export type StepType = z.infer<typeof StepType>;
 
@@ -1306,6 +1315,104 @@ export const StateWaitStep = BaseStep.extend({
 });
 export type StateWaitStep = z.infer<typeof StateWaitStep>;
 
+// Workflow primitives
+
+/** Terminate workflow execution with a status code and optional output */
+export const StopStep = BaseStep.extend({
+  type: z.literal("stop"),
+  stop: z.object({
+    status: z.enum(["success", "failure", "cancelled"]),
+    reason: z.string().optional(),
+    output: z.unknown().optional(),
+  }),
+});
+export type StopStep = z.infer<typeof StopStep>;
+
+/** Pass-through placeholder step */
+export const NoopStep = BaseStep.extend({
+  type: z.literal("noop"),
+});
+export type NoopStep = z.infer<typeof NoopStep>;
+
+/** Coalesce rapid-fire triggers into one execution using Redis */
+export const DebounceStep = BaseStep.extend({
+  type: z.literal("debounce"),
+  debounce: z.object({
+    key: z.string(),
+    windowMs: z.number(),
+    strategy: z.enum(["first", "last"]),
+    outputVariable: z.string().optional(),
+  }),
+});
+export type DebounceStep = z.infer<typeof DebounceStep>;
+
+/** Diff two arrays/objects and emit added/removed/changed */
+export const DiffStep = BaseStep.extend({
+  type: z.literal("diff"),
+  diff: z.object({
+    left: z.string(),
+    right: z.string(),
+    key: z.string().optional(),
+    outputVariable: z.string(),
+  }),
+});
+export type DiffStep = z.infer<typeof DiffStep>;
+
+/** Only continue if a value changed since the last run */
+export const ChangeDetectorStep = BaseStep.extend({
+  type: z.literal("change_detector"),
+  changeDetector: z.object({
+    key: z.string(),
+    value: z.string(),
+    strategy: z.enum(["hash", "deep_equal"]),
+    outputVariable: z.string().optional(),
+  }),
+});
+export type ChangeDetectorStep = z.infer<typeof ChangeDetectorStep>;
+
+/** Only proceed if current time is within a specified window */
+export const TimeWindowStep = BaseStep.extend({
+  type: z.literal("time_window"),
+  timeWindow: z.object({
+    startTime: z.string(),
+    endTime: z.string(),
+    timezone: z.string(),
+    daysOfWeek: z.array(z.number()).optional(),
+    onOutside: z.enum(["skip", "queue", "fail"]),
+  }),
+});
+export type TimeWindowStep = z.infer<typeof TimeWindowStep>;
+
+/** Send data through an LLM with a prompt template for simple transforms */
+export const AiTransformStep = BaseStep.extend({
+  type: z.literal("ai_transform"),
+  aiTransform: z.object({
+    model: z.string(),
+    prompt: z.string(),
+    input: z.string(),
+    schema: z.string().optional(),
+    outputVariable: z.string(),
+  }),
+});
+export type AiTransformStep = z.infer<typeof AiTransformStep>;
+
+/** Validate LLM output against rules before continuing */
+export const AiGuardrailsStep = BaseStep.extend({
+  type: z.literal("ai_guardrails"),
+  aiGuardrails: z.object({
+    input: z.string(),
+    rules: z.array(
+      z.object({
+        type: z.enum(["regex", "contains", "not_contains", "max_length", "json_schema"]),
+        value: z.string(),
+      }),
+    ),
+    onFail: z.enum(["block", "warn", "sanitize"]),
+    outputVariable: z.string().optional(),
+  }),
+});
+export type AiGuardrailsStep = z.infer<typeof AiGuardrailsStep>;
+
 export const Step = z.discriminatedUnion("type", [
   TriggerStep,
   ActionStep,
@@ -1393,6 +1500,15 @@ export const Step = z.discriminatedUnion("type", [
   StateGetStep,
   StateSetStep,
   StateWaitStep,
+  // Workflow primitives
+  StopStep,
+  NoopStep,
+  DebounceStep,
+  DiffStep,
+  ChangeDetectorStep,
+  TimeWindowStep,
+  AiTransformStep,
+  AiGuardrailsStep,
 ]);
 export type Step = z.infer<typeof Step>;
 
