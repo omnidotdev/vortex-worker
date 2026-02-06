@@ -55,6 +55,8 @@ const knipConfig: KnipConfig = {
     "src/adapters/**",
     // Cache client (exports used by plugins and connectors)
     "src/lib/cache/**",
+    // Events consumer (wired at runtime, not yet imported from index)
+    "src/events/**",
   ],
   ignoreDependencies: [
     // All @activepieces/* packages are dynamically loaded at runtime based on integration type
@@ -76,6 +78,8 @@ const knipConfig: KnipConfig = {
     "resend",
     // Kafka adapter (dynamically loaded)
     "kafkajs",
+    // Iggy SDK (used by events consumer)
+    "@iggy.rs/sdk",
   ],
   tags: ["-knipignore"],
 };
