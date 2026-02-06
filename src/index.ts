@@ -9,6 +9,8 @@ import "./lib/config/env.config";
 
 import Hatchet from "@hatchet-dev/typescript-sdk";
 
+import EventsConsumer from "./events/consumer";
+import routeEvent from "./events/router";
 import { closeCache, initCache } from "lib/cache";
 import logger from "lib/logger";
 import { initializeMCPServers } from "./mcp";
@@ -18,6 +20,25 @@ import { chronicleAuditWorkflow } from "./workflows/chronicle.workflow";
 import { dslWorkflow } from "./workflows/dsl.workflow";
 import { searchBootstrapWorkflow } from "./workflows/searchBootstrap.workflow";
 import { tokenRefreshWorkflow } from "./workflows/tokenRefresh.workflow";
+
+import type { EventsConfig } from "./events/types";
+
+/**
+ * Parse an `iggy://host:port` URL into an EventsConfig.
+ */
+function parseEventsUrl(url: string): EventsConfig {
+  const match = url.match(/^iggy:\/\/([^:]+):(\d+)$/);
+  if (!match) {
+    throw new Error(`Invalid EVENTS_URL format, expected iggy://host:port: ${url}`);
+  }
+
+  return {
+    host: match[1],
+    port: Number(match[2]),
+    username: process.env.IGGY_USERNAME ?? "iggy",
+    password: process.env.IGGY_PASSWORD ?? "iggy",
+  };
+}
 
 async function main() {
   await initCache();
@@ -37,9 +58,22 @@ async function main() {
   });
   await worker.start();
 
+  // Start events consumer if streaming layer is configured
+  let eventsConsumer: EventsConsumer | null = null;
+
+  const eventsUrl = process.env.EVENTS_URL;
+  if (eventsUrl) {
+    const config = parseEventsUrl(eventsUrl);
+    eventsConsumer = new EventsConsumer(config, routeEvent);
+    await eventsConsumer.start();
+  } else {
+    logger.warn("EVENTS_URL not set, event routing from Iggy is disabled");
+  }
+
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("Shutting down worker");
+    eventsConsumer?.stop();
     await closeCache();
     process.exit(0);
   };

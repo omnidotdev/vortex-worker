@@ -6,6 +6,7 @@
 import {
   boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -117,6 +118,45 @@ export const workflowTable = pgTable("workflow", {
 });
 
 export type Workflow = typeof workflowTable.$inferSelect;
+
+/**
+ * Event routing rule table - maps incoming events to workflows.
+ * Mirrored from vortex-api for event routing in the worker.
+ */
+export const eventRoutingRuleTable = pgTable(
+  "event_routing_rule",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organizationId: text("organization_id").notNull(),
+    workflowId: uuid("workflow_id")
+      .notNull()
+      .references(() => workflowTable.id, { onDelete: "cascade" }),
+    sourcePattern: text("source_pattern"),
+    typePattern: text("type_pattern").notNull(),
+    condition: text(),
+    transform: text(),
+    priority: integer().notNull().default(0),
+    enabled: boolean().notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("event_routing_rule_org_idx").on(table.organizationId),
+    index("event_routing_rule_workflow_idx").on(table.workflowId),
+    index("event_routing_rule_enabled_idx").on(table.enabled),
+    index("event_routing_rule_lookup_idx").on(
+      table.organizationId,
+      table.enabled,
+      table.priority,
+    ),
+  ],
+);
+
+export type EventRoutingRule = typeof eventRoutingRuleTable.$inferSelect;
 
 /**
  * Workflow run table - tracks workflow executions.
