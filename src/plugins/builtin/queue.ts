@@ -2,7 +2,11 @@
  * Built-in Queue Plugin
  *
  * Message queue operations for memory, Redis, SQS, and RabbitMQ.
+ * The Redis provider uses the centralized client when available,
+ * falling back to per-operation connections when explicit config is given.
  */
+
+import { redisClient } from "lib/redis";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
@@ -201,7 +205,7 @@ const memoryProvider: QueueProviderImpl = {
 
   async ack(_input) {
     const startTime = performance.now();
-    // Memory queue auto-acks on pull.
+    // Memory queue auto-acks on pull
     return {
       success: true,
       output: { acknowledged: true },
@@ -211,10 +215,13 @@ const memoryProvider: QueueProviderImpl = {
 
   async nack(input) {
     const startTime = performance.now();
-    // Memory queue doesn't support nack - message is already removed.
+    // Memory queue doesn't support nack - message is already removed
     return {
       success: true,
-      output: { acknowledged: false, note: "Memory queue does not support nack" },
+      output: {
+        acknowledged: false,
+        note: "Memory queue does not support nack",
+      },
       durationMs: performance.now() - startTime,
     };
   },
@@ -240,20 +247,43 @@ interface RedisConfig {
   db?: number;
 }
 
+/**
+ * Get a Redis client for queue operations.
+ * Uses the centralized client when no explicit config is given,
+ * otherwise creates a per-operation connection.
+ */
+async function getRedisForQueue(
+  config: RedisConfig | undefined,
+): Promise<{
+  // biome-ignore lint/suspicious/noExplicitAny: ioredis types vary
+  redis: any;
+  needsCleanup: boolean;
+}> {
+  // Use centralized client when no explicit config is provided
+  if (!config?.url && !config?.host && !config?.password && redisClient) {
+    return { redis: redisClient, needsCleanup: false };
+  }
+
+  // Create per-operation connection for explicit config
+  const { Redis } = await import("ioredis");
+  const redis = config?.url
+    ? new Redis(config.url)
+    : new Redis({
+        host: config?.host ?? "localhost",
+        port: config?.port ?? 6379,
+        password: config?.password,
+        db: config?.db ?? 0,
+      });
+
+  return { redis, needsCleanup: true };
+}
+
 const redisProvider: QueueProviderImpl = {
   async push(input) {
     const startTime = performance.now();
     try {
       const config = input.providerConfig as RedisConfig | undefined;
-      const { Redis } = await import("ioredis");
-
-      const redis = new Redis({
-        host: config?.host ?? "localhost",
-        port: config?.port ?? 6379,
-        password: config?.password,
-        db: config?.db ?? 0,
-        ...(config?.url && { url: config.url }),
-      });
+      const { redis, needsCleanup } = await getRedisForQueue(config);
 
       try {
         const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -278,11 +308,15 @@ const redisProvider: QueueProviderImpl = {
 
         return {
           success: true,
-          output: { messageId, queueName: input.queueName, queueLength: length },
+          output: {
+            messageId,
+            queueName: input.queueName,
+            queueLength: length,
+          },
           durationMs: performance.now() - startTime,
         };
       } finally {
-        await redis.quit();
+        if (needsCleanup) await redis.quit();
       }
     } catch (error) {
       return {
@@ -297,15 +331,7 @@ const redisProvider: QueueProviderImpl = {
     const startTime = performance.now();
     try {
       const config = input.providerConfig as RedisConfig | undefined;
-      const { Redis } = await import("ioredis");
-
-      const redis = new Redis({
-        host: config?.host ?? "localhost",
-        port: config?.port ?? 6379,
-        password: config?.password,
-        db: config?.db ?? 0,
-        ...(config?.url && { url: config.url }),
-      });
+      const { redis, needsCleanup } = await getRedisForQueue(config);
 
       try {
         const now = Date.now();
@@ -346,7 +372,7 @@ const redisProvider: QueueProviderImpl = {
           durationMs: performance.now() - startTime,
         };
       } finally {
-        await redis.quit();
+        if (needsCleanup) await redis.quit();
       }
     } catch (error) {
       return {
@@ -361,15 +387,7 @@ const redisProvider: QueueProviderImpl = {
     const startTime = performance.now();
     try {
       const config = input.providerConfig as RedisConfig | undefined;
-      const { Redis } = await import("ioredis");
-
-      const redis = new Redis({
-        host: config?.host ?? "localhost",
-        port: config?.port ?? 6379,
-        password: config?.password,
-        db: config?.db ?? 0,
-        ...(config?.url && { url: config.url }),
-      });
+      const { redis, needsCleanup } = await getRedisForQueue(config);
 
       try {
         const now = Date.now();
@@ -407,7 +425,7 @@ const redisProvider: QueueProviderImpl = {
           durationMs: performance.now() - startTime,
         };
       } finally {
-        await redis.quit();
+        if (needsCleanup) await redis.quit();
       }
     } catch (error) {
       return {
@@ -420,7 +438,7 @@ const redisProvider: QueueProviderImpl = {
 
   async ack(_input) {
     const startTime = performance.now();
-    // Redis queue auto-acks on pull (message is removed).
+    // Redis queue auto-acks on pull (message is removed)
     return {
       success: true,
       output: { acknowledged: true },
@@ -432,7 +450,10 @@ const redisProvider: QueueProviderImpl = {
     const startTime = performance.now();
     return {
       success: true,
-      output: { acknowledged: false, note: "Redis queue does not support nack" },
+      output: {
+        acknowledged: false,
+        note: "Redis queue does not support nack",
+      },
       durationMs: performance.now() - startTime,
     };
   },
@@ -441,15 +462,7 @@ const redisProvider: QueueProviderImpl = {
     const startTime = performance.now();
     try {
       const config = input.providerConfig as RedisConfig | undefined;
-      const { Redis } = await import("ioredis");
-
-      const redis = new Redis({
-        host: config?.host ?? "localhost",
-        port: config?.port ?? 6379,
-        password: config?.password,
-        db: config?.db ?? 0,
-        ...(config?.url && { url: config.url }),
-      });
+      const { redis, needsCleanup } = await getRedisForQueue(config);
 
       try {
         const length = await redis.zcard(`queue:${input.queueName}`);
@@ -459,7 +472,7 @@ const redisProvider: QueueProviderImpl = {
           durationMs: performance.now() - startTime,
         };
       } finally {
-        await redis.quit();
+        if (needsCleanup) await redis.quit();
       }
     } catch (error) {
       return {
@@ -480,7 +493,7 @@ interface SQSConfig {
   secretAccessKey?: string;
 }
 
-// Track receipt handles for ack/nack.
+// Track receipt handles for ack/nack
 const sqsReceiptHandles = new Map<string, string>();
 
 const sqsProvider: QueueProviderImpl = {
@@ -587,7 +600,7 @@ const sqsProvider: QueueProviderImpl = {
       const sqsMessage = result.Messages[0];
       const messageId = sqsMessage.MessageId!;
 
-      // Store receipt handle for ack/nack.
+      // Store receipt handle for ack/nack
       if (sqsMessage.ReceiptHandle) {
         sqsReceiptHandles.set(messageId, sqsMessage.ReceiptHandle);
       }
@@ -618,7 +631,7 @@ const sqsProvider: QueueProviderImpl = {
   },
 
   async peek(input) {
-    // SQS doesn't support true peek - receiving makes message invisible.
+    // SQS doesn't support true peek - receiving makes message invisible
     return sqsProvider.pull({
       ...input,
       visibilityTimeoutMs: 0,
@@ -708,7 +721,7 @@ const sqsProvider: QueueProviderImpl = {
           }),
       });
 
-      // Set visibility to 0 to make message immediately visible again.
+      // Set visibility to 0 to make message immediately visible again
       await client.send(
         new ChangeMessageVisibilityCommand({
           QueueUrl: config.queueUrl,
@@ -878,10 +891,9 @@ const rabbitmqProvider: QueueProviderImpl = {
           payload = message.content.toString();
         }
 
-        // Store delivery tag for ack/nack (using messageId as key).
+        // Store delivery tag for ack/nack (using messageId as key)
         const messageId =
-          message.properties.messageId ??
-          `tag_${message.fields.deliveryTag}`;
+          message.properties.messageId ?? `tag_${message.fields.deliveryTag}`;
 
         return {
           success: true,
@@ -921,7 +933,7 @@ const rabbitmqProvider: QueueProviderImpl = {
       try {
         await channel.assertQueue(input.queueName, { durable: true });
 
-        // Get without auto-ack, then nack to put back.
+        // Get without auto-ack, then nack to put back
         const message = await channel.get(input.queueName, { noAck: false });
 
         if (!message) {
@@ -939,7 +951,7 @@ const rabbitmqProvider: QueueProviderImpl = {
           payload = message.content.toString();
         }
 
-        // Nack to put message back at front of queue.
+        // Nack to put message back at front of queue
         channel.nack(message, false, true);
 
         return {
@@ -979,7 +991,6 @@ const rabbitmqProvider: QueueProviderImpl = {
       try {
         // RabbitMQ requires the channel that received the message to ack it.
         // This is a limitation - in practice, ack should be called immediately after pull.
-        // For now, return success but note this limitation.
         return {
           success: true,
           output: {

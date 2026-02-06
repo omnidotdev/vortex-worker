@@ -5,6 +5,9 @@
  * Provides the runtime context that pieces expect.
  */
 
+import logger from "lib/logger";
+import { redisClient } from "lib/redis";
+import { withRetry } from "lib/retry";
 import { getConnector, loadConnector } from "./registry";
 
 import type { Store, StoreScope } from "@activepieces/pieces-framework";
@@ -19,27 +22,56 @@ import type {
 
 /**
  * Create a store implementation for connector execution.
+ * Uses Redis when available, falls back to in-memory Maps.
  */
 function createStore(
-  _workflowId: string,
-  _runId: string,
+  workflowId: string,
+  runId: string,
 ): ConnectorStore & Store {
-  // In-memory store for now - should be backed by Redis/DB in production
-  const flowStore = new Map<string, unknown>();
-  const projectStore = new Map<string, unknown>();
+  const flowPrefix = `wk:store:flow:${workflowId}:${runId}:`;
+  const projectPrefix = `wk:store:proj:${workflowId}:`;
+
+  // In-memory fallback stores
+  const memoryFlowStore = new Map<string, unknown>();
+  const memoryProjectStore = new Map<string, unknown>();
 
   const store: ConnectorStore & Store = {
     async get<T>(key: string, scope?: StoreScope): Promise<T | null> {
-      const targetStore = scope === "COLLECTION" ? projectStore : flowStore;
+      if (redisClient) {
+        const prefix = scope === "COLLECTION" ? projectPrefix : flowPrefix;
+        const raw = await redisClient.get(`${prefix}${key}`);
+        if (!raw) return null;
+        return JSON.parse(raw) as T;
+      }
+
+      // In-memory fallback
+      const targetStore =
+        scope === "COLLECTION" ? memoryProjectStore : memoryFlowStore;
       return (targetStore.get(key) as T) ?? null;
     },
     async put<T>(key: string, value: T, scope?: StoreScope): Promise<T> {
-      const targetStore = scope === "COLLECTION" ? projectStore : flowStore;
+      if (redisClient) {
+        const prefix = scope === "COLLECTION" ? projectPrefix : flowPrefix;
+        await redisClient.set(`${prefix}${key}`, JSON.stringify(value));
+        return value;
+      }
+
+      // In-memory fallback
+      const targetStore =
+        scope === "COLLECTION" ? memoryProjectStore : memoryFlowStore;
       targetStore.set(key, value);
       return value;
     },
     async delete(key: string, scope?: StoreScope): Promise<void> {
-      const targetStore = scope === "COLLECTION" ? projectStore : flowStore;
+      if (redisClient) {
+        const prefix = scope === "COLLECTION" ? projectPrefix : flowPrefix;
+        await redisClient.del(`${prefix}${key}`);
+        return;
+      }
+
+      // In-memory fallback
+      const targetStore =
+        scope === "COLLECTION" ? memoryProjectStore : memoryFlowStore;
       targetStore.delete(key);
     },
   };
@@ -255,8 +287,18 @@ export async function executeConnectorAction(
     // Build Activepieces context
     const actionContext = buildActionContext(connectorContext);
 
-    // Execute the action
-    const result = await action.run(actionContext);
+    // Execute the action with retry for transient failures
+    const result = await withRetry(() => action.run(actionContext), {
+      maxAttempts: 3,
+      onRetry: (error, attempt) => {
+        logger.warn("Retrying connector action", {
+          connectorId,
+          actionName,
+          attempt,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      },
+    });
 
     return {
       success: true,

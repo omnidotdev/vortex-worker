@@ -51,6 +51,10 @@ const knipConfig: KnipConfig = {
     "src/plugins/host.ts",
     // MCP client (exports for testing)
     "src/mcp/client.ts",
+    // Adapters (dynamically loaded based on integration config)
+    "src/adapters/**",
+    // Redis client (exports used by plugins and connectors)
+    "src/lib/redis/**",
   ],
   ignoreDependencies: [
     // All @activepieces/* packages are dynamically loaded at runtime based on integration type
@@ -70,6 +74,8 @@ const knipConfig: KnipConfig = {
     "@temporalio/workflow",
     // Resend is used by email activity
     "resend",
+    // Kafka adapter (dynamically loaded)
+    "kafkajs",
   ],
   tags: ["-knipignore"],
 };

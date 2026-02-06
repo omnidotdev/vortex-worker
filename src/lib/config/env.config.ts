@@ -35,10 +35,17 @@ const {
   SLACK_OAUTH_CLIENT_SECRET,
   GOOGLE_OAUTH_CLIENT_ID,
   GOOGLE_OAUTH_CLIENT_SECRET,
+  // Redis (optional, enables distributed caching)
+  REDIS_URL,
+  // Logging
+  LOG_LEVEL: LOG_LEVEL_RAW,
 } = process.env;
 
 export const isDevEnv = NODE_ENV === "development";
 export const isProdEnv = NODE_ENV === "production";
+
+/** Log level threshold (default: "debug" in dev, "info" in production) */
+export const LOG_LEVEL = LOG_LEVEL_RAW ?? (isDevEnv ? "debug" : "info");
 
 /**
  * Assert that a required environment variable is set.
@@ -105,4 +112,6 @@ export {
   SLACK_OAUTH_CLIENT_SECRET,
   GOOGLE_OAUTH_CLIENT_ID,
   GOOGLE_OAUTH_CLIENT_SECRET,
+  // Redis
+  REDIS_URL,
 };
