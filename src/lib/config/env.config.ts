@@ -35,8 +35,8 @@ const {
   SLACK_OAUTH_CLIENT_SECRET,
   GOOGLE_OAUTH_CLIENT_ID,
   GOOGLE_OAUTH_CLIENT_SECRET,
-  // Redis (optional, enables distributed caching)
-  REDIS_URL,
+  // Cache (optional, enables distributed caching)
+  CACHE_URL,
   // Logging
   LOG_LEVEL: LOG_LEVEL_RAW,
 } = process.env;
@@ -112,6 +112,6 @@ export {
   SLACK_OAUTH_CLIENT_SECRET,
   GOOGLE_OAUTH_CLIENT_ID,
   GOOGLE_OAUTH_CLIENT_SECRET,
-  // Redis
-  REDIS_URL,
+  // Cache
+  CACHE_URL,
 };

@@ -3,11 +3,11 @@
  *
  * Throttling and rate limiting for workflow steps and API calls.
  * Supports token bucket, sliding window, and fixed window algorithms.
- * Uses Redis with Lua scripts for atomic operations when available,
+ * Uses cache with Lua scripts for atomic operations when available,
  * falls back to in-memory Maps.
  */
 
-import { redisClient } from "lib/redis";
+import { cacheClient } from "lib/cache";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
@@ -57,7 +57,7 @@ const TB_PREFIX = "wk:rl:tb:";
 const FW_PREFIX = "wk:rl:fw:";
 const SW_PREFIX = "wk:rl:sw:";
 
-// Lua scripts for atomic Redis operations
+// Lua scripts for atomic cache operations
 
 const TOKEN_BUCKET_ACQUIRE_LUA = `
 local key = KEYS[1]
@@ -326,9 +326,9 @@ const acquireSlidingWindowMemory = (
 };
 
 /**
- * Acquire rate limit tokens via Redis Lua script.
+ * Acquire rate limit tokens via cache Lua script.
  */
-const acquireRedis = async (
+const acquireDistributed = async (
   key: string,
   tokens: number,
   config: AcquireInput,
@@ -341,7 +341,7 @@ const acquireRedis = async (
       const capacity = config.burstCapacity ?? config.limit;
       const refillRate =
         config.refillRate ?? config.limit / config.windowSeconds;
-      const result = (await redisClient!.eval(
+      const result = (await cacheClient!.eval(
         TOKEN_BUCKET_ACQUIRE_LUA,
         1,
         `${TB_PREFIX}${key}`,
@@ -357,7 +357,7 @@ const acquireRedis = async (
       };
     }
     case "fixed_window": {
-      const result = (await redisClient!.eval(
+      const result = (await cacheClient!.eval(
         FIXED_WINDOW_ACQUIRE_LUA,
         1,
         `${FW_PREFIX}${key}`,
@@ -373,7 +373,7 @@ const acquireRedis = async (
       };
     }
     case "sliding_window": {
-      const result = (await redisClient!.eval(
+      const result = (await cacheClient!.eval(
         SLIDING_WINDOW_ACQUIRE_LUA,
         1,
         `${SW_PREFIX}${key}`,
@@ -399,8 +399,8 @@ const acquireTokens = async (
   tokens: number,
   config: AcquireInput,
 ): Promise<{ allowed: boolean; remaining: number; resetIn: number }> => {
-  if (redisClient) {
-    return acquireRedis(key, tokens, config);
+  if (cacheClient) {
+    return acquireDistributed(key, tokens, config);
   }
 
   const algorithm = config.algorithm ?? "token_bucket";
@@ -481,9 +481,9 @@ const check = async (
     const input = inputs as unknown as CheckInput;
     const now = Date.now();
 
-    if (redisClient) {
-      // Check Redis for each algorithm type
-      const tbData = await redisClient.hmget(
+    if (cacheClient) {
+      // Check cache for each algorithm type
+      const tbData = await cacheClient.hmget(
         `${TB_PREFIX}${input.key}`,
         "tokens",
         "lastRefill",
@@ -497,9 +497,7 @@ const check = async (
         const refillRate = parseFloat(tbData[3]!);
         const elapsed = (now - lastRefill) / 1000;
         const tokens = Math.min(capacity, currentTokens + elapsed * refillRate);
-        const resetIn = Math.ceil(
-          ((capacity - tokens) / refillRate) * 1000,
-        );
+        const resetIn = Math.ceil(((capacity - tokens) / refillRate) * 1000);
         return {
           success: true,
           output: {
@@ -514,7 +512,7 @@ const check = async (
         };
       }
 
-      const fwData = await redisClient.hmget(
+      const fwData = await cacheClient.hmget(
         `${FW_PREFIX}${input.key}`,
         "count",
         "windowStart",
@@ -550,7 +548,7 @@ const check = async (
         };
       }
 
-      const swCount = await redisClient.zcard(`${SW_PREFIX}${input.key}`);
+      const swCount = await cacheClient.zcard(`${SW_PREFIX}${input.key}`);
       if (swCount > 0) {
         // Estimate remaining - we can't easily get limit from sorted set
         return {
@@ -655,8 +653,8 @@ const reset = async (
   try {
     const input = inputs as unknown as ResetInput;
 
-    if (redisClient) {
-      const deleted = await redisClient.del(
+    if (cacheClient) {
+      const deleted = await cacheClient.del(
         `${TB_PREFIX}${input.key}`,
         `${FW_PREFIX}${input.key}`,
         `${SW_PREFIX}${input.key}`,
@@ -773,14 +771,14 @@ const configure = async (
     const input = inputs as unknown as RateLimitConfig;
     const algorithm = input.algorithm ?? "token_bucket";
 
-    if (redisClient) {
+    if (cacheClient) {
       const now = Date.now();
       switch (algorithm) {
         case "token_bucket": {
           const capacity = input.burstCapacity ?? input.limit;
           const refillRate =
             input.refillRate ?? input.limit / input.windowSeconds;
-          await redisClient.hmset(`${TB_PREFIX}${input.key}`, {
+          await cacheClient.hmset(`${TB_PREFIX}${input.key}`, {
             tokens: capacity,
             lastRefill: now,
             capacity,
@@ -789,7 +787,7 @@ const configure = async (
           break;
         }
         case "fixed_window": {
-          await redisClient.hmset(`${FW_PREFIX}${input.key}`, {
+          await cacheClient.hmset(`${FW_PREFIX}${input.key}`, {
             count: 0,
             windowStart: now,
             windowSeconds: input.windowSeconds,
@@ -799,7 +797,7 @@ const configure = async (
         }
         case "sliding_window": {
           // Just ensure key exists by removing old data
-          await redisClient.del(`${SW_PREFIX}${input.key}`);
+          await cacheClient.del(`${SW_PREFIX}${input.key}`);
           break;
         }
       }

@@ -6,7 +6,7 @@
  * falling back to per-operation connections when explicit config is given.
  */
 
-import { redisClient } from "lib/redis";
+import { cacheClient } from "lib/cache";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
@@ -252,16 +252,14 @@ interface RedisConfig {
  * Uses the centralized client when no explicit config is given,
  * otherwise creates a per-operation connection.
  */
-async function getRedisForQueue(
-  config: RedisConfig | undefined,
-): Promise<{
+async function getRedisForQueue(config: RedisConfig | undefined): Promise<{
   // biome-ignore lint/suspicious/noExplicitAny: ioredis types vary
   redis: any;
   needsCleanup: boolean;
 }> {
   // Use centralized client when no explicit config is provided
-  if (!config?.url && !config?.host && !config?.password && redisClient) {
-    return { redis: redisClient, needsCleanup: false };
+  if (!config?.url && !config?.host && !config?.password && cacheClient) {
+    return { redis: cacheClient, needsCleanup: false };
   }
 
   // Create per-operation connection for explicit config

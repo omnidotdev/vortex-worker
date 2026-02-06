@@ -5,8 +5,8 @@
  * Provides the runtime context that pieces expect.
  */
 
+import { cacheClient } from "lib/cache";
 import logger from "lib/logger";
-import { redisClient } from "lib/redis";
 import { withRetry } from "lib/retry";
 import { getConnector, loadConnector } from "./registry";
 
@@ -22,7 +22,7 @@ import type {
 
 /**
  * Create a store implementation for connector execution.
- * Uses Redis when available, falls back to in-memory Maps.
+ * Uses cache when available, falls back to in-memory Maps.
  */
 function createStore(
   workflowId: string,
@@ -37,9 +37,9 @@ function createStore(
 
   const store: ConnectorStore & Store = {
     async get<T>(key: string, scope?: StoreScope): Promise<T | null> {
-      if (redisClient) {
+      if (cacheClient) {
         const prefix = scope === "COLLECTION" ? projectPrefix : flowPrefix;
-        const raw = await redisClient.get(`${prefix}${key}`);
+        const raw = await cacheClient.get(`${prefix}${key}`);
         if (!raw) return null;
         return JSON.parse(raw) as T;
       }
@@ -50,9 +50,9 @@ function createStore(
       return (targetStore.get(key) as T) ?? null;
     },
     async put<T>(key: string, value: T, scope?: StoreScope): Promise<T> {
-      if (redisClient) {
+      if (cacheClient) {
         const prefix = scope === "COLLECTION" ? projectPrefix : flowPrefix;
-        await redisClient.set(`${prefix}${key}`, JSON.stringify(value));
+        await cacheClient.set(`${prefix}${key}`, JSON.stringify(value));
         return value;
       }
 
@@ -63,9 +63,9 @@ function createStore(
       return value;
     },
     async delete(key: string, scope?: StoreScope): Promise<void> {
-      if (redisClient) {
+      if (cacheClient) {
         const prefix = scope === "COLLECTION" ? projectPrefix : flowPrefix;
-        await redisClient.del(`${prefix}${key}`);
+        await cacheClient.del(`${prefix}${key}`);
         return;
       }
 

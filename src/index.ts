@@ -9,8 +9,8 @@ import "./lib/config/env.config";
 
 import Hatchet from "@hatchet-dev/typescript-sdk";
 
+import { closeCache, initCache } from "lib/cache";
 import logger from "lib/logger";
-import { closeRedis, initRedis } from "lib/redis";
 import { initializeMCPServers } from "./mcp";
 import { authzSyncWorkflow } from "./workflows/authz.workflow";
 import { authzReconcileWorkflow } from "./workflows/authzReconcile.workflow";
@@ -20,7 +20,7 @@ import { searchBootstrapWorkflow } from "./workflows/searchBootstrap.workflow";
 import { tokenRefreshWorkflow } from "./workflows/tokenRefresh.workflow";
 
 async function main() {
-  await initRedis();
+  await initCache();
   await initializeMCPServers();
 
   // Start Hatchet worker
@@ -40,7 +40,7 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("Shutting down worker");
-    await closeRedis();
+    await closeCache();
     process.exit(0);
   };
 

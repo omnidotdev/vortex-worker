@@ -2,10 +2,10 @@
  * Built-in Cache Plugin
  *
  * Cache values with optional TTL.
- * Uses Redis when available, falls back to in-memory Map.
+ * Uses cache when available, falls back to in-memory Map.
  */
 
-import { redisClient } from "lib/redis";
+import { cacheClient } from "lib/cache";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
@@ -62,8 +62,8 @@ const executeCache = async (
 
     switch (operation) {
       case "get": {
-        if (redisClient) {
-          const raw = await redisClient.get(`${KEY_PREFIX}${key}`);
+        if (cacheClient) {
+          const raw = await cacheClient.get(`${KEY_PREFIX}${key}`);
           if (!raw) {
             return {
               success: true,
@@ -97,7 +97,7 @@ const executeCache = async (
       }
 
       case "set": {
-        if (redisClient) {
+        if (cacheClient) {
           const args: (string | number)[] = [
             `${KEY_PREFIX}${key}`,
             JSON.stringify({ value }),
@@ -105,7 +105,7 @@ const executeCache = async (
           if (ttl) {
             args.push("EX", ttl);
           }
-          await redisClient.set(...(args as [string, string, ...string[]]));
+          await cacheClient.set(...(args as [string, string, ...string[]]));
           return {
             success: true,
             output: { stored: true, key, ttl },
@@ -127,8 +127,8 @@ const executeCache = async (
       }
 
       case "delete": {
-        if (redisClient) {
-          const deleted = await redisClient.del(`${KEY_PREFIX}${key}`);
+        if (cacheClient) {
+          const deleted = await cacheClient.del(`${KEY_PREFIX}${key}`);
           return {
             success: true,
             output: { deleted: deleted > 0, key },
@@ -146,8 +146,8 @@ const executeCache = async (
       }
 
       case "getOrSet": {
-        if (redisClient) {
-          const raw = await redisClient.get(`${KEY_PREFIX}${key}`);
+        if (cacheClient) {
+          const raw = await cacheClient.get(`${KEY_PREFIX}${key}`);
           if (raw) {
             const entry = JSON.parse(raw) as { value: unknown };
             return {

@@ -53,8 +53,8 @@ const knipConfig: KnipConfig = {
     "src/mcp/client.ts",
     // Adapters (dynamically loaded based on integration config)
     "src/adapters/**",
-    // Redis client (exports used by plugins and connectors)
-    "src/lib/redis/**",
+    // Cache client (exports used by plugins and connectors)
+    "src/lib/cache/**",
   ],
   ignoreDependencies: [
     // All @activepieces/* packages are dynamically loaded at runtime based on integration type
