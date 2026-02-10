@@ -4,7 +4,6 @@
  * Every event flowing through the streaming layer conforms to this shape,
  * providing consistent metadata for routing, tracing, and replay.
  *
- * TODO: extract to shared @omnidotdev/vortex-events package
  */
 export type OmniEvent = {
   id: string;

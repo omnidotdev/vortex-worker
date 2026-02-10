@@ -74,12 +74,8 @@ const knipConfig: KnipConfig = {
     "@temporalio/client",
     "@temporalio/worker",
     "@temporalio/workflow",
-    // Resend is used by email activity
-    "resend",
     // Kafka adapter (dynamically loaded)
     "kafkajs",
-    // Iggy SDK (used by events consumer)
-    "@iggy.rs/sdk",
   ],
   tags: ["-knipignore"],
 };

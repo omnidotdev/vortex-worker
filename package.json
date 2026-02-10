@@ -13,6 +13,8 @@
     "knip": "knip-bun",
     "catalog:generate": "bun run scripts/generateCatalog.ts",
     "postinstall": "bun catalog:generate",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
     "prepare": "husky"
   },
   "trustedDependencies": [
@@ -652,6 +654,7 @@
     "@opentelemetry/sdk-logs": "^0.210.0",
     "@opentelemetry/sdk-node": "^0.210.0",
     "@opentelemetry/semantic-conventions": "^1.39.0",
+    "@sentry/bun": "^10.38.0",
     "@temporalio/activity": "^1.14.1",
     "@temporalio/client": "^1.14.1",
     "@temporalio/worker": "^1.14.1",
