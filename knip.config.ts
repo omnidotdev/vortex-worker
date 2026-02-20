@@ -72,8 +72,6 @@ const knipConfig: KnipConfig = {
     // Temporal deps for future use
     "@temporalio/activity",
     "@temporalio/client",
-    // Kafka adapter (dynamically loaded)
-    "kafkajs",
   ],
   tags: ["-knipignore"],
 };
