@@ -131,7 +131,7 @@ async function main() {
     await Promise.all([
       stopKafkaTriggerRunner(),
       stopSqsTriggerRunner(),
-      Promise.resolve(stopGraphQLSubscriptionTriggerRunner()),
+      stopGraphQLSubscriptionTriggerRunner(),
     ]);
     await closeCache();
     process.exit(0);

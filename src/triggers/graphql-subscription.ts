@@ -302,7 +302,7 @@ export function startGraphQLSubscriptionTriggerRunner(): void {
 /**
  * Stop the GraphQL subscription trigger runner and dispose all subscriptions.
  */
-export function stopGraphQLSubscriptionTriggerRunner(): void {
+export function stopGraphQLSubscriptionTriggerRunner(): Promise<void> {
   if (scanInterval) {
     clearInterval(scanInterval);
     scanInterval = null;
@@ -322,4 +322,6 @@ export function stopGraphQLSubscriptionTriggerRunner(): void {
   activeSubscriptions.clear();
 
   logger.info("GraphQL subscription trigger runner stopped");
+
+  return Promise.resolve();
 }
