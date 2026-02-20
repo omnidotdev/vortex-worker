@@ -18,8 +18,9 @@ const knipConfig: KnipConfig = {
     "src/instrumentation.ts",
     // Test files are run via bun test
     "src/__tests__/**",
-    // Temporal workflows (WIP - alternative to Hatchet)
+    // Temporal workflows and activities (WIP - alternative to Hatchet)
     "src/workflows/temporal/**",
+    "src/workflows/temporal.activities.ts",
     // Activity files (used by workflow engine at runtime)
     "src/activities/**",
     // Executor adapters (dynamically loaded based on config)

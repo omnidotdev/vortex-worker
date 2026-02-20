@@ -30,8 +30,9 @@ function invertStepNameMap(
   return result;
 }
 
-interface DSLWorkflowInput {
+export interface DSLWorkflowInput {
   workflowId: string;
+  runId: string;
   organizationId?: string;
   triggerData: Record<string, unknown>;
   definition: WorkflowDefinition | Record<string, unknown>;
