@@ -37,7 +37,7 @@ export function createTransport(
       );
     }
     return new SSEClientTransport(new URL(config.url), {
-      requestInit: { headers: config.headers },
+      requestInit: config.headers ? { headers: config.headers } : {},
     });
   }
 
@@ -48,7 +48,7 @@ export function createTransport(
       );
     }
     return new StreamableHTTPClientTransport(new URL(config.url), {
-      requestInit: { headers: config.headers },
+      requestInit: config.headers ? { headers: config.headers } : {},
     });
   }
 

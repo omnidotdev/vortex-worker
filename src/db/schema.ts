@@ -22,10 +22,13 @@ export const mcpServerTable = pgTable("mcp_server", {
   organizationId: text("organization_id").notNull(),
   name: text().notNull(),
   type: text().notNull().default("custom"),
-  command: text().notNull(),
+  transport: text().default("stdio"),
+  command: text(),
   args: jsonb().notNull().default([]),
   env: jsonb().notNull().default({}),
   cwd: text(),
+  url: text(),
+  headers: jsonb(),
   isEnabled: boolean("is_enabled").default(true).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()

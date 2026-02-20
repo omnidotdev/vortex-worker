@@ -5,10 +5,11 @@
  * `transport` field in `MCPServerConfig`.
  */
 
+import { describe, expect, it } from "bun:test";
+
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { describe, expect, it } from "bun:test";
 
 import { createTransport } from "./client";
 
@@ -46,7 +47,7 @@ describe("createTransport", () => {
           name: "Test Server",
           transport: "stdio",
         }),
-      ).toThrow("command required for stdio transport");
+      ).toThrow("MCP server server-3: command required for stdio transport");
     });
   });
 
@@ -81,7 +82,7 @@ describe("createTransport", () => {
           name: "SSE Server",
           transport: "sse",
         }),
-      ).toThrow("url required for SSE transport");
+      ).toThrow("MCP server server-6: url required for SSE transport");
     });
   });
 
@@ -116,7 +117,7 @@ describe("createTransport", () => {
           name: "HTTP Server",
           transport: "http",
         }),
-      ).toThrow("url required for HTTP transport");
+      ).toThrow("MCP server server-9: url required for HTTP transport");
     });
   });
 });

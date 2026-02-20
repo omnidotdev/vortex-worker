@@ -31,10 +31,13 @@ export async function initializeMCPServers(): Promise<void> {
         const config: MCPServerConfig = {
           id: server.id,
           name: server.name,
-          command: server.command,
+          transport: (server.transport as MCPServerConfig["transport"]) ?? "stdio",
+          command: server.command ?? undefined,
           args: server.args as string[],
           env: server.env as Record<string, string>,
           cwd: server.cwd ?? undefined,
+          url: server.url ?? undefined,
+          headers: (server.headers as Record<string, string>) ?? undefined,
           enabled: server.isEnabled,
         };
         await mcpClient.connect(config);
@@ -102,10 +105,13 @@ export async function connectMCPServer(serverId: string): Promise<boolean> {
     const config: MCPServerConfig = {
       id: server.id,
       name: server.name,
-      command: server.command,
+      transport: (server.transport as MCPServerConfig["transport"]) ?? "stdio",
+      command: server.command ?? undefined,
       args: server.args as string[],
       env: server.env as Record<string, string>,
       cwd: server.cwd ?? undefined,
+      url: server.url ?? undefined,
+      headers: (server.headers as Record<string, string>) ?? undefined,
       enabled: server.isEnabled,
     };
 
