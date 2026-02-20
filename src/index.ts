@@ -64,6 +64,44 @@ async function main() {
   });
   await worker.start();
 
+  // Start Temporal worker if configured
+  let temporalWorker: import("@temporalio/worker").Worker | null = null;
+
+  if (process.env.TEMPORAL_ADDRESS) {
+    try {
+      const { Worker, NativeConnection } = await import("@temporalio/worker");
+      const { executeDslWorkflow } = await import(
+        "./workflows/temporal.activities"
+      );
+
+      const connection = await NativeConnection.connect({
+        address: process.env.TEMPORAL_ADDRESS,
+      });
+
+      temporalWorker = await Worker.create({
+        connection,
+        namespace: process.env.TEMPORAL_NAMESPACE ?? "default",
+        taskQueue: process.env.TEMPORAL_TASK_QUEUE ?? "vortex-dsl",
+        workflowsPath: new URL(
+          "./workflows/temporal.workflow",
+          import.meta.url,
+        ).pathname,
+        activities: { executeDslWorkflow },
+      });
+
+      await temporalWorker.run();
+      logger.info("Temporal worker started", {
+        address: process.env.TEMPORAL_ADDRESS,
+        taskQueue: process.env.TEMPORAL_TASK_QUEUE ?? "vortex-dsl",
+      });
+    } catch (err) {
+      logger.error("Failed to start Temporal worker", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      // Do not crash — Hatchet worker is still running
+    }
+  }
+
   // Start events consumer if streaming layer is configured
   let eventsConsumer: EventsConsumer | null = null;
 
@@ -80,6 +118,7 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("Shutting down worker");
+    temporalWorker?.shutdown();
     eventsConsumer?.stop();
     closePublisher();
     await closeCache();
