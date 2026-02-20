@@ -19,6 +19,10 @@ import { closePublisher, initPublisher } from "./events/publisher";
 import routeEvent from "./events/router";
 import { initializeMCPServers } from "./mcp";
 import {
+  startGraphQLSubscriptionTriggerRunner,
+  stopGraphQLSubscriptionTriggerRunner,
+} from "./triggers/graphql-subscription";
+import {
   startKafkaTriggerRunner,
   stopKafkaTriggerRunner,
 } from "./triggers/kafka";
@@ -102,6 +106,9 @@ async function main() {
   // Start SQS trigger runner
   startSqsTriggerRunner();
 
+  // Start GraphQL subscription trigger runner
+  startGraphQLSubscriptionTriggerRunner();
+
   // Start events consumer if streaming layer is configured
   let eventsConsumer: EventsConsumer | null = null;
 
@@ -121,6 +128,7 @@ async function main() {
     temporalWorker?.shutdown();
     eventsConsumer?.stop();
     closePublisher();
+    stopGraphQLSubscriptionTriggerRunner();
     await Promise.all([stopKafkaTriggerRunner(), stopSqsTriggerRunner()]);
     await closeCache();
     process.exit(0);
