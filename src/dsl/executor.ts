@@ -89,8 +89,8 @@ import type {
   SignStep,
   SleepStep,
   SortStep,
-  SpreadsheetStep,
   SplitStep,
+  SpreadsheetStep,
   StateGetStep,
   StateSetStep,
   StateWaitStep,
@@ -2727,13 +2727,15 @@ async function executeSpreadsheet(
       endRow: spreadsheet.endRow,
       columns: spreadsheet.columns,
       headers: spreadsheet.headers,
-      data: spreadsheet.data !== undefined
-        ? resolveValue(spreadsheet.data, ctx)
-        : undefined,
+      data:
+        spreadsheet.data !== undefined
+          ? resolveValue(spreadsheet.data, ctx)
+          : undefined,
       cell: spreadsheet.cell,
-      value: spreadsheet.value !== undefined
-        ? resolveValue(spreadsheet.value, ctx)
-        : undefined,
+      value:
+        spreadsheet.value !== undefined
+          ? resolveValue(spreadsheet.value, ctx)
+          : undefined,
       formula: spreadsheet.formula,
       filter: spreadsheet.filter,
       sortBy: spreadsheet.sortBy,
@@ -2772,9 +2774,10 @@ async function executeGoogleSheets(
       spreadsheetId: resolveExpression(googleSheets.spreadsheetId, ctx),
       sheet: googleSheets.sheet,
       range: googleSheets.range,
-      data: googleSheets.data !== undefined
-        ? resolveValue(googleSheets.data, ctx)
-        : undefined,
+      data:
+        googleSheets.data !== undefined
+          ? resolveValue(googleSheets.data, ctx)
+          : undefined,
       valueInputOption: googleSheets.valueInputOption,
       includeHeaders: googleSheets.includeHeaders,
       filter: googleSheets.filter,
@@ -2801,7 +2804,9 @@ async function executeModelRegistry(
 
   // Map "generate" to "complete" since the plugin uses "complete"
   const pluginOperation =
-    modelRegistry.operation === "generate" ? "complete" : modelRegistry.operation;
+    modelRegistry.operation === "generate"
+      ? "complete"
+      : modelRegistry.operation;
 
   const result = await executeBuiltinAction(
     "builtin:modelRegistry",
@@ -2872,9 +2877,8 @@ async function executePdf(
 ): Promise<unknown> {
   const { pdf } = step;
 
-  const resolvedInput = pdf.input !== undefined
-    ? resolveValue(pdf.input, ctx)
-    : undefined;
+  const resolvedInput =
+    pdf.input !== undefined ? resolveValue(pdf.input, ctx) : undefined;
 
   // Build inputs based on the operation
   const inputs: Record<string, unknown> = {
@@ -2885,7 +2889,9 @@ async function executePdf(
   if (pdf.operation === "parse" || pdf.operation === "info") {
     inputs.path = resolvedInput;
   } else if (pdf.operation === "merge") {
-    inputs.paths = Array.isArray(resolvedInput) ? resolvedInput : [resolvedInput];
+    inputs.paths = Array.isArray(resolvedInput)
+      ? resolvedInput
+      : [resolvedInput];
     inputs.outputPath = resolvedInput;
   } else if (pdf.operation === "split") {
     inputs.path = resolvedInput;
@@ -3104,7 +3110,10 @@ async function executeDiff(
     // Compare objects key-by-key
     const leftObj = left as Record<string, unknown>;
     const rightObj = right as Record<string, unknown>;
-    const allKeys = new Set([...Object.keys(leftObj), ...Object.keys(rightObj)]);
+    const allKeys = new Set([
+      ...Object.keys(leftObj),
+      ...Object.keys(rightObj),
+    ]);
 
     for (const k of allKeys) {
       const hasLeft = k in leftObj;
@@ -3159,7 +3168,9 @@ async function executeChangeDetector(
     buildPluginContext(step, ctx),
   );
 
-  const getOutput = getResult.output as { hit: boolean; value: unknown } | undefined;
+  const getOutput = getResult.output as
+    | { hit: boolean; value: unknown }
+    | undefined;
   const previousStored = getOutput?.hit ? getOutput.value : undefined;
 
   let hasChanged: boolean;
@@ -3221,7 +3232,7 @@ async function executeChangeDetector(
  */
 async function executeTimeWindow(
   step: TimeWindowStep,
-  ctx: ExecutionContext,
+  _ctx: ExecutionContext,
 ): Promise<unknown> {
   const { timeWindow } = step;
 
@@ -3334,7 +3345,11 @@ async function executeAiTransform(
 
   // Try all registered servers for a compatible tool
   for (const toolName of toolNames) {
-    callResult = await mcpClient.callTool(aiTransform.model, toolName, toolArgs);
+    callResult = await mcpClient.callTool(
+      aiTransform.model,
+      toolName,
+      toolArgs,
+    );
     if (callResult?.success) break;
   }
 
@@ -3358,7 +3373,10 @@ async function executeAiTransform(
     }
   } else {
     // Fallback: return input unchanged with a note
-    output = { transformed: inputRaw, note: "LLM unavailable - input returned unchanged" };
+    output = {
+      transformed: inputRaw,
+      note: "LLM unavailable - input returned unchanged",
+    };
   }
 
   if (aiTransform.outputVariable) {
@@ -3380,7 +3398,8 @@ async function executeAiGuardrails(
   const inputRaw = resolveExpression(aiGuardrails.input, ctx);
   const inputStr = String(inputRaw ?? "");
 
-  const violations: Array<{ type: string; value: string; message: string }> = [];
+  const violations: Array<{ type: string; value: string; message: string }> =
+    [];
 
   for (const rule of aiGuardrails.rules) {
     switch (rule.type) {
