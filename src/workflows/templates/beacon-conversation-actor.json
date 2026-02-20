@@ -1,0 +1,121 @@
+{
+  "version": "1.0",
+  "executor": "temporal",
+  "settings": {
+    "timeout": "24h",
+    "retryPolicy": {
+      "maxAttempts": 1,
+      "backoffCoefficient": 1,
+      "initialInterval": "1s",
+      "maxInterval": "1s"
+    }
+  },
+  "edges": [],
+  "steps": [
+    {
+      "id": "trigger",
+      "type": "trigger",
+      "name": "Conversation Started",
+      "position": { "x": 0, "y": 0 },
+      "trigger": {
+        "type": "event",
+        "config": {
+          "pattern": "beacon.conversation.started",
+          "source": "beacon-gateway"
+        }
+      },
+      "next": "init-state"
+    },
+    {
+      "id": "init-state",
+      "type": "state_set",
+      "name": "Initialize Conversation",
+      "position": { "x": 0, "y": 100 },
+      "stateSet": {
+        "key": "{{ run.id }}.history",
+        "value": []
+      },
+      "next": "message-loop"
+    },
+    {
+      "id": "message-loop",
+      "type": "loop",
+      "name": "Message Loop",
+      "position": { "x": 0, "y": 200 },
+      "loop": {
+        "type": "while",
+        "condition": "{{ state['{{ run.id }}.active'] !== false }}",
+        "body": ["wait-for-message"]
+      },
+      "next": "end"
+    },
+    {
+      "id": "wait-for-message",
+      "type": "state_wait",
+      "name": "Wait for Message",
+      "position": { "x": 0, "y": 300 },
+      "stateWait": {
+        "key": "{{ run.id }}.message",
+        "condition": "exists",
+        "timeout": "30m",
+        "outputVariable": "incomingMessage"
+      },
+      "next": "generate-response"
+    },
+    {
+      "id": "generate-response",
+      "type": "llm",
+      "name": "Generate Response",
+      "position": { "x": 0, "y": 400 },
+      "llm": {
+        "serverId": "default-llm",
+        "model": "claude-sonnet-4-6",
+        "systemPrompt": "You are Beacon, an omni AI assistant.",
+        "userPrompt": "{{ steps['wait-for-message'].output.value }}",
+        "memory": {
+          "sessionId": "{{ run.id }}",
+          "windowSize": 50,
+          "persist": true,
+          "autoSave": true
+        }
+      },
+      "next": "publish-response"
+    },
+    {
+      "id": "publish-response",
+      "type": "event",
+      "name": "Publish Response",
+      "position": { "x": 0, "y": 500 },
+      "event": {
+        "operation": "emit",
+        "eventName": "beacon.conversation.response",
+        "payload": {
+          "conversationId": "{{ trigger.data.conversationId }}",
+          "response": "{{ steps['generate-response'].output.content }}"
+        }
+      },
+      "next": "clear-message"
+    },
+    {
+      "id": "clear-message",
+      "type": "state_set",
+      "name": "Clear Message Slot",
+      "position": { "x": 0, "y": 600 },
+      "stateSet": {
+        "key": "{{ run.id }}.message",
+        "value": null
+      },
+      "next": "message-loop"
+    },
+    {
+      "id": "end",
+      "type": "stop",
+      "name": "Conversation Ended",
+      "position": { "x": 0, "y": 700 },
+      "stop": {
+        "status": "success",
+        "reason": "Conversation ended"
+      }
+    }
+  ]
+}
