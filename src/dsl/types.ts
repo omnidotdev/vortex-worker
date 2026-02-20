@@ -141,20 +141,6 @@ export const BaseStep = z.object({
   onError: ErrorHandler.optional(),
 });
 
-export const GraphQLSubscriptionTriggerConfig = z.object({
-  /** WebSocket endpoint. http(s):// URLs are auto-upgraded to ws(s)://. */
-  endpoint: z.string(),
-  /** GraphQL subscription operation document. */
-  query: z.string(),
-  variables: z.record(z.string(), z.unknown()).optional(),
-  /** HTTP headers forwarded as WebSocket connection params. */
-  headers: z.record(z.string(), z.string()).optional(),
-  operationName: z.string().optional(),
-});
-export type GraphQLSubscriptionTriggerConfig = z.infer<
-  typeof GraphQLSubscriptionTriggerConfig
->;
-
 export const TriggerStep = BaseStep.extend({
   type: z.literal("trigger"),
   trigger: z.object({
