@@ -12,6 +12,7 @@ import {
   findNextSteps,
   findTriggerStep,
 } from "../dsl/executor";
+import { WorkflowDefinition } from "../dsl/types";
 
 import type {
   ConditionStep,
@@ -22,8 +23,6 @@ import type {
   SwitchStep,
   TriggerStep,
 } from "../dsl/types";
-
-import { WorkflowDefinition } from "../dsl/types";
 
 // Helper to create a minimal workflow definition
 function createWorkflow(steps: Step[], edges: Edge[] = []): WorkflowDefinition {
@@ -489,7 +488,6 @@ describe("template expression resolution", () => {
     expect(result).toEqual({ branch: "true", value: true });
   });
 });
-
 
 describe("WorkflowDefinition executor field", () => {
   it("accepts executor field 'temporal'", () => {
