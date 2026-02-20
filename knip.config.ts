@@ -20,9 +20,6 @@ const knipConfig: KnipConfig = {
     "src/__tests__/**",
     // Temporal workflows and activities (WIP - alternative to Hatchet)
     "src/workflows/temporal/**",
-    "src/workflows/temporal.activities.ts",
-    // Temporal workflow function (wired at runtime by Temporal worker)
-    "src/workflows/temporal.workflow.ts",
     // Activity files (used by workflow engine at runtime)
     "src/activities/**",
     // Executor adapters (dynamically loaded based on config)

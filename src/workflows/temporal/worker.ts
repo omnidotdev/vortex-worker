@@ -7,7 +7,6 @@
 
 import { NativeConnection, Worker } from "@temporalio/worker";
 
-import logger from "lib/logger";
 import * as activities from "./activities";
 
 export interface TemporalWorkerConfig {
@@ -47,7 +46,7 @@ export async function createTemporalWorker(
     connection,
     namespace,
     taskQueue,
-    workflowsPath: require.resolve("./workflow"),
+    workflowsPath: new URL("./workflow", import.meta.url).pathname,
     activities,
     maxConcurrentActivityTaskExecutions: maxConcurrentActivities,
     maxConcurrentWorkflowTaskExecutions: maxConcurrentWorkflows,
@@ -66,14 +65,4 @@ export async function runTemporalWorker(
 
   // Run until shutdown signal
   await worker.run();
-}
-
-// Allow running directly
-if (require.main === module) {
-  runTemporalWorker().catch((err) => {
-    logger.error("Temporal worker error", {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    process.exit(1);
-  });
 }
