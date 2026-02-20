@@ -18,6 +18,11 @@ import EventsConsumer from "./events/consumer";
 import { closePublisher, initPublisher } from "./events/publisher";
 import routeEvent from "./events/router";
 import { initializeMCPServers } from "./mcp";
+import {
+  startKafkaTriggerRunner,
+  stopKafkaTriggerRunner,
+} from "./triggers/kafka";
+import { startSqsTriggerRunner, stopSqsTriggerRunner } from "./triggers/sqs";
 import { authzSyncWorkflow } from "./workflows/authz.workflow";
 import { authzReconcileWorkflow } from "./workflows/authzReconcile.workflow";
 import { chronicleAuditWorkflow } from "./workflows/chronicle.workflow";
@@ -91,6 +96,12 @@ async function main() {
     }
   }
 
+  // Start Kafka trigger runner
+  startKafkaTriggerRunner();
+
+  // Start SQS trigger runner
+  startSqsTriggerRunner();
+
   // Start events consumer if streaming layer is configured
   let eventsConsumer: EventsConsumer | null = null;
 
@@ -110,6 +121,7 @@ async function main() {
     temporalWorker?.shutdown();
     eventsConsumer?.stop();
     closePublisher();
+    await Promise.all([stopKafkaTriggerRunner(), stopSqsTriggerRunner()]);
     await closeCache();
     process.exit(0);
   };

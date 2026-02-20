@@ -33,18 +33,23 @@ import type {
   ActionStep,
   AgentStep,
   AggregateStep,
+  AiGuardrailsStep,
+  AiTransformStep,
   ApprovalStep,
   AssertStep,
   AudioStep,
   CacheStep,
+  ChangeDetectorStep,
   ChatStep,
   ChunkStep,
   ClassifyStep,
   CodeStep,
   ConditionStep,
   DatabaseStep,
+  DebounceStep,
   DecryptStep,
   DelayStep,
+  DiffStep,
   EmailStep,
   EmbeddingStep,
   EncryptStep,
@@ -56,6 +61,7 @@ import type {
   FlattenStep,
   FormatStep,
   GateStep,
+  GoogleSheetsStep,
   GroupStep,
   HashStep,
   InputStep,
@@ -66,20 +72,24 @@ import type {
   MCPStep,
   MapStep,
   MergeStep,
+  ModelRegistryStep,
   NotificationStep,
   ParallelStep,
   ParseStep,
+  PdfStep,
   PluginStep,
   PromptStep,
   QueueStep,
   RaceStep,
   RagStep,
+  RateLimitStep,
   ReduceStep,
   RetryStep,
   SetStep,
   SignStep,
   SleepStep,
   SortStep,
+  SpreadsheetStep,
   SplitStep,
   StateGetStep,
   StateSetStep,
@@ -89,6 +99,7 @@ import type {
   SummarizeStep,
   SwitchStep,
   TemplateStep,
+  TimeWindowStep,
   TimeoutStep,
   TriggerStep,
   TryCatchStep,
@@ -98,6 +109,7 @@ import type {
   VisionStep,
   WaitStep,
   WebhookResponseStep,
+  WebhookVerifyStep,
   WorkflowDefinition,
   ZipStep,
 } from "./types";
@@ -471,17 +483,13 @@ export async function executeStep(
     .with({ type: "rag" }, (s) => executeRag(s, ctx))
     .with({ type: "vision" }, (s) => executeVision(s, ctx))
     .with({ type: "audio" }, (s) => executeAudio(s, ctx))
-    // Integration steps (TODO: implement)
-    .with({ type: "spreadsheet" }, () => executeNotImplemented("spreadsheet"))
-    .with({ type: "googleSheets" }, () => executeNotImplemented("googleSheets"))
-    .with({ type: "modelRegistry" }, () =>
-      executeNotImplemented("modelRegistry"),
-    )
-    .with({ type: "webhookVerify" }, () =>
-      executeNotImplemented("webhookVerify"),
-    )
-    .with({ type: "pdf" }, () => executeNotImplemented("pdf"))
-    .with({ type: "rateLimit" }, () => executeNotImplemented("rateLimit"))
+    // Integration steps
+    .with({ type: "spreadsheet" }, (s) => executeSpreadsheet(s, ctx))
+    .with({ type: "googleSheets" }, (s) => executeGoogleSheets(s, ctx))
+    .with({ type: "modelRegistry" }, (s) => executeModelRegistry(s, ctx))
+    .with({ type: "webhookVerify" }, (s) => executeWebhookVerify(s, ctx))
+    .with({ type: "pdf" }, (s) => executePdf(s, ctx))
+    .with({ type: "rateLimit" }, (s) => executeRateLimit(s, ctx))
     // Flow control
     .with({ type: "try_catch" }, (s) => executeTryCatch(s, ctx, def))
     .with({ type: "race" }, (s) => executeRace(s, ctx, def))
@@ -494,16 +502,12 @@ export async function executeStep(
     // Workflow primitives
     .with({ type: "stop" }, (s) => ({ stopped: true, ...s.stop }))
     .with({ type: "noop" }, () => ({ skipped: true, type: "noop" }))
-    .with({ type: "debounce" }, () => executeNotImplemented("debounce"))
-    .with({ type: "diff" }, () => executeNotImplemented("diff"))
-    .with({ type: "change_detector" }, () =>
-      executeNotImplemented("change_detector"),
-    )
-    .with({ type: "time_window" }, () => executeNotImplemented("time_window"))
-    .with({ type: "ai_transform" }, () => executeNotImplemented("ai_transform"))
-    .with({ type: "ai_guardrails" }, () =>
-      executeNotImplemented("ai_guardrails"),
-    )
+    .with({ type: "debounce" }, (s) => executeDebounce(s, ctx))
+    .with({ type: "diff" }, (s) => executeDiff(s, ctx))
+    .with({ type: "change_detector" }, (s) => executeChangeDetector(s, ctx))
+    .with({ type: "time_window" }, (s) => executeTimeWindow(s, ctx))
+    .with({ type: "ai_transform" }, (s) => executeAiTransform(s, ctx))
+    .with({ type: "ai_guardrails" }, (s) => executeAiGuardrails(s, ctx))
     .exhaustive();
 
   ctx.stepResults[step.id] = result;
@@ -953,17 +957,13 @@ async function executeStepInternal(
     .with({ type: "rag" }, (s) => executeRag(s, ctx))
     .with({ type: "vision" }, (s) => executeVision(s, ctx))
     .with({ type: "audio" }, (s) => executeAudio(s, ctx))
-    // Integration steps (TODO: implement)
-    .with({ type: "spreadsheet" }, () => executeNotImplemented("spreadsheet"))
-    .with({ type: "googleSheets" }, () => executeNotImplemented("googleSheets"))
-    .with({ type: "modelRegistry" }, () =>
-      executeNotImplemented("modelRegistry"),
-    )
-    .with({ type: "webhookVerify" }, () =>
-      executeNotImplemented("webhookVerify"),
-    )
-    .with({ type: "pdf" }, () => executeNotImplemented("pdf"))
-    .with({ type: "rateLimit" }, () => executeNotImplemented("rateLimit"))
+    // Integration steps
+    .with({ type: "spreadsheet" }, (s) => executeSpreadsheet(s, ctx))
+    .with({ type: "googleSheets" }, (s) => executeGoogleSheets(s, ctx))
+    .with({ type: "modelRegistry" }, (s) => executeModelRegistry(s, ctx))
+    .with({ type: "webhookVerify" }, (s) => executeWebhookVerify(s, ctx))
+    .with({ type: "pdf" }, (s) => executePdf(s, ctx))
+    .with({ type: "rateLimit" }, (s) => executeRateLimit(s, ctx))
     // Flow control
     .with({ type: "try_catch" }, (s) => executeTryCatch(s, ctx, def))
     .with({ type: "race" }, (s) => executeRace(s, ctx, def))
@@ -976,16 +976,12 @@ async function executeStepInternal(
     // Workflow primitives
     .with({ type: "stop" }, (s) => ({ stopped: true, ...s.stop }))
     .with({ type: "noop" }, () => ({ skipped: true, type: "noop" }))
-    .with({ type: "debounce" }, () => executeNotImplemented("debounce"))
-    .with({ type: "diff" }, () => executeNotImplemented("diff"))
-    .with({ type: "change_detector" }, () =>
-      executeNotImplemented("change_detector"),
-    )
-    .with({ type: "time_window" }, () => executeNotImplemented("time_window"))
-    .with({ type: "ai_transform" }, () => executeNotImplemented("ai_transform"))
-    .with({ type: "ai_guardrails" }, () =>
-      executeNotImplemented("ai_guardrails"),
-    )
+    .with({ type: "debounce" }, (s) => executeDebounce(s, ctx))
+    .with({ type: "diff" }, (s) => executeDiff(s, ctx))
+    .with({ type: "change_detector" }, (s) => executeChangeDetector(s, ctx))
+    .with({ type: "time_window" }, (s) => executeTimeWindow(s, ctx))
+    .with({ type: "ai_transform" }, (s) => executeAiTransform(s, ctx))
+    .with({ type: "ai_guardrails" }, (s) => executeAiGuardrails(s, ctx))
     .exhaustive();
 
   // Store result
@@ -2706,14 +2702,795 @@ function convertToMs(duration: number, unit: string): number {
   return duration * (multipliers[unit] ?? 1000);
 }
 
+// ============================================================================
+// Integration Step Executors
+// ============================================================================
+
 /**
- * Placeholder for unimplemented step types
+ * Execute a Spreadsheet step - read/write Excel and CSV files.
  */
-async function executeNotImplemented(
-  stepType: string,
-): Promise<{ error: string }> {
-  logger.warn("Step type is not yet implemented", { stepType });
-  return { error: `Step type "${stepType}" is not yet implemented` };
+async function executeSpreadsheet(
+  step: SpreadsheetStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { spreadsheet } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:spreadsheet",
+    spreadsheet.operation,
+    {
+      operation: spreadsheet.operation,
+      path: resolveExpression(spreadsheet.path, ctx),
+      format: spreadsheet.format,
+      sheet: spreadsheet.sheet,
+      startRow: spreadsheet.startRow,
+      endRow: spreadsheet.endRow,
+      columns: spreadsheet.columns,
+      headers: spreadsheet.headers,
+      data: spreadsheet.data !== undefined
+        ? resolveValue(spreadsheet.data, ctx)
+        : undefined,
+      cell: spreadsheet.cell,
+      value: spreadsheet.value !== undefined
+        ? resolveValue(spreadsheet.value, ctx)
+        : undefined,
+      formula: spreadsheet.formula,
+      filter: spreadsheet.filter,
+      sortBy: spreadsheet.sortBy,
+      sortDirection: spreadsheet.sortDirection,
+      limit: spreadsheet.limit,
+      offset: spreadsheet.offset,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (spreadsheet.outputVariable && result.success && result.output) {
+    ctx.variables[spreadsheet.outputVariable] = result.output;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Google Sheets step - read/write Google Sheets.
+ */
+async function executeGoogleSheets(
+  step: GoogleSheetsStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { googleSheets } = step;
+
+  // Map "delete" operation to "clear" since the plugin uses "clear"
+  const pluginOperation =
+    googleSheets.operation === "delete" ? "clear" : googleSheets.operation;
+
+  const result = await executeBuiltinAction(
+    "builtin:googleSheets",
+    pluginOperation,
+    {
+      connectionId: googleSheets.connectionId,
+      spreadsheetId: resolveExpression(googleSheets.spreadsheetId, ctx),
+      sheet: googleSheets.sheet,
+      range: googleSheets.range,
+      data: googleSheets.data !== undefined
+        ? resolveValue(googleSheets.data, ctx)
+        : undefined,
+      valueInputOption: googleSheets.valueInputOption,
+      includeHeaders: googleSheets.includeHeaders,
+      filter: googleSheets.filter,
+      sortBy: googleSheets.sortBy,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (googleSheets.outputVariable && result.success && result.output) {
+    ctx.variables[googleSheets.outputVariable] = result.output;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Model Registry step - call AI models via BYOK.
+ */
+async function executeModelRegistry(
+  step: ModelRegistryStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { modelRegistry } = step;
+
+  // Map "generate" to "complete" since the plugin uses "complete"
+  const pluginOperation =
+    modelRegistry.operation === "generate" ? "complete" : modelRegistry.operation;
+
+  const result = await executeBuiltinAction(
+    "builtin:modelRegistry",
+    pluginOperation,
+    {
+      provider: modelRegistry.provider,
+      connectionId: modelRegistry.connectionId,
+      apiKey: modelRegistry.apiKey,
+      model: modelRegistry.model,
+      messages: modelRegistry.messages,
+      prompt: modelRegistry.prompt,
+      input: modelRegistry.input,
+      temperature: modelRegistry.temperature,
+      maxTokens: modelRegistry.maxTokens,
+      topP: modelRegistry.topP,
+      stop: modelRegistry.stop,
+      baseUrl: modelRegistry.baseUrl,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (modelRegistry.outputVariable && result.success && result.output) {
+    ctx.variables[modelRegistry.outputVariable] = result.output;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Webhook Verify step - verify webhook signatures.
+ */
+async function executeWebhookVerify(
+  step: WebhookVerifyStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { webhookVerify } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:webhookVerify",
+    "verify",
+    {
+      provider: webhookVerify.provider,
+      payload: String(resolveExpression(webhookVerify.payload, ctx)),
+      signature: String(resolveExpression(webhookVerify.signature, ctx)),
+      secret: String(resolveExpression(webhookVerify.secret, ctx)),
+      timestamp: webhookVerify.timestamp
+        ? String(resolveExpression(webhookVerify.timestamp, ctx))
+        : undefined,
+      tolerance: webhookVerify.tolerance,
+      algorithm: webhookVerify.algorithm,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (webhookVerify.outputVariable && result.success && result.output) {
+    ctx.variables[webhookVerify.outputVariable] = result.output;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a PDF step - generate, parse, and manipulate PDFs.
+ */
+async function executePdf(
+  step: PdfStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { pdf } = step;
+
+  const resolvedInput = pdf.input !== undefined
+    ? resolveValue(pdf.input, ctx)
+    : undefined;
+
+  // Build inputs based on the operation
+  const inputs: Record<string, unknown> = {
+    operation: pdf.operation,
+  };
+
+  // Map input to the appropriate field based on operation
+  if (pdf.operation === "parse" || pdf.operation === "info") {
+    inputs.path = resolvedInput;
+  } else if (pdf.operation === "merge") {
+    inputs.paths = Array.isArray(resolvedInput) ? resolvedInput : [resolvedInput];
+    inputs.outputPath = resolvedInput;
+  } else if (pdf.operation === "split") {
+    inputs.path = resolvedInput;
+    inputs.outputDir = resolvedInput;
+    inputs.mode = "all";
+    if (pdf.pageRanges) {
+      inputs.mode = "ranges";
+      inputs.ranges = pdf.pageRanges;
+    }
+  } else if (pdf.operation === "watermark") {
+    inputs.path = resolvedInput;
+    inputs.outputPath = resolvedInput;
+    inputs.text = pdf.watermarkText ?? "";
+    if (pdf.watermarkOptions) {
+      Object.assign(inputs, pdf.watermarkOptions);
+    }
+  } else if (pdf.operation === "extractPages") {
+    inputs.path = resolvedInput;
+    inputs.outputPath = resolvedInput;
+    if (pdf.pageRanges) {
+      inputs.pages = pdf.pageRanges;
+    }
+  } else if (pdf.operation === "create") {
+    inputs.path = resolvedInput ?? "";
+    if (pdf.pages) {
+      inputs.pages = pdf.pages;
+    }
+  }
+
+  const result = await executeBuiltinAction(
+    "builtin:pdf",
+    pdf.operation,
+    inputs,
+    buildPluginContext(step, ctx),
+  );
+
+  if (pdf.outputVariable && result.success && result.output) {
+    ctx.variables[pdf.outputVariable] = result.output;
+  }
+
+  return result.output;
+}
+
+/**
+ * Execute a Rate Limit step - throttle and rate limit workflow steps.
+ */
+async function executeRateLimit(
+  step: RateLimitStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { rateLimit } = step;
+
+  const result = await executeBuiltinAction(
+    "builtin:rateLimit",
+    rateLimit.operation,
+    {
+      key: String(resolveExpression(rateLimit.key, ctx)),
+      limit: rateLimit.limit,
+      windowSeconds: rateLimit.windowSeconds,
+      algorithm: rateLimit.algorithm,
+      burstCapacity: rateLimit.burstCapacity,
+      refillRate: rateLimit.refillRate,
+      tokens: rateLimit.tokens,
+      wait: rateLimit.wait,
+      maxWaitMs: rateLimit.maxWaitMs,
+      maxRetries: rateLimit.maxRetries,
+    },
+    buildPluginContext(step, ctx),
+  );
+
+  if (rateLimit.outputVariable && result.success && result.output) {
+    ctx.variables[rateLimit.outputVariable] = result.output;
+  }
+
+  return result.output;
+}
+
+// ============================================================================
+// Flow Control Step Executors (inline implementations)
+// ============================================================================
+
+/**
+ * Execute a Debounce step - coalesce rapid-fire events into one execution.
+ *
+ * Uses the cache plugin to track event windows. On "first" strategy, only the
+ * first event within the window is processed. On "last" strategy, the window
+ * is always refreshed (last event wins).
+ */
+async function executeDebounce(
+  step: DebounceStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { debounce } = step;
+  const cacheKey = `debounce:${String(resolveExpression(debounce.key, ctx))}`;
+  const ttlSeconds = Math.ceil(debounce.windowMs / 1000);
+
+  if (debounce.strategy === "first") {
+    // Check if key already exists - if so, this event is within the window and should be skipped
+    const checkResult = await executeBuiltinAction(
+      "builtin:cache",
+      "execute",
+      { operation: "get", key: cacheKey },
+      buildPluginContext(step, ctx),
+    );
+
+    const checkOutput = checkResult.output as { hit: boolean } | undefined;
+    if (checkOutput?.hit) {
+      const output = { debounced: true, skipped: true };
+      if (debounce.outputVariable) {
+        ctx.variables[debounce.outputVariable] = output;
+      }
+      return output;
+    }
+
+    // Key does not exist - set it with TTL to mark the window as open
+    await executeBuiltinAction(
+      "builtin:cache",
+      "execute",
+      { operation: "set", key: cacheKey, value: true, ttl: ttlSeconds },
+      buildPluginContext(step, ctx),
+    );
+
+    const output = { debounced: false };
+    if (debounce.outputVariable) {
+      ctx.variables[debounce.outputVariable] = output;
+    }
+    return output;
+  }
+
+  // strategy === "last": always refresh the window (last event wins)
+  await executeBuiltinAction(
+    "builtin:cache",
+    "execute",
+    { operation: "set", key: cacheKey, value: true, ttl: ttlSeconds },
+    buildPluginContext(step, ctx),
+  );
+
+  const output = { debounced: false, refreshed: true };
+  if (debounce.outputVariable) {
+    ctx.variables[debounce.outputVariable] = output;
+  }
+  return output;
+}
+
+/**
+ * Execute a Diff step - compute deep diff between two values.
+ */
+async function executeDiff(
+  step: DiffStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { diff } = step;
+
+  const left = resolveExpression(diff.left, ctx);
+  const right = resolveExpression(diff.right, ctx);
+
+  const added: unknown[] = [];
+  const removed: unknown[] = [];
+  const changed: Array<{ key: string; left: unknown; right: unknown }> = [];
+  const unchanged: unknown[] = [];
+
+  if (Array.isArray(left) && Array.isArray(right)) {
+    if (diff.key) {
+      // Compare arrays of objects by identity key
+      const identityKey = diff.key;
+      const leftMap = new Map<unknown, unknown>();
+      const rightMap = new Map<unknown, unknown>();
+
+      for (const item of left) {
+        const k = (item as Record<string, unknown>)[identityKey];
+        leftMap.set(k, item);
+      }
+      for (const item of right) {
+        const k = (item as Record<string, unknown>)[identityKey];
+        rightMap.set(k, item);
+      }
+
+      for (const [k, lv] of leftMap) {
+        if (!rightMap.has(k)) {
+          removed.push(lv);
+        } else {
+          const rv = rightMap.get(k);
+          if (JSON.stringify(lv) !== JSON.stringify(rv)) {
+            changed.push({ key: String(k), left: lv, right: rv });
+          } else {
+            unchanged.push(lv);
+          }
+        }
+      }
+      for (const [k, rv] of rightMap) {
+        if (!leftMap.has(k)) {
+          added.push(rv);
+        }
+      }
+    } else {
+      // Compare by index
+      const maxLen = Math.max(left.length, right.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (i >= left.length) {
+          added.push(right[i]);
+        } else if (i >= right.length) {
+          removed.push(left[i]);
+        } else if (JSON.stringify(left[i]) !== JSON.stringify(right[i])) {
+          changed.push({ key: String(i), left: left[i], right: right[i] });
+        } else {
+          unchanged.push(left[i]);
+        }
+      }
+    }
+  } else if (
+    left !== null &&
+    right !== null &&
+    typeof left === "object" &&
+    typeof right === "object"
+  ) {
+    // Compare objects key-by-key
+    const leftObj = left as Record<string, unknown>;
+    const rightObj = right as Record<string, unknown>;
+    const allKeys = new Set([...Object.keys(leftObj), ...Object.keys(rightObj)]);
+
+    for (const k of allKeys) {
+      const hasLeft = k in leftObj;
+      const hasRight = k in rightObj;
+
+      if (!hasLeft) {
+        added.push({ key: k, value: rightObj[k] });
+      } else if (!hasRight) {
+        removed.push({ key: k, value: leftObj[k] });
+      } else if (JSON.stringify(leftObj[k]) !== JSON.stringify(rightObj[k])) {
+        changed.push({ key: k, left: leftObj[k], right: rightObj[k] });
+      } else {
+        unchanged.push({ key: k, value: leftObj[k] });
+      }
+    }
+  } else {
+    // Primitive comparison
+    if (JSON.stringify(left) !== JSON.stringify(right)) {
+      changed.push({ key: "value", left, right });
+    } else {
+      unchanged.push(left);
+    }
+  }
+
+  const output = { added, removed, changed, unchanged };
+
+  if (diff.outputVariable) {
+    ctx.variables[diff.outputVariable] = output;
+  }
+
+  return output;
+}
+
+/**
+ * Execute a Change Detector step - only continue if a value has changed.
+ *
+ * Uses cache to persist the previous value/hash across runs.
+ */
+async function executeChangeDetector(
+  step: ChangeDetectorStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { changeDetector } = step;
+  const currentValue = resolveExpression(changeDetector.value, ctx);
+  const cacheKey = `change_detector:${String(resolveExpression(changeDetector.key, ctx))}`;
+
+  // Read previous stored value
+  const getResult = await executeBuiltinAction(
+    "builtin:cache",
+    "execute",
+    { operation: "get", key: cacheKey },
+    buildPluginContext(step, ctx),
+  );
+
+  const getOutput = getResult.output as { hit: boolean; value: unknown } | undefined;
+  const previousStored = getOutput?.hit ? getOutput.value : undefined;
+
+  let hasChanged: boolean;
+  let previousValue: unknown;
+
+  if (changeDetector.strategy === "hash") {
+    // SHA-256 hash comparison
+    const encoder = new TextEncoder();
+    const currentStr = JSON.stringify(currentValue);
+    const hashBuffer = await crypto.subtle.digest(
+      "SHA-256",
+      encoder.encode(currentStr),
+    );
+    const currentHash = Array.from(new Uint8Array(hashBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    previousValue = previousStored;
+    hasChanged = previousStored === undefined || previousStored !== currentHash;
+
+    if (hasChanged) {
+      await executeBuiltinAction(
+        "builtin:cache",
+        "execute",
+        { operation: "set", key: cacheKey, value: currentHash },
+        buildPluginContext(step, ctx),
+      );
+    }
+  } else {
+    // deep_equal strategy - JSON compare the actual value
+    previousValue = previousStored;
+    hasChanged =
+      previousStored === undefined ||
+      JSON.stringify(previousStored) !== JSON.stringify(currentValue);
+
+    if (hasChanged) {
+      await executeBuiltinAction(
+        "builtin:cache",
+        "execute",
+        { operation: "set", key: cacheKey, value: currentValue },
+        buildPluginContext(step, ctx),
+      );
+    }
+  }
+
+  const output = hasChanged
+    ? { changed: true, previous: previousValue, current: currentValue }
+    : { changed: false };
+
+  if (changeDetector.outputVariable) {
+    ctx.variables[changeDetector.outputVariable] = output;
+  }
+
+  return output;
+}
+
+/**
+ * Execute a Time Window step - only proceed if current time is within a window.
+ */
+async function executeTimeWindow(
+  step: TimeWindowStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { timeWindow } = step;
+
+  const now = new Date();
+
+  // Get current time components in the specified timezone
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timeWindow.timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    weekday: "short",
+  });
+
+  const parts = formatter.formatToParts(now);
+  const hourPart = parts.find((p) => p.type === "hour");
+  const minutePart = parts.find((p) => p.type === "minute");
+  const weekdayPart = parts.find((p) => p.type === "weekday");
+
+  const currentHour = Number.parseInt(hourPart?.value ?? "0", 10);
+  const currentMinute = Number.parseInt(minutePart?.value ?? "0", 10);
+  const currentMinutes = currentHour * 60 + currentMinute;
+
+  // Parse start/end times as "HH:MM"
+  const [startHour, startMinute] = timeWindow.startTime.split(":").map(Number);
+  const [endHour, endMinute] = timeWindow.endTime.split(":").map(Number);
+  const startMinutes = startHour * 60 + startMinute;
+  const endMinutes = endHour * 60 + endMinute;
+
+  let inTimeRange: boolean;
+  if (startMinutes <= endMinutes) {
+    inTimeRange = currentMinutes >= startMinutes && currentMinutes < endMinutes;
+  } else {
+    // Overnight window (e.g., 22:00 - 06:00)
+    inTimeRange = currentMinutes >= startMinutes || currentMinutes < endMinutes;
+  }
+
+  // Check day of week if specified
+  let inDayRange = true;
+  if (timeWindow.daysOfWeek && timeWindow.daysOfWeek.length > 0) {
+    const weekdayMap: Record<string, number> = {
+      Sun: 0,
+      Mon: 1,
+      Tue: 2,
+      Wed: 3,
+      Thu: 4,
+      Fri: 5,
+      Sat: 6,
+    };
+    const currentDay = weekdayMap[weekdayPart?.value ?? ""] ?? -1;
+    inDayRange = timeWindow.daysOfWeek.includes(currentDay);
+  }
+
+  const inWindow = inTimeRange && inDayRange;
+
+  const currentTime = now.toISOString();
+
+  if (inWindow) {
+    return { inWindow: true, currentTime };
+  }
+
+  if (timeWindow.onOutside === "fail") {
+    throw new ExecutionError("Execution outside allowed time window", {
+      currentTime,
+      startTime: timeWindow.startTime,
+      endTime: timeWindow.endTime,
+      timezone: timeWindow.timezone,
+    });
+  }
+
+  if (timeWindow.onOutside === "queue") {
+    return { inWindow: false, queued: true, currentTime };
+  }
+
+  // onOutside === "skip"
+  return { inWindow: false, skipped: true, currentTime };
+}
+
+/**
+ * Execute an AI Transform step - transform data using an LLM with a prompt.
+ */
+async function executeAiTransform(
+  step: AiTransformStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { aiTransform } = step;
+
+  const inputRaw = resolveExpression(aiTransform.input, ctx);
+  const inputStr =
+    typeof inputRaw === "object" && inputRaw !== null
+      ? JSON.stringify(inputRaw, null, 2)
+      : String(inputRaw ?? "");
+
+  let userPrompt = `${aiTransform.prompt}\n\nInput:\n${inputStr}`;
+
+  if (aiTransform.schema) {
+    userPrompt += `\n\nRespond with valid JSON matching this schema:\n${aiTransform.schema}`;
+  }
+
+  const mcpClient = getMCPClient();
+
+  // Try to find a connected LLM server
+  const toolArgs: Record<string, unknown> = {
+    model: aiTransform.model,
+    messages: [{ role: "user", content: userPrompt }],
+  };
+
+  const toolNames = ["chat_completion", "complete", "chat", "generate"];
+  let callResult = null;
+
+  // Try all registered servers for a compatible tool
+  for (const toolName of toolNames) {
+    callResult = await mcpClient.callTool(aiTransform.model, toolName, toolArgs);
+    if (callResult?.success) break;
+  }
+
+  let output: unknown;
+
+  if (callResult?.success) {
+    const textContent = callResult.content
+      ?.filter((c: { type: string }) => c.type === "text")
+      .map((c: { text?: string }) => c.text)
+      .join("");
+
+    try {
+      const trimmed = textContent?.trim() ?? "";
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        output = JSON.parse(trimmed);
+      } else {
+        output = textContent;
+      }
+    } catch {
+      output = textContent;
+    }
+  } else {
+    // Fallback: return input unchanged with a note
+    output = { transformed: inputRaw, note: "LLM unavailable - input returned unchanged" };
+  }
+
+  if (aiTransform.outputVariable) {
+    ctx.variables[aiTransform.outputVariable] = output;
+  }
+
+  return output;
+}
+
+/**
+ * Execute an AI Guardrails step - validate LLM output against safety rules.
+ */
+async function executeAiGuardrails(
+  step: AiGuardrailsStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { aiGuardrails } = step;
+
+  const inputRaw = resolveExpression(aiGuardrails.input, ctx);
+  const inputStr = String(inputRaw ?? "");
+
+  const violations: Array<{ type: string; value: string; message: string }> = [];
+
+  for (const rule of aiGuardrails.rules) {
+    switch (rule.type) {
+      case "regex": {
+        const re = new RegExp(rule.value);
+        if (!re.test(inputStr)) {
+          violations.push({
+            type: "regex",
+            value: rule.value,
+            message: `Input does not match required pattern: ${rule.value}`,
+          });
+        }
+        break;
+      }
+      case "contains": {
+        if (!inputStr.includes(rule.value)) {
+          violations.push({
+            type: "contains",
+            value: rule.value,
+            message: `Input does not contain required string: "${rule.value}"`,
+          });
+        }
+        break;
+      }
+      case "not_contains": {
+        if (inputStr.includes(rule.value)) {
+          violations.push({
+            type: "not_contains",
+            value: rule.value,
+            message: `Input contains disallowed string: "${rule.value}"`,
+          });
+        }
+        break;
+      }
+      case "max_length": {
+        const maxLen = Number.parseInt(rule.value, 10);
+        if (inputStr.length > maxLen) {
+          violations.push({
+            type: "max_length",
+            value: rule.value,
+            message: `Input length ${inputStr.length} exceeds maximum ${maxLen}`,
+          });
+        }
+        break;
+      }
+      case "json_schema": {
+        try {
+          const parsed = JSON.parse(inputStr);
+          const schema = JSON.parse(rule.value) as Record<string, unknown>;
+          // Basic JSON schema validation (type check only)
+          if (schema.type) {
+            const actualType = Array.isArray(parsed) ? "array" : typeof parsed;
+            if (actualType !== schema.type) {
+              violations.push({
+                type: "json_schema",
+                value: rule.value,
+                message: `Input type "${actualType}" does not match schema type "${schema.type}"`,
+              });
+            }
+          }
+        } catch {
+          violations.push({
+            type: "json_schema",
+            value: rule.value,
+            message: "Input is not valid JSON",
+          });
+        }
+        break;
+      }
+    }
+  }
+
+  let output: unknown;
+
+  if (violations.length > 0) {
+    if (aiGuardrails.onFail === "block") {
+      throw new ValidationError("AI guardrail violations detected", {
+        violations,
+        input: inputStr,
+      });
+    }
+
+    if (aiGuardrails.onFail === "sanitize") {
+      let sanitized = inputStr;
+      for (const v of violations) {
+        if (v.type === "regex" || v.type === "contains") {
+          try {
+            const re = new RegExp(v.value, "g");
+            sanitized = sanitized.replace(re, "");
+          } catch {
+            sanitized = sanitized.split(v.value).join("");
+          }
+        } else if (v.type === "not_contains") {
+          sanitized = sanitized.split(v.value).join("");
+        }
+      }
+      output = { passed: false, violations, output: sanitized };
+    } else {
+      // onFail === "warn"
+      output = { passed: false, violations, output: inputStr };
+    }
+  } else {
+    output = { passed: true, output: inputStr };
+  }
+
+  if (aiGuardrails.outputVariable) {
+    ctx.variables[aiGuardrails.outputVariable] = output;
+  }
+
+  return output;
 }
 
 /**
