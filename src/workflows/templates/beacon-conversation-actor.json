@@ -44,7 +44,7 @@
       "position": { "x": 0, "y": 200 },
       "loop": {
         "type": "while",
-        "condition": "{{ state['{{ run.id }}.active'] !== false }}",
+        "condition": "{{ state[run.id + '.active'] !== false }}",
         "body": ["wait-for-message"]
       },
       "next": "end"
@@ -71,7 +71,7 @@
         "serverId": "default-llm",
         "model": "claude-sonnet-4-6",
         "systemPrompt": "You are Beacon, an omni AI assistant.",
-        "userPrompt": "{{ steps['wait-for-message'].output.value }}",
+        "userPrompt": "{{ incomingMessage }}",
         "memory": {
           "sessionId": "{{ run.id }}",
           "windowSize": 50,
