@@ -58,8 +58,8 @@ export async function executeDslWorkflow(
     while (queue.length > 0) {
       const step = queue.shift()!;
 
-      await executeStep(parsedDef.data, step, context);
-      queue.push(...findNextSteps(parsedDef.data, step.id));
+      const { nextSteps } = await executeStep(parsedDef.data, step, context);
+      queue.push(...nextSteps);
     }
 
     return { status: "completed" };
