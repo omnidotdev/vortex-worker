@@ -1,35 +1,121 @@
 /**
  * Built-in Agent Plugin
  *
- * Autonomous AI agent execution.
- * Placeholder for integration with LLM providers.
+ * Autonomous AI agent execution using LLM tool calling and MCP tool execution.
  */
+
+import { getMCPClient } from "../../mcp";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
-interface AgentInput {
+type AgentInput = {
   serverId: string;
   model?: string;
   goal: string;
   tools?: string[];
   maxIterations?: number;
+  provider?: string;
+  apiKey?: string;
+  connectionId?: string;
+  baseUrl?: string;
+  systemPrompt?: string;
+};
+
+type OpenAIToolCall = {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+};
+
+type OpenAIMessage =
+  | { role: "system" | "user"; content: string }
+  | { role: "assistant"; content: string | null; tool_calls?: OpenAIToolCall[] }
+  | { role: "tool"; content: string; tool_call_id: string };
+
+type OpenAITool = {
+  type: "function";
+  function: {
+    name: string;
+    description?: string;
+    parameters: Record<string, unknown>;
+  };
+};
+
+const PROVIDER_BASE_URLS: Record<string, string> = {
+  openai: "https://api.openai.com/v1",
+  groq: "https://api.groq.com/openai/v1",
+  together: "https://api.together.xyz/v1",
+  mistral: "https://api.mistral.ai/v1",
+};
+
+function getApiBaseUrl(provider: string, baseUrl?: string): string {
+  return baseUrl ?? PROVIDER_BASE_URLS[provider] ?? "https://api.openai.com/v1";
+}
+
+async function callLLMWithTools(
+  provider: string,
+  apiKey: string,
+  model: string,
+  messages: OpenAIMessage[],
+  tools: OpenAITool[],
+  baseUrl?: string,
+): Promise<unknown> {
+  const base = getApiBaseUrl(provider, baseUrl);
+  const url = `${base}/chat/completions`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${apiKey}`,
+  };
+
+  // Anthropic uses different auth headers
+  if (provider === "anthropic") {
+    headers["x-api-key"] = apiKey;
+    delete headers.Authorization;
+    headers["anthropic-version"] = "2023-06-01";
+  }
+
+  const body = {
+    model,
+    messages,
+    ...(tools.length > 0 && { tools }),
+  };
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`${provider} API error: ${error}`);
+  }
+
+  return response.json();
 }
 
 const executeAgent = async (
   inputs: Record<string, unknown>,
-  _context?: PluginContext,
+  context?: PluginContext,
 ): Promise<PluginCallResult> => {
   const startTime = performance.now();
 
   try {
+    const input = inputs as unknown as AgentInput;
     const {
       serverId,
-      model,
+      model = "gpt-4o-mini",
       goal,
-      tools = [],
+      tools: toolFilter = [],
       maxIterations = 10,
-    } = inputs as unknown as AgentInput;
+      provider = "openai",
+      apiKey: inputApiKey,
+      connectionId,
+      baseUrl,
+      systemPrompt,
+    } = input;
 
     if (!serverId) {
       return {
@@ -47,18 +133,146 @@ const executeAgent = async (
       };
     }
 
-    // Placeholder: In production, this would connect to an LLM via MCP
+    // Resolve API key from input or connection context
+    const apiKey =
+      inputApiKey ??
+      (context?.connections?.[connectionId ?? ""]?.apiKey as
+        | string
+        | undefined);
+
+    if (!apiKey) {
+      return {
+        success: false,
+        error: "API key required - provide connectionId or apiKey",
+        durationMs: performance.now() - startTime,
+      };
+    }
+
+    const mcpClient = getMCPClient();
+
+    if (!mcpClient.isConnected(serverId)) {
+      return {
+        success: false,
+        error: `MCP server not connected: ${serverId}`,
+        durationMs: performance.now() - startTime,
+      };
+    }
+
+    const allMcpTools = await mcpClient.listTools(serverId);
+    const selectedTools = toolFilter.length
+      ? allMcpTools.filter((t) => toolFilter.includes(t.name))
+      : allMcpTools;
+
+    // Convert MCP tools to OpenAI function calling format
+    const openaiTools: OpenAITool[] = selectedTools.map((t) => ({
+      type: "function" as const,
+      function: {
+        name: t.name,
+        description: t.description ?? "",
+        parameters: t.inputSchema as Record<string, unknown>,
+      },
+    }));
+
+    const messages: OpenAIMessage[] = [
+      ...(systemPrompt
+        ? [{ role: "system" as const, content: systemPrompt }]
+        : []),
+      { role: "user" as const, content: goal },
+    ];
+
+    const steps: Array<{ tool: string; args: unknown; result: unknown }> = [];
+    let iterations = 0;
+    let finalResult = "";
+
+    // Agentic loop: call LLM, execute tool calls, feed results back
+    for (let i = 0; i < maxIterations; i++) {
+      iterations = i + 1;
+
+      const response = await callLLMWithTools(
+        provider,
+        apiKey,
+        model,
+        messages,
+        openaiTools,
+        baseUrl,
+      );
+
+      const r = response as {
+        choices?: Array<{
+          message?: {
+            content?: string | null;
+            tool_calls?: OpenAIToolCall[];
+          };
+          finish_reason?: string;
+        }>;
+      };
+
+      const message = r.choices?.[0]?.message;
+
+      if (!message?.tool_calls?.length) {
+        // No tool calls — agent has reached a final answer
+        finalResult = message?.content ?? "";
+        break;
+      }
+
+      // Add assistant message with tool calls to conversation history
+      messages.push({
+        role: "assistant",
+        content: message.content ?? null,
+        tool_calls: message.tool_calls,
+      });
+
+      // Execute each tool call and feed results back
+      for (const toolCall of message.tool_calls) {
+        const toolName = toolCall.function.name;
+        let toolArgs: Record<string, unknown>;
+
+        try {
+          toolArgs = JSON.parse(toolCall.function.arguments);
+        } catch {
+          toolArgs = {};
+        }
+
+        const toolResult = await mcpClient.callTool(
+          serverId,
+          toolName,
+          toolArgs,
+        );
+
+        const toolResultText = toolResult.success
+          ? (toolResult.content
+              ?.filter((c) => c.type === "text")
+              .map((c) => c.text ?? "")
+              .join("\n") ?? "")
+          : (toolResult.error ?? "Tool call failed");
+
+        steps.push({
+          tool: toolName,
+          args: toolArgs,
+          result: toolResultText,
+        });
+
+        messages.push({
+          role: "tool",
+          content: toolResultText,
+          tool_call_id: toolCall.id,
+        });
+      }
+    }
+
+    if (!finalResult && iterations >= maxIterations) {
+      finalResult = "Max iterations reached without a final answer";
+    }
+
     return {
       success: true,
       output: {
-        result: `[Agent placeholder] Goal: "${goal}"`,
-        iterations: 0,
-        steps: [],
-        model: model || "default",
-        toolsUsed: tools,
-        maxIterations,
+        result: finalResult,
+        iterations,
+        steps,
+        model,
+        provider,
         serverId,
-        status: "placeholder",
       },
       durationMs: performance.now() - startTime,
     };

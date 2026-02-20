@@ -1,26 +1,58 @@
 /**
  * Built-in Email Plugin
  *
- * Sends emails via SMTP or integration.
+ * Sends emails via Resend.
  */
 
-import logger from "lib/logger";
+import { Resend } from "resend";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
+/** Default sender address */
+const DEFAULT_FROM = "Vortex <noreply@vortex.omni.dev>";
+
+/** Module-level singleton for the env-key Resend client */
+let resendClient: Resend | null = null;
+
+/**
+ * Get a Resend client instance.
+ *
+ * Uses a module-level singleton when relying on the env var, or creates a new
+ * instance per call when an explicit `apiKey` override is provided.
+ */
+const getResendClient = (apiKey?: string): Resend => {
+  if (apiKey) {
+    return new Resend(apiKey);
+  }
+
+  if (!resendClient) {
+    const { RESEND_API_KEY } = process.env;
+
+    if (!RESEND_API_KEY) {
+      throw new Error(
+        "RESEND_API_KEY environment variable is required for email plugin",
+      );
+    }
+
+    resendClient = new Resend(RESEND_API_KEY);
+  }
+
+  return resendClient;
+};
+
 /** Email attachment */
-interface EmailAttachment {
+type EmailAttachment = {
   /** Filename for the attachment */
   filename: string;
   /** Base64 encoded content or plain text */
   content: string;
   /** MIME type (default: application/octet-stream) */
   contentType?: string;
-}
+};
 
 /** Email send input */
-interface EmailSendInput {
+type EmailSendInput = {
   /** Recipient email address(es) */
   to: string | string[];
   /** CC recipients */
@@ -35,7 +67,13 @@ interface EmailSendInput {
   contentType?: "text" | "html";
   /** File attachments */
   attachments?: EmailAttachment[];
-}
+  /** Sender address override */
+  from?: string;
+  /** Reply-to address */
+  replyTo?: string;
+  /** Resend API key override */
+  apiKey?: string;
+};
 
 /**
  * Send an email.
@@ -55,6 +93,9 @@ const sendEmail = async (
       body,
       contentType = "text",
       attachments,
+      from,
+      replyTo,
+      apiKey,
     } = inputs as unknown as EmailSendInput;
 
     if (!to) {
@@ -73,29 +114,57 @@ const sendEmail = async (
       };
     }
 
+    if (!body) {
+      return {
+        success: false,
+        error: "Body is required",
+        durationMs: performance.now() - startTime,
+      };
+    }
+
     // Normalize recipients to arrays.
     const toList = Array.isArray(to) ? to : [to];
     const ccList = cc ? (Array.isArray(cc) ? cc : [cc]) : undefined;
     const bccList = bcc ? (Array.isArray(bcc) ? bcc : [bcc]) : undefined;
 
-    const emailData = {
+    const resend = getResendClient(apiKey);
+
+    const baseOptions = {
+      from: from ?? DEFAULT_FROM,
       to: toList,
-      cc: ccList,
-      bcc: bccList,
       subject,
-      [contentType === "html" ? "html" : "text"]: body,
-      attachments,
+      ...(ccList && { cc: ccList }),
+      ...(bccList && { bcc: bccList }),
+      ...(replyTo && { replyTo }),
+      ...(attachments && {
+        attachments: attachments.map((a) => ({
+          filename: a.filename,
+          content: a.content,
+          ...(a.contentType && { content_type: a.contentType }),
+        })),
+      }),
     };
 
-    // TODO: Integrate with actual SMTP transport via MCP or direct
-    logger.debug("Would send email", { emailData });
+    const { data, error } = await resend.emails.send(
+      contentType === "html"
+        ? { ...baseOptions, html: body }
+        : { ...baseOptions, text: body },
+    );
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message,
+        durationMs: performance.now() - startTime,
+      };
+    }
 
     return {
       success: true,
       output: {
         sent: true,
         recipients: toList.length,
-        messageId: `msg_${Date.now()}`,
+        messageId: data?.id,
       },
       durationMs: performance.now() - startTime,
     };
@@ -114,7 +183,7 @@ const sendEmail = async (
 export const emailPlugin: BuiltinPlugin = {
   id: "builtin:email",
   name: "Email",
-  description: "Send emails via SMTP",
+  description: "Send emails via Resend",
   actions: {
     send: {
       name: "send",

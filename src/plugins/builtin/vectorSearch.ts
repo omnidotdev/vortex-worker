@@ -1,15 +1,18 @@
 /**
  * Built-in Vector Search Plugin
  *
- * Query vector databases for similarity search.
- * Placeholder implementation - in production, call vector DB API.
+ * Query vector databases for similarity search via MCP tool delegation.
  */
+
+import { getMCPClient } from "../../mcp";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
 /** Vector search input parameters */
-export interface VectorSearchInput {
+export type VectorSearchInput = {
+  /** MCP server ID for the vector database */
+  serverId: string;
   /** Query vector (required) */
   queryVector: number[];
   /** Name of the index to search (required) */
@@ -24,10 +27,10 @@ export interface VectorSearchInput {
   includeVectors?: boolean;
   /** Whether to include metadata in results (default: true) */
   includeMetadata?: boolean;
-}
+};
 
 /** Single search result */
-export interface VectorSearchResult {
+export type VectorSearchResult = {
   /** Document ID */
   id: string;
   /** Similarity score */
@@ -36,10 +39,10 @@ export interface VectorSearchResult {
   metadata?: Record<string, unknown>;
   /** Document vector (if requested) */
   vector?: number[];
-}
+};
 
 /** Vector search output */
-export interface VectorSearchOutput {
+export type VectorSearchOutput = {
   /** Search results sorted by score */
   results: VectorSearchResult[];
   /** Index that was searched */
@@ -48,7 +51,7 @@ export interface VectorSearchOutput {
   topK: number;
   /** Actual number of matches returned */
   matchCount: number;
-}
+};
 
 /**
  * Search for similar vectors in a vector database.
@@ -61,11 +64,12 @@ const search = async (
 
   try {
     const {
+      serverId,
       queryVector,
       indexName,
       topK = 10,
       minScore,
-      filter: _filter,
+      filter,
       includeVectors = false,
       includeMetadata = true,
     } = inputs as unknown as VectorSearchInput;
@@ -86,26 +90,57 @@ const search = async (
       };
     }
 
-    // Placeholder: In production, call vector DB API.
-    const results: VectorSearchResult[] = Array(Math.min(topK, 5))
-      .fill(null)
-      .map((_, i) => {
-        const result: VectorSearchResult = {
-          id: `doc_${i}`,
-          score: 0.95 - i * 0.05,
-        };
+    if (!serverId) {
+      return {
+        success: false,
+        error: "Server ID is required",
+        durationMs: performance.now() - startTime,
+      };
+    }
 
-        if (includeMetadata) {
-          result.metadata = { source: `source_${i}`, chunk: i };
-        }
+    const mcpClient = getMCPClient();
 
-        if (includeVectors) {
-          result.vector = queryVector.map((v) => v + Math.random() * 0.01);
-        }
+    if (!mcpClient.isConnected(serverId)) {
+      return {
+        success: false,
+        error: `MCP server not connected: ${serverId}`,
+        durationMs: performance.now() - startTime,
+      };
+    }
 
-        return result;
-      })
-      .filter((r) => !minScore || r.score >= minScore);
+    const callResult = await mcpClient.callTool(serverId, "search", {
+      indexName,
+      queryVector,
+      topK,
+      minScore,
+      filter,
+      includeVectors,
+      includeMetadata,
+    });
+
+    if (!callResult.success) {
+      return {
+        success: false,
+        error: callResult.error ?? "Vector search failed",
+        durationMs: performance.now() - startTime,
+      };
+    }
+
+    const textContent = callResult.content
+      ?.filter((c) => c.type === "text")
+      .map((c) => c.text ?? "")
+      .join("");
+
+    let mcpOutput: { results?: VectorSearchResult[] };
+    try {
+      mcpOutput = textContent ? JSON.parse(textContent) : { results: [] };
+    } catch {
+      mcpOutput = { results: [] };
+    }
+
+    const results: VectorSearchResult[] = (mcpOutput.results ?? []).filter(
+      (r) => !minScore || r.score >= minScore,
+    );
 
     const output: VectorSearchOutput = {
       results,

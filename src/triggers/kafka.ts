@@ -7,12 +7,11 @@
  */
 
 import Hatchet from "@hatchet-dev/typescript-sdk";
-
-import { eq } from "drizzle-orm";
-
 import { KafkaAdapter } from "adapters";
 import { getDb } from "db";
 import { workflowRunTable, workflowTable } from "db/schema";
+import { eq } from "drizzle-orm";
+
 import logger from "lib/logger";
 
 // Scan interval for detecting new/removed kafka-triggered workflows (60s)
