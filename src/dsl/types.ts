@@ -1565,6 +1565,8 @@ export const WorkflowDefinition = z.object({
   edges: z.array(Edge),
   variables: z.record(z.string(), VariableDefinition).optional(),
   settings: WorkflowSettings.optional(),
+  /** Routing: which execution backend runs this workflow */
+  executor: z.enum(["hatchet", "temporal", "local"]).optional(),
   /** Mapping from human-readable step names to step IDs for template resolution */
   stepNameToId: z.record(z.string(), z.string()).optional(),
 });

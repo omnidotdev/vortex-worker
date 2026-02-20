@@ -21,8 +21,9 @@ import type {
   Step,
   SwitchStep,
   TriggerStep,
-  WorkflowDefinition,
 } from "../dsl/types";
+
+import { WorkflowDefinition } from "../dsl/types";
 
 // Helper to create a minimal workflow definition
 function createWorkflow(steps: Step[], edges: Edge[] = []): WorkflowDefinition {
@@ -486,5 +487,48 @@ describe("template expression resolution", () => {
     const { result } = await executeStep(def, condition, ctx);
 
     expect(result).toEqual({ branch: "true", value: true });
+  });
+});
+
+
+describe("WorkflowDefinition executor field", () => {
+  it("accepts executor field 'temporal'", () => {
+    const result = WorkflowDefinition.safeParse({
+      version: "1.0",
+      steps: [],
+      edges: [],
+      executor: "temporal",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts executor field 'hatchet'", () => {
+    const result = WorkflowDefinition.safeParse({
+      version: "1.0",
+      steps: [],
+      edges: [],
+      executor: "hatchet",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("defaults executor to undefined when omitted", () => {
+    const result = WorkflowDefinition.safeParse({
+      version: "1.0",
+      steps: [],
+      edges: [],
+    });
+    expect(result.success).toBe(true);
+    expect(result.data?.executor).toBeUndefined();
+  });
+
+  it("rejects unknown executor values", () => {
+    const result = WorkflowDefinition.safeParse({
+      version: "1.0",
+      steps: [],
+      edges: [],
+      executor: "trigger-dev",
+    });
+    expect(result.success).toBe(false);
   });
 });
