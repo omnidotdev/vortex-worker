@@ -6,7 +6,9 @@
  */
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import logger from "lib/logger";
 import { withRetry } from "lib/retry";
@@ -22,7 +24,10 @@ import type {
 
 export class MCPIntegrationClient {
   private clients: Map<string, Client> = new Map();
-  private transports: Map<string, StdioClientTransport> = new Map();
+  private transports: Map<
+    string,
+    StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport
+  > = new Map();
   private serverInfo: Map<string, MCPServerInfo> = new Map();
 
   /**
@@ -37,12 +42,43 @@ export class MCPIntegrationClient {
     this.updateStatus(config, "connecting");
 
     try {
-      const transport = new StdioClientTransport({
-        command: config.command,
-        args: config.args,
-        env: config.env,
-        cwd: config.cwd,
-      });
+      let transport:
+        | StdioClientTransport
+        | SSEClientTransport
+        | StreamableHTTPClientTransport;
+      const transportType = config.transport ?? "stdio";
+
+      if (transportType === "sse") {
+        if (!config.url) {
+          throw new Error(
+            `MCP server ${config.id}: url required for SSE transport`,
+          );
+        }
+        transport = new SSEClientTransport(new URL(config.url), {
+          requestInit: { headers: config.headers },
+        });
+      } else if (transportType === "http") {
+        if (!config.url) {
+          throw new Error(
+            `MCP server ${config.id}: url required for HTTP transport`,
+          );
+        }
+        transport = new StreamableHTTPClientTransport(new URL(config.url), {
+          requestInit: { headers: config.headers },
+        });
+      } else {
+        if (!config.command) {
+          throw new Error(
+            `MCP server ${config.id}: command required for stdio transport`,
+          );
+        }
+        transport = new StdioClientTransport({
+          command: config.command,
+          args: config.args,
+          env: config.env,
+          cwd: config.cwd,
+        });
+      }
 
       const client = new Client(
         { name: "vortex-worker", version: "1.0.0" },

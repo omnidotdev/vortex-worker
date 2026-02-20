@@ -6,22 +6,30 @@
  */
 
 /** Configuration for an MCP server */
-export interface MCPServerConfig {
+export type MCPServerConfig = {
   /** Unique identifier for this server */
   id: string;
   /** Human-readable name */
   name: string;
+  /** Transport type. Defaults to "stdio" */
+  transport?: "stdio" | "sse" | "http";
+  // stdio fields (required when transport = "stdio" or omitted)
   /** Command to start the server (e.g., "npx", "node") */
-  command: string;
+  command?: string;
   /** Arguments to pass to the command */
-  args: string[];
+  args?: string[];
   /** Environment variables for the server process */
   env?: Record<string, string>;
   /** Working directory for the server */
   cwd?: string;
+  // remote fields (required when transport = "sse" | "http")
+  /** URL of the remote MCP server */
+  url?: string;
+  /** HTTP headers to send with remote transport requests */
+  headers?: Record<string, string>;
   /** Whether this server is enabled */
   enabled?: boolean;
-}
+};
 
 /** Tool definition from an MCP server */
 export interface MCPTool {
