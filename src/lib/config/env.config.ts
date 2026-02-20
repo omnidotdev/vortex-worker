@@ -73,10 +73,10 @@ function assertProdEnv(name: string, value: string | undefined): void {
 /** Validate required env vars. Call once at startup */
 export function validateEnv(): void {
   assertEnv("DATABASE_URL", DATABASE_URL);
-
-  if (VORTEX_EXECUTOR === "hatchet") {
-    assertEnv("HATCHET_CLIENT_TOKEN", HATCHET_CLIENT_TOKEN);
-  } else if (VORTEX_EXECUTOR === "temporal") {
+  // Hatchet is always required — it runs platform workflows (authz, chronicle, tokenRefresh, etc.)
+  assertEnv("HATCHET_CLIENT_TOKEN", HATCHET_CLIENT_TOKEN);
+  // Temporal is opt-in — validate only if configured
+  if (TEMPORAL_ADDRESS) {
     assertEnv("TEMPORAL_ADDRESS", TEMPORAL_ADDRESS);
   }
 
