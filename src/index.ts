@@ -128,8 +128,11 @@ async function main() {
     temporalWorker?.shutdown();
     eventsConsumer?.stop();
     closePublisher();
-    stopGraphQLSubscriptionTriggerRunner();
-    await Promise.all([stopKafkaTriggerRunner(), stopSqsTriggerRunner()]);
+    await Promise.all([
+      stopKafkaTriggerRunner(),
+      stopSqsTriggerRunner(),
+      Promise.resolve(stopGraphQLSubscriptionTriggerRunner()),
+    ]);
     await closeCache();
     process.exit(0);
   };

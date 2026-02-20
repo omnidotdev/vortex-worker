@@ -7,10 +7,10 @@
  */
 
 import Hatchet from "@hatchet-dev/typescript-sdk";
-import { createClient } from "graphql-ws";
 import { getDb } from "db";
 import { workflowRunTable, workflowTable } from "db/schema";
 import { eq } from "drizzle-orm";
+import { createClient } from "graphql-ws";
 
 import logger from "lib/logger";
 
@@ -45,7 +45,9 @@ type GraphQLSubscriptionTriggerConfig = {
  * Normalize an HTTP(S) URL to WS(S) for use with graphql-ws.
  */
 function normalizeWsUrl(endpoint: string): string {
-  return endpoint.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
+  return endpoint
+    .replace(/^http:\/\//, "ws://")
+    .replace(/^https:\/\//, "wss://");
 }
 
 /**
@@ -149,7 +151,7 @@ function startGraphQLSubscription(workflow: {
       : undefined,
   });
 
-  const dispose = client.subscribe(
+  const unsubscribe = client.subscribe(
     {
       query: workflow.gqlConfig.query,
       variables: workflow.gqlConfig.variables,
@@ -190,7 +192,10 @@ function startGraphQLSubscription(workflow: {
     endpoint: wsUrl,
   });
 
-  return dispose;
+  return () => {
+    unsubscribe();
+    void client.dispose();
+  };
 }
 
 /**
@@ -288,7 +293,10 @@ export function startGraphQLSubscriptionTriggerRunner(): void {
   logger.info("GraphQL subscription trigger runner started");
 
   scanGraphQLSubscriptionWorkflows();
-  scanInterval = setInterval(scanGraphQLSubscriptionWorkflows, SCAN_INTERVAL_MS);
+  scanInterval = setInterval(
+    scanGraphQLSubscriptionWorkflows,
+    SCAN_INTERVAL_MS,
+  );
 }
 
 /**
