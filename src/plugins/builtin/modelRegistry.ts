@@ -19,8 +19,6 @@ type ModelProvider =
   | "mistral"
   | "cohere";
 
-type ModelOperation = "chat" | "complete" | "embed";
-
 interface Message {
   role: "system" | "user" | "assistant";
   content: string;
@@ -592,7 +590,11 @@ const listModels = async (
 
     // Not all providers have a models endpoint.
     let url: string;
-    if (input.provider === "openai" || input.provider === "together" || input.provider === "groq") {
+    if (
+      input.provider === "openai" ||
+      input.provider === "together" ||
+      input.provider === "groq"
+    ) {
       url = `${baseUrl}/models`;
     } else if (input.provider === "ollama") {
       url = `${baseUrl.replace("/api", "")}/api/tags`;

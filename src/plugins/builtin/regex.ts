@@ -74,7 +74,17 @@ interface EscapeInput {
 /** Common patterns input */
 interface CommonPatternInput {
   /** Pattern type */
-  type: "email" | "url" | "phone" | "ipv4" | "ipv6" | "uuid" | "date" | "creditCard" | "ssn" | "zipCode";
+  type:
+    | "email"
+    | "url"
+    | "phone"
+    | "ipv4"
+    | "ipv6"
+    | "uuid"
+    | "date"
+    | "creditCard"
+    | "ssn"
+    | "zipCode";
   /** Text to validate against pattern */
   text?: string;
 }
@@ -84,7 +94,13 @@ interface BuildPatternInput {
   /** Base pattern or character class */
   base: string;
   /** Quantifier */
-  quantifier?: "one" | "zeroOrOne" | "zeroOrMore" | "oneOrMore" | "exact" | "range";
+  quantifier?:
+    | "one"
+    | "zeroOrOne"
+    | "zeroOrMore"
+    | "oneOrMore"
+    | "exact"
+    | "range";
   /** Count for exact quantifier */
   count?: number;
   /** Min/max for range quantifier */
@@ -116,7 +132,8 @@ const COMMON_PATTERNS: Record<string, string> = {
   ipv6: "^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$",
   uuid: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
   date: "^\\d{4}-\\d{2}-\\d{2}$",
-  creditCard: "^(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})$",
+  creditCard:
+    "^(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14}|3[47][0-9]{13}|6(?:011|5[0-9]{2})[0-9]{12})$",
   ssn: "^\\d{3}-\\d{2}-\\d{4}$",
   zipCode: "^\\d{5}(-\\d{4})?$",
 };
@@ -135,17 +152,21 @@ const match = async (
     const regex = new RegExp(input.pattern, input.flags);
 
     if (input.all) {
-      const matches: Array<{ match: string; index: number; groups?: Record<string, string> }> = [];
-      let m;
-
+      const matches: Array<{
+        match: string;
+        index: number;
+        groups?: Record<string, string>;
+      }> = [];
       // Ensure global flag for matchAll.
-      const globalRegex = regex.global ? regex : new RegExp(input.pattern, (input.flags ?? "") + "g");
+      const globalRegex = regex.global
+        ? regex
+        : new RegExp(input.pattern, `${input.flags ?? ""}g`);
 
-      while ((m = globalRegex.exec(input.text)) !== null) {
+      for (const m of input.text.matchAll(globalRegex)) {
         matches.push({
           match: m[0],
           index: m.index,
-          groups: m.groups,
+          groups: m.groups as Record<string, string> | undefined,
         });
       }
 
@@ -240,18 +261,18 @@ const extract = async (
 
     if (input.all) {
       const results: Array<string | Record<string, string>> = [];
-      const globalRegex = regex.global ? regex : new RegExp(input.pattern, (input.flags ?? "") + "g");
-      let m;
-
-      while ((m = globalRegex.exec(input.text)) !== null) {
+      const globalRegex = regex.global
+        ? regex
+        : new RegExp(input.pattern, `${input.flags ?? ""}g`);
+      for (const m of input.text.matchAll(globalRegex)) {
         if (input.group !== undefined) {
           if (typeof input.group === "string" && m.groups) {
-            results.push(m.groups[input.group]);
+            results.push(m.groups[input.group] ?? "");
           } else if (typeof input.group === "number") {
-            results.push(m[input.group]);
+            results.push(m[input.group] ?? "");
           }
         } else if (m.groups) {
-          results.push(m.groups);
+          results.push(m.groups as Record<string, string>);
         } else {
           results.push(m.slice(1).join(""));
         }
@@ -345,7 +366,9 @@ const split = async (
   try {
     const input = inputs as unknown as SplitInput;
     const regex = new RegExp(input.pattern);
-    const parts = input.limit ? input.text.split(regex, input.limit) : input.text.split(regex);
+    const parts = input.limit
+      ? input.text.split(regex, input.limit)
+      : input.text.split(regex);
 
     return {
       success: true,
@@ -367,7 +390,7 @@ const split = async (
 /**
  * Escape special regex characters.
  */
-const escape = async (
+const escapePattern = async (
   inputs: Record<string, unknown>,
   _context?: PluginContext,
 ): Promise<PluginCallResult> => {
@@ -482,10 +505,10 @@ const buildPattern = async (
 
     // Add anchors.
     if (input.startAnchor) {
-      pattern = "^" + pattern;
+      pattern = `^${pattern}`;
     }
     if (input.endAnchor) {
-      pattern = pattern + "$";
+      pattern = `${pattern}$`;
     }
 
     // Validate pattern.
@@ -597,7 +620,7 @@ export const regexPlugin: BuiltinPlugin = {
     escape: {
       name: "escape",
       description: "Escape special regex characters",
-      handler: escape,
+      handler: escapePattern,
     },
     commonPattern: {
       name: "commonPattern",

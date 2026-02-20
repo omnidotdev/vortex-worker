@@ -156,7 +156,7 @@ const read = async (
       valueRanges?: Array<{ values?: unknown[][] }>;
     };
 
-    let values = result.values ?? result.valueRanges?.[0]?.values ?? [];
+    const values = result.values ?? result.valueRanges?.[0]?.values ?? [];
 
     // Convert to records if headers enabled.
     let data: unknown;
@@ -403,9 +403,7 @@ const update = async (
       values = input.data as unknown[][];
     }
 
-    const range = input.sheet
-      ? `${input.sheet}!${input.range}`
-      : input.range;
+    const range = input.sheet ? `${input.sheet}!${input.range}` : input.range;
 
     const url = `${BASE_URL}/${input.spreadsheetId}/values/${encodeURIComponent(range)}?valueInputOption=${input.valueInputOption ?? "USER_ENTERED"}`;
 
@@ -472,9 +470,7 @@ const clear = async (
 
     const client = await getClient(accessToken);
 
-    const range = input.sheet
-      ? `${input.sheet}!${input.range}`
-      : input.range;
+    const range = input.sheet ? `${input.sheet}!${input.range}` : input.range;
 
     const url = `${BASE_URL}/${input.spreadsheetId}/values/${encodeURIComponent(range)}:clear`;
 

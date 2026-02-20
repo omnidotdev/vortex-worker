@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 
+import logger from "lib/logger";
+
 const { RESEND_API_KEY } = process.env;
 
 // Initialize Resend client (lazy to allow for missing API key during tests)
@@ -53,7 +55,7 @@ export async function executeEmailActivity(
     });
 
     if (error) {
-      console.error("[Email] Failed to send email:", error);
+      logger.error("Failed to send email", { error: error.message });
       return {
         success: false,
         error: error.message,
@@ -67,7 +69,7 @@ export async function executeEmailActivity(
   } catch (err) {
     const errorMessage =
       err instanceof Error ? err.message : "Unknown error sending email";
-    console.error("[Email] Exception while sending email:", err);
+    logger.error("Exception while sending email", { error: errorMessage });
     return {
       success: false,
       error: errorMessage,

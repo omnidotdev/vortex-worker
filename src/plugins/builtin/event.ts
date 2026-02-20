@@ -4,6 +4,8 @@
  * Emit events to other workflows (pub/sub pattern).
  */
 
+import { isInitialized, publish } from "../../events/publisher";
+
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
@@ -17,8 +19,13 @@ const emitEvent = async (
   const startTime = performance.now();
 
   try {
-    const { eventName, payload = {} } = inputs as {
+    const {
+      eventName,
+      organizationId,
+      payload = {},
+    } = inputs as {
       eventName: string;
+      organizationId?: string;
       payload?: Record<string, unknown>;
     };
 
@@ -30,16 +37,37 @@ const emitEvent = async (
       };
     }
 
-    // TODO: Implement actual event bus integration
-    // biome-ignore lint/suspicious/noConsole: Intentional runtime logging for plugin placeholder
-    console.log(`[Event] Emitting "${eventName}" with payload:`, payload);
+    if (!isInitialized()) {
+      return {
+        success: false,
+        error: "Event publisher not initialized",
+        durationMs: performance.now() - startTime,
+      };
+    }
+
+    if (!organizationId) {
+      return {
+        success: false,
+        error: "organizationId is required to emit events",
+        durationMs: performance.now() - startTime,
+      };
+    }
+
+    const event = await publish({
+      type: eventName,
+      source: "vortex.plugin",
+      data: payload as Record<string, unknown>,
+      organizationId,
+      correlationId: context?.runId,
+    });
 
     return {
       success: true,
       output: {
+        eventId: event?.id,
         eventName,
         payload,
-        emittedAt: new Date().toISOString(),
+        emittedAt: event?.timestamp,
         workflowId: context?.workflowId,
         runId: context?.runId,
       },

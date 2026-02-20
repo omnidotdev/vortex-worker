@@ -52,7 +52,7 @@ interface ResetInput {
   key: string;
 }
 
-// Redis key prefixes
+// Cache key prefixes
 const TB_PREFIX = "wk:rl:tb:";
 const FW_PREFIX = "wk:rl:fw:";
 const SW_PREFIX = "wk:rl:sw:";
@@ -392,7 +392,7 @@ const acquireDistributed = async (
 };
 
 /**
- * Acquire rate limit tokens (dispatches to Redis or in-memory).
+ * Acquire rate limit tokens (dispatches to cache or in-memory).
  */
 const acquireTokens = async (
   key: string,

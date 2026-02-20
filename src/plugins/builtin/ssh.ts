@@ -77,14 +77,21 @@ interface CheckInput extends SshConfig {
  * Execute SSH command using Bun shell.
  * In production, use ssh2 library for full SSH support.
  */
-const execSsh = async (config: SshConfig, command: string, timeout = 30000): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+const execSsh = async (
+  config: SshConfig,
+  command: string,
+  timeout = 30000,
+): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
   const port = config.port ?? 22;
   const sshArgs: string[] = [];
 
   // Build SSH command.
   sshArgs.push("-o", "StrictHostKeyChecking=accept-new");
   sshArgs.push("-o", "BatchMode=yes");
-  sshArgs.push("-o", `ConnectTimeout=${Math.floor((config.timeout ?? 10000) / 1000)}`);
+  sshArgs.push(
+    "-o",
+    `ConnectTimeout=${Math.floor((config.timeout ?? 10000) / 1000)}`,
+  );
   sshArgs.push("-p", String(port));
 
   if (config.privateKeyPath) {
@@ -309,7 +316,12 @@ const list = async (
     const entries = result.stdout.trim().split("\n").filter(Boolean);
 
     // Parse long format if used.
-    let files: Array<{ name: string; type?: string; size?: number; permissions?: string }>;
+    let files: Array<{
+      name: string;
+      type?: string;
+      size?: number;
+      permissions?: string;
+    }>;
 
     if (input.long) {
       files = entries.map((line) => {
@@ -318,7 +330,11 @@ const list = async (
           const permissions = parts[0];
           const size = Number.parseInt(parts[4], 10);
           const name = parts.slice(8).join(" ");
-          const type = permissions.startsWith("d") ? "directory" : permissions.startsWith("l") ? "link" : "file";
+          const type = permissions.startsWith("d")
+            ? "directory"
+            : permissions.startsWith("l")
+              ? "link"
+              : "file";
           return { name, type, size, permissions };
         }
         return { name: line };
@@ -398,7 +414,12 @@ const script = async (
       stopOnError?: boolean;
     };
 
-    const results: Array<{ command: string; stdout: string; stderr: string; exitCode: number }> = [];
+    const results: Array<{
+      command: string;
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+    }> = [];
     let hasError = false;
 
     for (const command of input.commands) {

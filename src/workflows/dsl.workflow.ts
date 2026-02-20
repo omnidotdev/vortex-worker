@@ -1,3 +1,4 @@
+import logger from "lib/logger";
 import {
   createWorkflowRun,
   logStepComplete,
@@ -50,6 +51,16 @@ export const dslWorkflow: Workflow = {
         const { workflowId, organizationId, triggerData } = input;
         let { definition } = input;
         const runId = ctx.workflowRunId();
+
+        // Extract correlation ID from trigger data
+        const _requestId = triggerData._requestId as string | undefined;
+
+        // Create child logger with run context for correlated logging
+        const runLogger = logger.child({
+          ...(_requestId && { requestId: _requestId }),
+          workflowId,
+          runId,
+        });
 
         // Extract step name mapping from ReactFlow nodes before conversion
         let stepNameToId: Record<string, string> = {};
@@ -148,12 +159,14 @@ export const dslWorkflow: Workflow = {
         // Create inverted map for looking up step names by ID
         const stepIdToName = invertStepNameMap(stepNameToId);
 
+        runLogger.info("Starting workflow execution");
+
         // Create workflow run record for tracking
         const dbRunId = await createWorkflowRun({
           workflowId,
           engineWorkflowId: "dsl-workflow",
           engineRunId: runId,
-          input: triggerData,
+          input: { ...triggerData, _requestId },
         });
 
         // Find trigger step
@@ -183,13 +196,17 @@ export const dslWorkflow: Workflow = {
             const stepName = stepIdToName[step.id] || step.type;
 
             ctx.log(`Executing step: ${step.id} (${step.type})`);
+            runLogger.debug("Executing step", {
+              stepId: step.id,
+              stepType: step.type,
+            });
 
             // Log step start
             await logStepStart(dbRunId, {
               stepId: step.id,
               stepName,
               stepType: step.type,
-              input: step.config,
+              input: { type: step.type, name: step.name },
             });
 
             try {
@@ -205,17 +222,28 @@ export const dslWorkflow: Workflow = {
               ctx.log(
                 `Step ${step.id} completed with result: ${JSON.stringify(result)}`,
               );
+              runLogger.debug("Step completed", { stepId: step.id });
 
               queue.push(...nextSteps);
             } catch (stepError) {
               // Log step failure
               await logStepFailed(dbRunId, step.id, stepError);
+              runLogger.error("Step failed", {
+                stepId: step.id,
+                error:
+                  stepError instanceof Error
+                    ? stepError.message
+                    : String(stepError),
+              });
               throw stepError;
             }
           }
 
           // Mark run as complete
           await markRunComplete(dbRunId, execCtx.stepResults);
+          runLogger.info("Workflow execution completed", {
+            completedSteps: Object.keys(execCtx.stepResults).length,
+          });
 
           return {
             workflowId,
@@ -226,6 +254,9 @@ export const dslWorkflow: Workflow = {
         } catch (error) {
           // Mark run as failed
           await markRunFailed(dbRunId, error);
+          runLogger.error("Workflow execution failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
           throw error;
         }
       },

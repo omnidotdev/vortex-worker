@@ -101,7 +101,9 @@ interface DeleteInput extends DbConfig {
 /**
  * Build WHERE clause from conditions object.
  */
-const buildWhere = (where: Record<string, unknown>): { clause: string; params: unknown[] } => {
+const buildWhere = (
+  where: Record<string, unknown>,
+): { clause: string; params: unknown[] } => {
   const conditions: string[] = [];
   const params: unknown[] = [];
 
@@ -147,17 +149,25 @@ const query = async (
 
       try {
         const stmt = db.prepare(input.sql);
-        const params = (Array.isArray(input.params) ? input.params : []) as (string | number | boolean | null | Uint8Array)[];
+        const params = (Array.isArray(input.params) ? input.params : []) as (
+          | string
+          | number
+          | boolean
+          | null
+          | Uint8Array
+        )[];
 
-        const rows = input.single
-          ? stmt.get(...params)
-          : stmt.all(...params);
+        const rows = input.single ? stmt.get(...params) : stmt.all(...params);
 
         return {
           success: true,
           output: {
             rows: input.single ? (rows ? [rows] : []) : rows,
-            rowCount: input.single ? (rows ? 1 : 0) : (rows as unknown[]).length,
+            rowCount: input.single
+              ? rows
+                ? 1
+                : 0
+              : (rows as unknown[]).length,
           },
           durationMs: performance.now() - startTime,
         };
@@ -200,7 +210,13 @@ const execute = async (
 
       try {
         const stmt = db.prepare(input.sql);
-        const params = (Array.isArray(input.params) ? input.params : []) as (string | number | boolean | null | Uint8Array)[];
+        const params = (Array.isArray(input.params) ? input.params : []) as (
+          | string
+          | number
+          | boolean
+          | null
+          | Uint8Array
+        )[];
         const result = stmt.run(...params);
 
         return {
@@ -257,7 +273,13 @@ const batch = async (
         try {
           for (const stmt of input.statements) {
             const prepared = db.prepare(stmt.sql);
-            const params = (Array.isArray(stmt.params) ? stmt.params : []) as (string | number | boolean | null | Uint8Array)[];
+            const params = (Array.isArray(stmt.params) ? stmt.params : []) as (
+              | string
+              | number
+              | boolean
+              | null
+              | Uint8Array
+            )[];
             const result = prepared.run(...params);
             results.push({ changes: result.changes });
           }
@@ -327,7 +349,8 @@ const createTable = async (
       if (col.notNull) parts.push("NOT NULL");
       if (col.unique) parts.push("UNIQUE");
       if (col.default !== undefined) {
-        const defaultVal = typeof col.default === "string" ? `'${col.default}'` : col.default;
+        const defaultVal =
+          typeof col.default === "string" ? `'${col.default}'` : col.default;
         parts.push(`DEFAULT ${defaultVal}`);
       }
       return parts.join(" ");
@@ -411,7 +434,13 @@ const insert = async (
         let lastId: number | bigint = 0;
 
         for (const row of rows) {
-          const values = columns.map((col) => row[col]) as (string | number | boolean | null | Uint8Array)[];
+          const values = columns.map((col) => row[col]) as (
+            | string
+            | number
+            | boolean
+            | null
+            | Uint8Array
+          )[];
           const result = stmt.run(...values);
           totalChanges += result.changes;
           lastId = result.lastInsertRowid;
@@ -459,10 +488,18 @@ const update = async (
     const setClauses = Object.keys(input.data).map((col) => `${col} = ?`);
     const setParams = Object.values(input.data);
 
-    const { clause: whereClause, params: whereParams } = buildWhere(input.where);
+    const { clause: whereClause, params: whereParams } = buildWhere(
+      input.where,
+    );
 
     const sql = `UPDATE ${input.table} SET ${setClauses.join(", ")} ${whereClause}`;
-    const params = [...setParams, ...whereParams] as (string | number | boolean | null | Uint8Array)[];
+    const params = [...setParams, ...whereParams] as (
+      | string
+      | number
+      | boolean
+      | null
+      | Uint8Array
+    )[];
 
     if (input.type === "sqlite") {
       const { Database } = await import("bun:sqlite");
@@ -515,7 +552,8 @@ const deleteRows = async (
     if (!whereClause) {
       return {
         success: false,
-        error: "DELETE requires WHERE conditions. Use TRUNCATE for full table delete.",
+        error:
+          "DELETE requires WHERE conditions. Use TRUNCATE for full table delete.",
         durationMs: performance.now() - startTime,
       };
     }
@@ -528,7 +566,13 @@ const deleteRows = async (
 
       try {
         const stmt = db.prepare(sql);
-        const typedParams = params as (string | number | boolean | null | Uint8Array)[];
+        const typedParams = params as (
+          | string
+          | number
+          | boolean
+          | null
+          | Uint8Array
+        )[];
         const result = stmt.run(...typedParams);
 
         return {

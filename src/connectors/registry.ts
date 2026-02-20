@@ -8,6 +8,8 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 
+import logger from "lib/logger";
+
 import type { Piece } from "@activepieces/pieces-framework";
 import type {
   ConnectorAction,
@@ -256,7 +258,7 @@ export async function loadConnector(
     // Find the Piece export from the module
     const piece = findPieceExport(module as Record<string, unknown>);
     if (!piece) {
-      console.warn(`[Connectors] No piece exported from ${packageId}`);
+      logger.warn("No piece exported from package", { packageId });
       return null;
     }
 
@@ -308,10 +310,11 @@ export async function discoverPieces(): Promise<string[]> {
       }
     }
 
-    // biome-ignore lint/suspicious/noConsole: Intentional startup logging
-    console.log(`[Connectors] Discovered ${pieces.length} Activepieces pieces`);
+    logger.info("Discovered Activepieces pieces", { count: pieces.length });
   } catch (error) {
-    console.warn("[Connectors] Failed to auto-discover pieces:", error);
+    logger.warn("Failed to auto-discover pieces", {
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 
   discoveredPieces = pieces;

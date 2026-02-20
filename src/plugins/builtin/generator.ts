@@ -77,7 +77,19 @@ interface MockInput {
 
 /** Mock field definition */
 interface MockField {
-  type: "string" | "number" | "boolean" | "date" | "email" | "name" | "phone" | "address" | "uuid" | "enum" | "array" | "object";
+  type:
+    | "string"
+    | "number"
+    | "boolean"
+    | "date"
+    | "email"
+    | "name"
+    | "phone"
+    | "address"
+    | "uuid"
+    | "enum"
+    | "array"
+    | "object";
   /** Min/max for numbers or lengths */
   min?: number;
   max?: number;
@@ -131,7 +143,8 @@ interface SlugInput {
 
 // Character sets.
 const CHARSETS = {
-  alphanumeric: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
+  alphanumeric:
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
   alpha: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
   numeric: "0123456789",
   hex: "0123456789abcdef",
@@ -140,20 +153,102 @@ const CHARSETS = {
 
 // Lorem ipsum words.
 const LOREM_WORDS = [
-  "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit",
-  "sed", "do", "eiusmod", "tempor", "incididunt", "ut", "labore", "et", "dolore",
-  "magna", "aliqua", "enim", "ad", "minim", "veniam", "quis", "nostrud",
-  "exercitation", "ullamco", "laboris", "nisi", "aliquip", "ex", "ea", "commodo",
-  "consequat", "duis", "aute", "irure", "in", "reprehenderit", "voluptate",
-  "velit", "esse", "cillum", "fugiat", "nulla", "pariatur", "excepteur", "sint",
-  "occaecat", "cupidatat", "non", "proident", "sunt", "culpa", "qui", "officia",
-  "deserunt", "mollit", "anim", "id", "est", "laborum",
+  "lorem",
+  "ipsum",
+  "dolor",
+  "sit",
+  "amet",
+  "consectetur",
+  "adipiscing",
+  "elit",
+  "sed",
+  "do",
+  "eiusmod",
+  "tempor",
+  "incididunt",
+  "ut",
+  "labore",
+  "et",
+  "dolore",
+  "magna",
+  "aliqua",
+  "enim",
+  "ad",
+  "minim",
+  "veniam",
+  "quis",
+  "nostrud",
+  "exercitation",
+  "ullamco",
+  "laboris",
+  "nisi",
+  "aliquip",
+  "ex",
+  "ea",
+  "commodo",
+  "consequat",
+  "duis",
+  "aute",
+  "irure",
+  "in",
+  "reprehenderit",
+  "voluptate",
+  "velit",
+  "esse",
+  "cillum",
+  "fugiat",
+  "nulla",
+  "pariatur",
+  "excepteur",
+  "sint",
+  "occaecat",
+  "cupidatat",
+  "non",
+  "proident",
+  "sunt",
+  "culpa",
+  "qui",
+  "officia",
+  "deserunt",
+  "mollit",
+  "anim",
+  "id",
+  "est",
+  "laborum",
 ];
 
 // Sample names for mock data.
-const FIRST_NAMES = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth"];
-const LAST_NAMES = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez"];
-const DOMAINS = ["example.com", "test.org", "sample.net", "demo.io", "mock.dev"];
+const FIRST_NAMES = [
+  "James",
+  "Mary",
+  "John",
+  "Patricia",
+  "Robert",
+  "Jennifer",
+  "Michael",
+  "Linda",
+  "William",
+  "Elizabeth",
+];
+const LAST_NAMES = [
+  "Smith",
+  "Johnson",
+  "Williams",
+  "Brown",
+  "Jones",
+  "Garcia",
+  "Miller",
+  "Davis",
+  "Rodriguez",
+  "Martinez",
+];
+const DOMAINS = [
+  "example.com",
+  "test.org",
+  "sample.net",
+  "demo.io",
+  "mock.dev",
+];
 
 /**
  * Generate random bytes.
@@ -246,7 +341,8 @@ const randomString = async (
     const input = inputs as unknown as RandomStringInput;
     const count = input.count ?? 1;
     const charset = input.charset ?? "alphanumeric";
-    const characters = charset === "custom" ? (input.characters ?? "") : CHARSETS[charset];
+    const characters =
+      charset === "custom" ? (input.characters ?? "") : CHARSETS[charset];
 
     if (!characters) {
       return {
@@ -342,7 +438,9 @@ const sequence = async (
       const num = start + i * step;
 
       if (input.prefix || input.suffix || input.padding) {
-        const numStr = input.padding ? String(num).padStart(input.padding, "0") : String(num);
+        const numStr = input.padding
+          ? String(num).padStart(input.padding, "0")
+          : String(num);
         values.push(`${input.prefix ?? ""}${numStr}${input.suffix ?? ""}`);
       } else {
         values.push(num);
@@ -383,7 +481,7 @@ const lorem = async (
         words.push(LOREM_WORDS[randomInt(0, LOREM_WORDS.length - 1)]);
       }
       words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1);
-      return words.join(" ") + ".";
+      return `${words.join(" ")}.`;
     };
 
     const generateParagraph = (): string => {
@@ -455,11 +553,13 @@ const mock = async (
 
     const generateField = (field: MockField): unknown => {
       switch (field.type) {
-        case "string":
+        case "string": {
           const len = randomInt(field.min ?? 5, field.max ?? 20);
-          return Array.from({ length: len }, () =>
-            CHARSETS.alpha[randomInt(0, CHARSETS.alpha.length - 1)],
+          return Array.from(
+            { length: len },
+            () => CHARSETS.alpha[randomInt(0, CHARSETS.alpha.length - 1)],
           ).join("");
+        }
 
         case "number":
           return randomInt(field.min ?? 0, field.max ?? 100);
@@ -468,14 +568,18 @@ const mock = async (
           return Math.random() > 0.5;
 
         case "date": {
-          const start = field.min ? new Date(field.min).getTime() : Date.now() - 365 * 24 * 60 * 60 * 1000;
+          const start = field.min
+            ? new Date(field.min).getTime()
+            : Date.now() - 365 * 24 * 60 * 60 * 1000;
           const end = field.max ? new Date(field.max).getTime() : Date.now();
           return new Date(randomInt(start, end)).toISOString();
         }
 
         case "email": {
-          const first = FIRST_NAMES[randomInt(0, FIRST_NAMES.length - 1)].toLowerCase();
-          const last = LAST_NAMES[randomInt(0, LAST_NAMES.length - 1)].toLowerCase();
+          const first =
+            FIRST_NAMES[randomInt(0, FIRST_NAMES.length - 1)].toLowerCase();
+          const last =
+            LAST_NAMES[randomInt(0, LAST_NAMES.length - 1)].toLowerCase();
           const domain = DOMAINS[randomInt(0, DOMAINS.length - 1)];
           return `${first}.${last}@${domain}`;
         }
@@ -558,7 +662,9 @@ const date = async (
     const count = input.count ?? 1;
     const format = input.format ?? "iso";
 
-    const startDate = input.start ? new Date(input.start).getTime() : Date.now() - 365 * 24 * 60 * 60 * 1000;
+    const startDate = input.start
+      ? new Date(input.start).getTime()
+      : Date.now() - 365 * 24 * 60 * 60 * 1000;
     const endDate = input.end ? new Date(input.end).getTime() : Date.now();
 
     const dates: (string | number)[] = [];

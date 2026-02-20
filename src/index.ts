@@ -4,15 +4,19 @@
  * Error tracking: OpenTelemetry traces/logs sent to HyperDX via instrumentation.ts
  */
 
-// Import env config first to validate environment variables
-import "./lib/config/env.config";
+// Validate environment variables at startup
+import { validateEnv } from "lib/config/env.config";
+import Sentry from "lib/sentry";
+
+validateEnv();
 
 import Hatchet from "@hatchet-dev/typescript-sdk";
 
-import EventsConsumer from "./events/consumer";
-import routeEvent from "./events/router";
 import { closeCache, initCache } from "lib/cache";
 import logger from "lib/logger";
+import EventsConsumer from "./events/consumer";
+import { closePublisher, initPublisher } from "./events/publisher";
+import routeEvent from "./events/router";
 import { initializeMCPServers } from "./mcp";
 import { authzSyncWorkflow } from "./workflows/authz.workflow";
 import { authzReconcileWorkflow } from "./workflows/authzReconcile.workflow";
@@ -29,7 +33,9 @@ import type { EventsConfig } from "./events/types";
 function parseEventsUrl(url: string): EventsConfig {
   const match = url.match(/^iggy:\/\/([^:]+):(\d+)$/);
   if (!match) {
-    throw new Error(`Invalid EVENTS_URL format, expected iggy://host:port: ${url}`);
+    throw new Error(
+      `Invalid EVENTS_URL format, expected iggy://host:port: ${url}`,
+    );
   }
 
   return {
@@ -66,6 +72,7 @@ async function main() {
     const config = parseEventsUrl(eventsUrl);
     eventsConsumer = new EventsConsumer(config, routeEvent);
     await eventsConsumer.start();
+    await initPublisher(config);
   } else {
     logger.warn("EVENTS_URL not set, event routing from Iggy is disabled");
   }
@@ -74,6 +81,7 @@ async function main() {
   const shutdown = async () => {
     logger.info("Shutting down worker");
     eventsConsumer?.stop();
+    closePublisher();
     await closeCache();
     process.exit(0);
   };
@@ -83,6 +91,7 @@ async function main() {
 }
 
 main().catch((err) => {
+  Sentry.captureException(err);
   logger.error("Worker failed to start", {
     error: err instanceof Error ? err.message : String(err),
   });

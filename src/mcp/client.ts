@@ -8,6 +8,9 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
+import logger from "lib/logger";
+import { withRetry } from "lib/retry";
+
 import type {
   MCPContent,
   MCPServerConfig,
@@ -164,10 +167,20 @@ export class MCPIntegrationClient {
     }
 
     try {
-      const result = await client.callTool({
-        name: toolName,
-        arguments: args,
-      });
+      const result = await withRetry(
+        () => client.callTool({ name: toolName, arguments: args }),
+        {
+          maxAttempts: 2,
+          onRetry: (error, attempt) => {
+            logger.warn("Retrying MCP tool call", {
+              serverId,
+              toolName,
+              attempt,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        },
+      );
 
       const contentArray = result.content as Array<{
         type: string;

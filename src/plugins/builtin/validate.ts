@@ -82,7 +82,9 @@ const validateProperty = (
   if (schema.type !== undefined) {
     const actualType = getType(value);
     if (actualType !== schema.type) {
-      errors.push(`${path}: expected type "${schema.type}", got "${actualType}"`);
+      errors.push(
+        `${path}: expected type "${schema.type}", got "${actualType}"`,
+      );
       return;
     }
   }
@@ -111,7 +113,9 @@ const validateProperty = (
     if (schema.pattern !== undefined) {
       const regex = new RegExp(schema.pattern);
       if (!regex.test(value)) {
-        errors.push(`${path}: string does not match pattern "${schema.pattern}"`);
+        errors.push(
+          `${path}: string does not match pattern "${schema.pattern}"`,
+        );
       }
     }
   }
@@ -208,7 +212,9 @@ const validateSchema = async (
         const knownKeys = new Set(Object.keys(schema.properties));
         for (const key of Object.keys(obj)) {
           if (!knownKeys.has(key)) {
-            errors.push(`$.${key}: unknown property not allowed in strict mode`);
+            errors.push(
+              `$.${key}: unknown property not allowed in strict mode`,
+            );
           }
         }
       }
@@ -222,7 +228,7 @@ const validateSchema = async (
 
     return {
       success: true,
-      output: result,
+      output: result as unknown as Record<string, unknown>,
       durationMs: performance.now() - startTime,
     };
   } catch (error) {

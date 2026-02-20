@@ -245,7 +245,7 @@ const verifyPaddle = async (
   payload: string,
   signature: string,
   secret: string,
-  timestamp: string | undefined,
+  _timestamp: string | undefined,
   tolerance: number,
 ): Promise<{ valid: boolean; error?: string }> => {
   // Paddle Billing uses ts=timestamp;h1=signature format.
@@ -426,7 +426,10 @@ const parseWebhook = async (
   const startTime = performance.now();
 
   try {
-    const input = inputs as unknown as { provider: WebhookProvider; payload: string };
+    const input = inputs as unknown as {
+      provider: WebhookProvider;
+      payload: string;
+    };
 
     let parsed: unknown;
     try {
@@ -453,11 +456,13 @@ const parseWebhook = async (
         eventData = p;
         break;
       case "slack":
-        eventType = (p.event as Record<string, unknown>)?.type as string ?? p.type as string;
+        eventType =
+          ((p.event as Record<string, unknown>)?.type as string) ??
+          (p.type as string);
         eventData = p.event ?? p;
         break;
       case "twilio":
-        eventType = p.EventType as string ?? "message";
+        eventType = (p.EventType as string) ?? "message";
         eventData = p;
         break;
       case "shopify":
@@ -465,19 +470,21 @@ const parseWebhook = async (
         eventData = p;
         break;
       case "sendgrid":
-        eventType = Array.isArray(p) ? (p[0] as Record<string, unknown>)?.event as string : p.event as string;
+        eventType = Array.isArray(p)
+          ? ((p[0] as Record<string, unknown>)?.event as string)
+          : (p.event as string);
         eventData = p;
         break;
       case "paddle":
-        eventType = p.event_type as string ?? p.alert_name as string;
+        eventType = (p.event_type as string) ?? (p.alert_name as string);
         eventData = p.data ?? p;
         break;
       case "linear":
-        eventType = p.type as string ?? p.action as string;
+        eventType = (p.type as string) ?? (p.action as string);
         eventData = p.data ?? p;
         break;
       default:
-        eventType = p.type as string ?? p.event as string ?? "unknown";
+        eventType = (p.type as string) ?? (p.event as string) ?? "unknown";
         eventData = p;
     }
 

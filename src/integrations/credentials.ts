@@ -8,6 +8,7 @@
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 
+import logger from "lib/logger";
 import { DATABASE_URL } from "../lib/config/env.config";
 import { decryptJson, isEncrypted } from "../lib/crypto/encryption";
 
@@ -77,10 +78,10 @@ export async function getIntegrationCredentials(
   const integrations = integrationResult.rows as unknown as Integration[];
 
   if (integrations.length === 0) {
-    // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-    console.log(
-      `[Credentials] No enabled integration found for org=${organizationId} type=${integrationType}`,
-    );
+    logger.debug("No enabled integration found", {
+      organizationId,
+      integrationType,
+    });
     return undefined;
   }
 
@@ -101,10 +102,7 @@ export async function getIntegrationCredentials(
     const tokens = tokenResult.rows as unknown as OAuthToken[];
 
     if (tokens.length === 0) {
-      // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-      console.log(
-        `[Credentials] No OAuth token found for integration=${integration.id}`,
-      );
+      logger.debug("No OAuth token found", { integrationId: integration.id });
       return undefined;
     }
 
@@ -112,10 +110,7 @@ export async function getIntegrationCredentials(
 
     // Check if token is expired
     if (token.expiresAt && new Date(token.expiresAt) < new Date()) {
-      // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-      console.log(
-        `[Credentials] OAuth token expired for integration=${integration.id}`,
-      );
+      logger.debug("OAuth token expired", { integrationId: integration.id });
       // TODO: Trigger token refresh
       return undefined;
     }
@@ -137,15 +132,12 @@ export async function getIntegrationCredentials(
   if (typeof rawConfig === "string" && isEncrypted(rawConfig)) {
     try {
       config = decryptJson<Record<string, unknown>>(rawConfig);
-      // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-      console.log(
-        `[Credentials] Decrypted config for integration=${integration.id}`,
-      );
+      logger.debug("Decrypted config", { integrationId: integration.id });
     } catch (err) {
-      console.error(
-        `[Credentials] Failed to decrypt config for integration=${integration.id}:`,
-        err,
-      );
+      logger.error("Failed to decrypt config", {
+        integrationId: integration.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
       return undefined;
     }
   } else if (typeof rawConfig === "object" && rawConfig !== null) {
@@ -205,9 +197,8 @@ export async function getIntegrationCredentials(
     };
   }
 
-  // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-  console.log(
-    `[Credentials] No credentials found in integration config for integration=${integration.id}`,
-  );
+  logger.debug("No credentials found in integration config", {
+    integrationId: integration.id,
+  });
   return undefined;
 }

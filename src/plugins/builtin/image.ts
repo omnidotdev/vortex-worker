@@ -79,7 +79,12 @@ interface WatermarkInput {
   /** Is watermark text instead of image */
   isText?: boolean;
   /** Position */
-  position?: "top-left" | "top-right" | "bottom-left" | "bottom-right" | "center";
+  position?:
+    | "top-left"
+    | "top-right"
+    | "bottom-left"
+    | "bottom-right"
+    | "center";
   /** Opacity (0-1) */
   opacity?: number;
   /** Margin from edge */
@@ -354,7 +359,9 @@ const optimize = async (
         originalSize,
         optimizedSize: outputBuffer.length,
         savings: originalSize - outputBuffer.length,
-        savingsPercent: Math.round((1 - outputBuffer.length / originalSize) * 100),
+        savingsPercent: Math.round(
+          (1 - outputBuffer.length / originalSize) * 100,
+        ),
       },
       durationMs: performance.now() - startTime,
     };
@@ -480,7 +487,8 @@ const rotate = async (
     const input = inputs as unknown as RotateInput;
     const sharp = (await import("sharp")).default;
 
-    const rotateOptions: { background?: { r: number; g: number; b: number } } = {};
+    const rotateOptions: { background?: { r: number; g: number; b: number } } =
+      {};
 
     if (input.background) {
       rotateOptions.background = parseColor(input.background);
@@ -591,11 +599,13 @@ const info = async (
         isAnimated: (metadata.pages ?? 1) > 1,
         pages: metadata.pages,
         stats: {
-          channels: stats.channels.map((c: { min: number; max: number; mean: number }) => ({
-            min: c.min,
-            max: c.max,
-            mean: c.mean,
-          })),
+          channels: stats.channels.map(
+            (c: { min: number; max: number; mean: number }) => ({
+              min: c.min,
+              max: c.max,
+              mean: c.mean,
+            }),
+          ),
           isOpaque: stats.isOpaque,
         },
       },
@@ -631,7 +641,9 @@ const composite = async (
     }));
 
     const outputBuffer = await sharp(input.input)
-      .composite(compositeInputs as Parameters<ReturnType<typeof sharp>["composite"]>[0])
+      .composite(
+        compositeInputs as Parameters<ReturnType<typeof sharp>["composite"]>[0],
+      )
       .toBuffer();
 
     await Bun.write(input.output, outputBuffer);

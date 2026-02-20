@@ -5,6 +5,7 @@
 
 import { and, eq } from "drizzle-orm";
 
+import { VortexError } from "lib/errors";
 import { getDb } from "./index";
 import { redactSensitive } from "./redact";
 import { workflowRunTable, workflowStepLogTable } from "./schema";
@@ -111,10 +112,15 @@ export async function logStepFailed(
 ): Promise<void> {
   const db = getDb();
 
-  const errorMessage =
+  const baseMessage =
     error instanceof Error
       ? `${error.message}\n${error.stack || ""}`
       : String(error);
+
+  const errorMessage =
+    error instanceof VortexError
+      ? `[${error.code}] ${baseMessage}`
+      : baseMessage;
 
   await db
     .update(workflowStepLogTable)
@@ -183,10 +189,15 @@ export async function markRunFailed(
 ): Promise<void> {
   const db = getDb();
 
-  const errorMessage =
+  const baseMessage =
     error instanceof Error
       ? `${error.message}\n${error.stack || ""}`
       : String(error);
+
+  const errorMessage =
+    error instanceof VortexError
+      ? `[${error.code}] ${baseMessage}`
+      : baseMessage;
 
   await db
     .update(workflowRunTable)

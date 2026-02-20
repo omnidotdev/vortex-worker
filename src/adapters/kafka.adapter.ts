@@ -1,8 +1,7 @@
-import { Kafka, Consumer } from "kafkajs";
+import { Kafka } from "kafkajs";
 
+import type { Consumer, EachMessagePayload } from "kafkajs";
 import type { EventAdapter, NormalizedEvent } from "./types";
-
-import type { EachMessagePayload } from "kafkajs";
 
 export class KafkaAdapter implements EventAdapter {
   name = "kafka";
@@ -12,14 +11,20 @@ export class KafkaAdapter implements EventAdapter {
   private consumer: Consumer;
   private handler: ((event: NormalizedEvent) => Promise<void>) | null = null;
 
-  constructor(
-    private config: {
-      brokers: string[];
-      topic: string;
-      groupId: string;
-      fromBeginning?: boolean;
-    },
-  ) {
+  #config: {
+    brokers: string[];
+    topic: string;
+    groupId: string;
+    fromBeginning?: boolean;
+  };
+
+  constructor(config: {
+    brokers: string[];
+    topic: string;
+    groupId: string;
+    fromBeginning?: boolean;
+  }) {
+    this.#config = config;
     this.kafka = new Kafka({
       clientId: "vortex-worker",
       brokers: config.brokers,
@@ -34,8 +39,8 @@ export class KafkaAdapter implements EventAdapter {
   async start(): Promise<void> {
     await this.consumer.connect();
     await this.consumer.subscribe({
-      topic: this.config.topic,
-      fromBeginning: this.config.fromBeginning ?? false,
+      topic: this.#config.topic,
+      fromBeginning: this.#config.fromBeginning ?? false,
     });
 
     await this.consumer.run({
@@ -53,12 +58,12 @@ export class KafkaAdapter implements EventAdapter {
         }
 
         const event: NormalizedEvent = {
-          source: `kafka:${this.config.topic}`,
+          source: `kafka:${this.#config.topic}`,
           type: "kafka.message",
           subject: payload.message.key?.toString(),
           data,
           metadata: {
-            idempotencyKey: `kafka-${this.config.topic}-${payload.partition}-${payload.message.offset}`,
+            idempotencyKey: `kafka-${this.#config.topic}-${payload.partition}-${payload.message.offset}`,
             timestamp: new Date(
               Number(payload.message.timestamp) || Date.now(),
             ),

@@ -4,6 +4,7 @@
  * Excel and CSV file operations with full read/write/formula support.
  */
 
+import type { BookType, Sheet2JSONOpts, WorkBook } from "xlsx";
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
@@ -195,7 +196,7 @@ const read = async (
     }
 
     // Parse options.
-    const options: XLSX.Sheet2JSONOpts = {
+    const options: Sheet2JSONOpts = {
       header: input.headers === false ? 1 : undefined,
       range: input.startRow ? input.startRow - 1 : undefined,
     };
@@ -315,8 +316,10 @@ const write = async (
       const csv = Papa.default.unparse(data as unknown[][]);
 
       if (input.mode === "append") {
-        const existing = await Bun.file(input.path).text().catch(() => "");
-        await Bun.write(input.path, existing + "\n" + csv);
+        const existing = await Bun.file(input.path)
+          .text()
+          .catch(() => "");
+        await Bun.write(input.path, `${existing}\n${csv}`);
       } else {
         await Bun.write(input.path, csv);
       }
@@ -334,7 +337,7 @@ const write = async (
 
     const XLSX = await import("xlsx");
 
-    let workbook: XLSX.WorkBook;
+    let workbook: WorkBook;
     if (input.mode === "append") {
       try {
         const existing = await Bun.file(input.path).arrayBuffer();
@@ -357,8 +360,7 @@ const write = async (
       const records = input.data as Record<string, unknown>[];
       const headers = Object.keys(records[0]);
       const rows = records.map((r) => headers.map((h) => r[h]));
-      sheetData =
-        input.includeHeaders !== false ? [headers, ...rows] : rows;
+      sheetData = input.includeHeaders !== false ? [headers, ...rows] : rows;
     } else {
       sheetData = input.data as unknown[][];
     }
@@ -381,7 +383,10 @@ const write = async (
     }
 
     // Write file.
-    const buffer = XLSX.write(workbook, { type: "array", bookType: format as XLSX.BookType });
+    const buffer = XLSX.write(workbook, {
+      type: "array",
+      bookType: format as BookType,
+    });
     await Bun.write(input.path, buffer);
 
     return {
@@ -459,11 +464,17 @@ const cell = async (
       if (input.formula) {
         sheet[cellAddress] = { f: input.formula };
       } else {
-        sheet[cellAddress] = { v: input.value, t: typeof input.value === "number" ? "n" : "s" };
+        sheet[cellAddress] = {
+          v: input.value,
+          t: typeof input.value === "number" ? "n" : "s",
+        };
       }
 
       // Write back.
-      const buffer = XLSX.write(workbook, { type: "array", bookType: format as XLSX.BookType });
+      const buffer = XLSX.write(workbook, {
+        type: "array",
+        bookType: format as BookType,
+      });
       await Bun.write(input.path, buffer);
 
       return {
@@ -584,7 +595,8 @@ const addSheet = async (
     const fileData = await Bun.file(input.path).arrayBuffer();
     const workbook = XLSX.read(fileData, { type: "array" });
 
-    const sheetName = input.sheetName ?? `Sheet${workbook.SheetNames.length + 1}`;
+    const sheetName =
+      input.sheetName ?? `Sheet${workbook.SheetNames.length + 1}`;
 
     if (workbook.SheetNames.includes(sheetName)) {
       return {
@@ -597,7 +609,10 @@ const addSheet = async (
     const sheet = XLSX.utils.aoa_to_sheet([]);
     XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
 
-    const buffer = XLSX.write(workbook, { type: "array", bookType: format as XLSX.BookType });
+    const buffer = XLSX.write(workbook, {
+      type: "array",
+      bookType: format as BookType,
+    });
     await Bun.write(input.path, buffer);
 
     return {
@@ -645,7 +660,10 @@ const deleteSheet = async (
     workbook.SheetNames.splice(idx, 1);
     delete workbook.Sheets[sheetName];
 
-    const buffer = XLSX.write(workbook, { type: "array", bookType: format as XLSX.BookType });
+    const buffer = XLSX.write(workbook, {
+      type: "array",
+      bookType: format as BookType,
+    });
     await Bun.write(input.path, buffer);
 
     return {
@@ -702,7 +720,10 @@ const renameSheet = async (
     workbook.Sheets[input.newName] = workbook.Sheets[oldName];
     delete workbook.Sheets[oldName];
 
-    const buffer = XLSX.write(workbook, { type: "array", bookType: format as XLSX.BookType });
+    const buffer = XLSX.write(workbook, {
+      type: "array",
+      bookType: format as BookType,
+    });
     await Bun.write(input.path, buffer);
 
     return {
@@ -877,7 +898,10 @@ const create = async (
     const sheet = XLSX.utils.aoa_to_sheet([]);
     XLSX.utils.book_append_sheet(workbook, sheet, input.sheetName ?? "Sheet1");
 
-    const buffer = XLSX.write(workbook, { type: "array", bookType: format as XLSX.BookType });
+    const buffer = XLSX.write(workbook, {
+      type: "array",
+      bookType: format as BookType,
+    });
     await Bun.write(input.path, buffer);
 
     return {

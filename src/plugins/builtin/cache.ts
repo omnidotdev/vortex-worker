@@ -98,14 +98,13 @@ const executeCache = async (
 
       case "set": {
         if (cacheClient) {
-          const args: (string | number)[] = [
-            `${KEY_PREFIX}${key}`,
-            JSON.stringify({ value }),
-          ];
+          const cacheKey = `${KEY_PREFIX}${key}`;
+          const cacheValue = JSON.stringify({ value });
           if (ttl) {
-            args.push("EX", ttl);
+            await cacheClient.set(cacheKey, cacheValue, "EX", ttl);
+          } else {
+            await cacheClient.set(cacheKey, cacheValue);
           }
-          await cacheClient.set(...(args as [string, string, ...string[]]));
           return {
             success: true,
             output: { stored: true, key, ttl },

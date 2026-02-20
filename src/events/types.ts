@@ -28,6 +28,22 @@ export type EventsConfig = {
 };
 
 /**
+ * Partial event input, omitting fields generated automatically.
+ */
+export type EventInput = Omit<OmniEvent, "id" | "timestamp">;
+
+/**
+ * Dead-letter queue envelope wrapping a failed event with error metadata.
+ */
+export type DlqEvent = {
+  originalEvent: OmniEvent;
+  originalTopic: string;
+  error: string;
+  failedAt: string;
+  attemptCount: number;
+};
+
+/**
  * Callback invoked for each consumed event.
  */
 export type EventHandler = (event: OmniEvent) => Promise<void>;

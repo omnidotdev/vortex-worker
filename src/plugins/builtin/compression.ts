@@ -254,7 +254,13 @@ const zip = async (
 
       // Create zip using native command.
       const proc = Bun.spawn(
-        ["zip", "-r", input.level ? `-${input.level}` : "-6", input.output, "."],
+        [
+          "zip",
+          "-r",
+          input.level ? `-${input.level}` : "-6",
+          input.output,
+          ".",
+        ],
         {
           cwd: tempDir,
           stdout: "pipe",
@@ -334,7 +340,9 @@ const unzip = async (
     // Parse extracted files from output.
     const extractedFiles = stdout
       .split("\n")
-      .filter((line) => line.includes("extracting:") || line.includes("inflating:"))
+      .filter(
+        (line) => line.includes("extracting:") || line.includes("inflating:"),
+      )
       .map((line) => line.replace(/.*(?:extracting|inflating):\s*/, "").trim());
 
     return {
@@ -517,8 +525,14 @@ const listArchive = async (
 
     if (type === "auto") {
       if (ext.endsWith(".zip")) type = "zip";
-      else if (ext.endsWith(".tar") || ext.endsWith(".tar.gz") || ext.endsWith(".tgz") ||
-               ext.endsWith(".tar.bz2") || ext.endsWith(".tbz2") || ext.endsWith(".tar.xz")) {
+      else if (
+        ext.endsWith(".tar") ||
+        ext.endsWith(".tar.gz") ||
+        ext.endsWith(".tgz") ||
+        ext.endsWith(".tar.bz2") ||
+        ext.endsWith(".tbz2") ||
+        ext.endsWith(".tar.xz")
+      ) {
         type = "tar";
       }
     }

@@ -79,7 +79,9 @@ interface MathInput {
 /**
  * Create a sandboxed evaluation context.
  */
-const createSandbox = (context: Record<string, unknown> = {}): Record<string, unknown> => {
+const createSandbox = (
+  context: Record<string, unknown> = {},
+): Record<string, unknown> => {
   // Safe built-ins.
   const sandbox: Record<string, unknown> = {
     // Math functions.
@@ -267,7 +269,10 @@ const conditional = async (
     const keys = Object.keys(sandbox);
     const values = Object.values(sandbox);
 
-    const fn = new Function(...keys, `"use strict"; return Boolean(${input.condition});`);
+    const fn = new Function(
+      ...keys,
+      `"use strict"; return Boolean(${input.condition});`,
+    );
     const conditionResult = fn(...values);
 
     const result = conditionResult ? input.ifTrue : input.ifFalse;
@@ -314,7 +319,10 @@ const mapExpr = async (
       const keys = Object.keys(sandbox);
       const values = Object.values(sandbox);
 
-      const fn = new Function(...keys, `"use strict"; return (${input.expression});`);
+      const fn = new Function(
+        ...keys,
+        `"use strict"; return (${input.expression});`,
+      );
       results.push(fn(...values));
     }
 
@@ -357,7 +365,10 @@ const filterExpr = async (
       const keys = Object.keys(sandbox);
       const values = Object.values(sandbox);
 
-      const fn = new Function(...keys, `"use strict"; return Boolean(${input.predicate});`);
+      const fn = new Function(
+        ...keys,
+        `"use strict"; return Boolean(${input.predicate});`,
+      );
 
       if (fn(...values)) {
         results.push(input.array[i]);

@@ -24,7 +24,8 @@ const generateCallbackUrl = (
   context: PluginContext | undefined,
   webhookSuffix?: string,
 ): string => {
-  const baseUrl = process.env.VORTEX_CALLBACK_BASE_URL || "http://localhost:3000";
+  const baseUrl =
+    process.env.VORTEX_CALLBACK_BASE_URL || "http://localhost:3000";
   const workflowId = context?.workflowId || "unknown";
   const runId = context?.runId || "unknown";
   const suffix = webhookSuffix || "";
@@ -68,7 +69,9 @@ const executeWait = async (
             status: "waiting",
             resumeOn: "webhook",
             callbackUrl,
-            timeoutMs: timeout ? timeout * (TIME_MULTIPLIERS[timeoutUnit] || 1000) : undefined,
+            timeoutMs: timeout
+              ? timeout * (TIME_MULTIPLIERS[timeoutUnit] || 1000)
+              : undefined,
           },
           durationMs: performance.now() - startTime,
         };
@@ -88,7 +91,9 @@ const executeWait = async (
             status: "waiting",
             resumeOn: "event",
             eventName,
-            timeoutMs: timeout ? timeout * (TIME_MULTIPLIERS[timeoutUnit] || 1000) : undefined,
+            timeoutMs: timeout
+              ? timeout * (TIME_MULTIPLIERS[timeoutUnit] || 1000)
+              : undefined,
           },
           durationMs: performance.now() - startTime,
         };

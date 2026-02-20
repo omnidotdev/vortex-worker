@@ -39,6 +39,7 @@ export interface ExecutionError {
   message: string;
   stepId?: string;
   stack?: string;
+  meta?: Record<string, unknown>;
 }
 
 /** Complete result of a workflow execution */

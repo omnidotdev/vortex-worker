@@ -6,14 +6,14 @@
  */
 
 import Hatchet from "@hatchet-dev/typescript-sdk";
-import { and, desc, eq } from "drizzle-orm";
-
 import { getDb } from "db";
 import {
   eventRoutingRuleTable,
   workflowRunTable,
   workflowTable,
 } from "db/schema";
+import { and, desc, eq } from "drizzle-orm";
+
 import logger from "lib/logger";
 
 import type { OmniEvent } from "./types";
@@ -62,7 +62,10 @@ async function routeEvent(event: OmniEvent): Promise<void> {
     if (!matchGlobPattern(rule.typePattern, event.type)) return false;
 
     // If the rule specifies a source pattern, it must also match
-    if (rule.sourcePattern && !matchGlobPattern(rule.sourcePattern, event.source)) {
+    if (
+      rule.sourcePattern &&
+      !matchGlobPattern(rule.sourcePattern, event.source)
+    ) {
       return false;
     }
 

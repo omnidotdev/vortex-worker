@@ -1,8 +1,8 @@
 /**
  * Built-in Queue Plugin
  *
- * Message queue operations for memory, Redis, SQS, and RabbitMQ.
- * The Redis provider uses the centralized client when available,
+ * Message queue operations for memory, Valkey, SQS, and RabbitMQ.
+ * The Valkey provider uses the centralized client when available,
  * falling back to per-operation connections when explicit config is given.
  */
 
@@ -11,7 +11,7 @@ import { cacheClient } from "lib/cache";
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
-type QueueProvider = "memory" | "redis" | "sqs" | "rabbitmq";
+type QueueProvider = "memory" | "valkey" | "sqs" | "rabbitmq";
 
 /** Queue message */
 interface QueueMessage {
@@ -213,7 +213,7 @@ const memoryProvider: QueueProviderImpl = {
     };
   },
 
-  async nack(input) {
+  async nack(_input) {
     const startTime = performance.now();
     // Memory queue doesn't support nack - message is already removed
     return {
@@ -237,9 +237,9 @@ const memoryProvider: QueueProviderImpl = {
   },
 };
 
-// Redis provider
+// Valkey provider
 
-interface RedisConfig {
+interface ValkeyConfig {
   url?: string;
   host?: string;
   port?: number;
@@ -248,23 +248,23 @@ interface RedisConfig {
 }
 
 /**
- * Get a Redis client for queue operations.
- * Uses the centralized client when no explicit config is given,
- * otherwise creates a per-operation connection.
+ * Get a cache client for queue operations.
+ * Use the centralized client when no explicit config is given,
+ * otherwise create a per-operation connection.
  */
-async function getRedisForQueue(config: RedisConfig | undefined): Promise<{
+async function getCacheForQueue(config: ValkeyConfig | undefined): Promise<{
   // biome-ignore lint/suspicious/noExplicitAny: ioredis types vary
-  redis: any;
+  client: any;
   needsCleanup: boolean;
 }> {
   // Use centralized client when no explicit config is provided
   if (!config?.url && !config?.host && !config?.password && cacheClient) {
-    return { redis: cacheClient, needsCleanup: false };
+    return { client: cacheClient, needsCleanup: false };
   }
 
   // Create per-operation connection for explicit config
   const { Redis } = await import("ioredis");
-  const redis = config?.url
+  const client = config?.url
     ? new Redis(config.url)
     : new Redis({
         host: config?.host ?? "localhost",
@@ -273,15 +273,15 @@ async function getRedisForQueue(config: RedisConfig | undefined): Promise<{
         db: config?.db ?? 0,
       });
 
-  return { redis, needsCleanup: true };
+  return { client, needsCleanup: true };
 }
 
-const redisProvider: QueueProviderImpl = {
+const valkeyProvider: QueueProviderImpl = {
   async push(input) {
     const startTime = performance.now();
     try {
-      const config = input.providerConfig as RedisConfig | undefined;
-      const { redis, needsCleanup } = await getRedisForQueue(config);
+      const config = input.providerConfig as ValkeyConfig | undefined;
+      const { client, needsCleanup } = await getCacheForQueue(config);
 
       try {
         const messageId = `msg_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -296,13 +296,13 @@ const redisProvider: QueueProviderImpl = {
           ? Date.now() + input.delayMs
           : Date.now() - (input.priority ?? 0) * 1000000;
 
-        await redis.zadd(
+        await client.zadd(
           `queue:${input.queueName}`,
           score,
           JSON.stringify(message),
         );
 
-        const length = await redis.zcard(`queue:${input.queueName}`);
+        const length = await client.zcard(`queue:${input.queueName}`);
 
         return {
           success: true,
@@ -314,7 +314,7 @@ const redisProvider: QueueProviderImpl = {
           durationMs: performance.now() - startTime,
         };
       } finally {
-        if (needsCleanup) await redis.quit();
+        if (needsCleanup) await client.quit();
       }
     } catch (error) {
       return {
@@ -328,12 +328,12 @@ const redisProvider: QueueProviderImpl = {
   async pull(input) {
     const startTime = performance.now();
     try {
-      const config = input.providerConfig as RedisConfig | undefined;
-      const { redis, needsCleanup } = await getRedisForQueue(config);
+      const config = input.providerConfig as ValkeyConfig | undefined;
+      const { client, needsCleanup } = await getCacheForQueue(config);
 
       try {
         const now = Date.now();
-        const results = await redis.zrangebyscore(
+        const results = await client.zrangebyscore(
           `queue:${input.queueName}`,
           "-inf",
           now,
@@ -343,7 +343,7 @@ const redisProvider: QueueProviderImpl = {
         );
 
         if (results.length === 0) {
-          const length = await redis.zcard(`queue:${input.queueName}`);
+          const length = await client.zcard(`queue:${input.queueName}`);
           return {
             success: true,
             output: { message: null, queueLength: length },
@@ -352,13 +352,13 @@ const redisProvider: QueueProviderImpl = {
         }
 
         const messageStr = results[0];
-        await redis.zrem(`queue:${input.queueName}`, messageStr);
+        await client.zrem(`queue:${input.queueName}`, messageStr);
 
         const message = JSON.parse(messageStr) as {
           id: string;
           payload: unknown;
         };
-        const length = await redis.zcard(`queue:${input.queueName}`);
+        const length = await client.zcard(`queue:${input.queueName}`);
 
         return {
           success: true,
@@ -370,7 +370,7 @@ const redisProvider: QueueProviderImpl = {
           durationMs: performance.now() - startTime,
         };
       } finally {
-        if (needsCleanup) await redis.quit();
+        if (needsCleanup) await client.quit();
       }
     } catch (error) {
       return {
@@ -384,12 +384,12 @@ const redisProvider: QueueProviderImpl = {
   async peek(input) {
     const startTime = performance.now();
     try {
-      const config = input.providerConfig as RedisConfig | undefined;
-      const { redis, needsCleanup } = await getRedisForQueue(config);
+      const config = input.providerConfig as ValkeyConfig | undefined;
+      const { client, needsCleanup } = await getCacheForQueue(config);
 
       try {
         const now = Date.now();
-        const results = await redis.zrangebyscore(
+        const results = await client.zrangebyscore(
           `queue:${input.queueName}`,
           "-inf",
           now,
@@ -398,7 +398,7 @@ const redisProvider: QueueProviderImpl = {
           1,
         );
 
-        const length = await redis.zcard(`queue:${input.queueName}`);
+        const length = await client.zcard(`queue:${input.queueName}`);
 
         if (results.length === 0) {
           return {
@@ -423,7 +423,7 @@ const redisProvider: QueueProviderImpl = {
           durationMs: performance.now() - startTime,
         };
       } finally {
-        if (needsCleanup) await redis.quit();
+        if (needsCleanup) await client.quit();
       }
     } catch (error) {
       return {
@@ -436,7 +436,7 @@ const redisProvider: QueueProviderImpl = {
 
   async ack(_input) {
     const startTime = performance.now();
-    // Redis queue auto-acks on pull (message is removed)
+    // Valkey queue auto-acks on pull (message is removed)
     return {
       success: true,
       output: { acknowledged: true },
@@ -450,7 +450,7 @@ const redisProvider: QueueProviderImpl = {
       success: true,
       output: {
         acknowledged: false,
-        note: "Redis queue does not support nack",
+        note: "Valkey queue does not support nack",
       },
       durationMs: performance.now() - startTime,
     };
@@ -459,18 +459,18 @@ const redisProvider: QueueProviderImpl = {
   async length(input) {
     const startTime = performance.now();
     try {
-      const config = input.providerConfig as RedisConfig | undefined;
-      const { redis, needsCleanup } = await getRedisForQueue(config);
+      const config = input.providerConfig as ValkeyConfig | undefined;
+      const { client, needsCleanup } = await getCacheForQueue(config);
 
       try {
-        const length = await redis.zcard(`queue:${input.queueName}`);
+        const length = await client.zcard(`queue:${input.queueName}`);
         return {
           success: true,
           output: { length },
           durationMs: performance.now() - startTime,
         };
       } finally {
-        if (needsCleanup) await redis.quit();
+        if (needsCleanup) await client.quit();
       }
     } catch (error) {
       return {
@@ -1010,7 +1010,7 @@ const rabbitmqProvider: QueueProviderImpl = {
     }
   },
 
-  async nack(input) {
+  async nack(_input) {
     const startTime = performance.now();
     try {
       return {
@@ -1071,7 +1071,7 @@ const rabbitmqProvider: QueueProviderImpl = {
 
 const providers: Record<QueueProvider, QueueProviderImpl> = {
   memory: memoryProvider,
-  redis: redisProvider,
+  valkey: valkeyProvider,
   sqs: sqsProvider,
   rabbitmq: rabbitmqProvider,
 };
@@ -1160,7 +1160,7 @@ const length = async (
 export const queuePlugin: BuiltinPlugin = {
   id: "builtin:queue",
   name: "Queue",
-  description: "Message queue operations (memory, Redis, SQS, RabbitMQ)",
+  description: "Message queue operations (memory, Valkey, SQS, RabbitMQ)",
   actions: {
     push: {
       name: "push",

@@ -13,10 +13,7 @@
  * TODO: Add Backfeed, Gaia when they have reconcile endpoints
  */
 
-import {
-  RUNA_API_URL,
-  WARDEN_SERVICE_KEY,
-} from "../lib/config/env.config";
+import { RUNA_API_URL, WARDEN_SERVICE_KEY } from "../lib/config/env.config";
 
 import type { Workflow } from "@hatchet-dev/typescript-sdk";
 
@@ -136,15 +133,20 @@ export const authzReconcileWorkflow: Workflow = {
         }
 
         // Summary
-        const totalWritten = results.reduce((sum, r) => sum + (r.written ?? 0), 0);
-        ctx.log(`Reconciliation complete. Total tuples written: ${totalWritten}`);
+        const totalWritten = results.reduce(
+          (sum, r) => sum + (r.written ?? 0),
+          0,
+        );
+        ctx.log(
+          `Reconciliation complete. Total tuples written: ${totalWritten}`,
+        );
 
         return {
           success: true,
           results,
           totalWritten,
           reconciledAt: new Date().toISOString(),
-        };
+        } as unknown as undefined;
       },
     },
   ],

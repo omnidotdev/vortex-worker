@@ -6,16 +6,20 @@
  * groups (kind 2) so multiple worker instances can share the load.
  */
 
-import { Client } from "@iggy.rs/sdk";
+import { Client, Partitioning } from "@iggy.rs/sdk";
+import { CompressionAlgorithmKind } from "@iggy.rs/sdk/dist/wire/topic/topic.utils.js";
 
 import logger from "lib/logger";
 
-import type { EventHandler, EventsConfig, OmniEvent } from "./types";
+import type { DlqEvent, EventHandler, EventsConfig, OmniEvent } from "./types";
 
 const STREAM_ID = 1;
 const CONSUMER_GROUP_NAME = "vortex-worker";
 const POLL_INTERVAL_MS = 100;
 const BATCH_SIZE = 10;
+const DEFAULT_PARTITIONS = 3;
+// 90-day retention
+const RETENTION_SECONDS = 90 * 24 * 60 * 60;
 
 class EventsConsumer {
   #config: EventsConfig;
@@ -25,6 +29,8 @@ class EventsConsumer {
   #running = false;
   // Track which topics already have a consumer group created
   #consumerGroups = new Set<string>();
+  // Track which DLQ topics have been created
+  #dlqTopics = new Set<string>();
 
   constructor(config: EventsConfig, handler: EventHandler) {
     this.#config = config;
@@ -68,6 +74,7 @@ class EventsConsumer {
     this.#client?.destroy();
     this.#client = null;
     this.#consumerGroups.clear();
+    this.#dlqTopics.clear();
 
     logger.info("Events consumer stopped");
   }
@@ -148,13 +155,13 @@ class EventsConsumer {
       try {
         await this.#handler(event);
       } catch (err) {
-        // TODO: publish to dead-letter topic
         logger.error("Event handler failed", {
           eventId: event.id,
           type: event.type,
           topic: topicId,
           error: err instanceof Error ? err.message : String(err),
         });
+        await this.#publishToDlq(event, topicId, err);
       }
     }
   }
@@ -183,6 +190,76 @@ class EventsConsumer {
     }
 
     this.#consumerGroups.add(topicId);
+  }
+
+  /**
+   * Publish a failed event to the dead-letter topic.
+   *
+   * Wrapped in try/catch so DLQ failures never crash the consumer loop.
+   */
+  async #publishToDlq(
+    event: OmniEvent,
+    topicName: string,
+    error: unknown,
+  ): Promise<void> {
+    try {
+      const client = this.#client;
+      if (!client) return;
+
+      const dlqTopic = `${topicName}-dlq`;
+      await this.#ensureDlqTopic(dlqTopic);
+
+      const dlqEvent: DlqEvent = {
+        originalEvent: event,
+        originalTopic: topicName,
+        error: error instanceof Error ? error.message : String(error),
+        failedAt: new Date().toISOString(),
+        attemptCount: 1,
+      };
+
+      await client.message.send({
+        streamId: STREAM_ID,
+        topicId: dlqTopic,
+        messages: [{ payload: Buffer.from(JSON.stringify(dlqEvent)) }],
+        partition: Partitioning.Balanced,
+      });
+
+      logger.debug("Event published to DLQ", {
+        eventId: event.id,
+        dlqTopic,
+      });
+    } catch (dlqErr) {
+      logger.error("Failed to publish to DLQ", {
+        eventId: event.id,
+        error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr),
+      });
+    }
+  }
+
+  /**
+   * Idempotently ensure a DLQ topic exists.
+   */
+  async #ensureDlqTopic(name: string): Promise<void> {
+    if (this.#dlqTopics.has(name)) return;
+
+    const client = this.#client;
+    if (!client) return;
+
+    try {
+      await client.topic.get({ streamId: STREAM_ID, topicId: name });
+    } catch {
+      await client.topic.create({
+        streamId: STREAM_ID,
+        topicId: 0,
+        name,
+        partitionCount: DEFAULT_PARTITIONS,
+        compressionAlgorithm: CompressionAlgorithmKind.None,
+        messageExpiry: BigInt(RETENTION_SECONDS),
+      });
+      logger.info("Created DLQ topic", { streamId: STREAM_ID, topic: name });
+    }
+
+    this.#dlqTopics.add(name);
   }
 }
 

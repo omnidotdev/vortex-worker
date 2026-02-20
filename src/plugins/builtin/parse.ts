@@ -56,8 +56,6 @@ const parseCsv = (
       }
       current = "";
     } else if (char === "\r" && !inQuotes) {
-      // Skip carriage returns.
-      continue;
     } else {
       current += char;
     }
@@ -133,28 +131,29 @@ const parseYaml = (input: string): Record<string, unknown> => {
     }
 
     const key = trimmed.slice(0, colonIndex).trim();
-    let value: unknown = trimmed.slice(colonIndex + 1).trim();
+    const rawValue = trimmed.slice(colonIndex + 1).trim();
+    let value: unknown = rawValue;
 
     // Handle quoted strings.
     if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
+      (rawValue.startsWith('"') && rawValue.endsWith('"')) ||
+      (rawValue.startsWith("'") && rawValue.endsWith("'"))
     ) {
-      value = (value as string).slice(1, -1);
+      value = rawValue.slice(1, -1);
     }
     // Handle booleans.
-    else if (value === "true") {
+    else if (rawValue === "true") {
       value = true;
-    } else if (value === "false") {
+    } else if (rawValue === "false") {
       value = false;
     }
     // Handle null.
-    else if (value === "null" || value === "~" || value === "") {
+    else if (rawValue === "null" || rawValue === "~" || rawValue === "") {
       value = null;
     }
     // Handle numbers.
-    else if (!Number.isNaN(Number(value)) && value !== "") {
-      value = Number(value);
+    else if (!Number.isNaN(Number(rawValue)) && rawValue !== "") {
+      value = Number(rawValue);
     }
 
     result[key] = value;

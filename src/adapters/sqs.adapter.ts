@@ -1,8 +1,10 @@
 import {
-  SQSClient,
-  ReceiveMessageCommand,
   DeleteMessageCommand,
+  ReceiveMessageCommand,
+  SQSClient,
 } from "@aws-sdk/client-sqs";
+
+import logger from "lib/logger";
 
 import type { EventAdapter, NormalizedEvent } from "./types";
 
@@ -15,13 +17,18 @@ export class SqsAdapter implements EventAdapter {
   private running = false;
   private pollTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(
-    private config: {
-      queueUrl: string;
-      region: string;
-      batchSize?: number;
-    },
-  ) {
+  #config: {
+    queueUrl: string;
+    region: string;
+    batchSize?: number;
+  };
+
+  constructor(config: {
+    queueUrl: string;
+    region: string;
+    batchSize?: number;
+  }) {
+    this.#config = config;
     this.client = new SQSClient({ region: config.region });
   }
 
@@ -48,8 +55,8 @@ export class SqsAdapter implements EventAdapter {
     try {
       const response = await this.client.send(
         new ReceiveMessageCommand({
-          QueueUrl: this.config.queueUrl,
-          MaxNumberOfMessages: this.config.batchSize ?? 10,
+          QueueUrl: this.#config.queueUrl,
+          MaxNumberOfMessages: this.#config.batchSize ?? 10,
           WaitTimeSeconds: 20, // Long polling
         }),
       );
@@ -64,7 +71,7 @@ export class SqsAdapter implements EventAdapter {
           }
 
           const event: NormalizedEvent = {
-            source: `sqs:${this.config.queueUrl}`,
+            source: `sqs:${this.#config.queueUrl}`,
             type: "sqs.message",
             subject: message.MessageId,
             data,
@@ -85,7 +92,7 @@ export class SqsAdapter implements EventAdapter {
           if (message.ReceiptHandle) {
             await this.client.send(
               new DeleteMessageCommand({
-                QueueUrl: this.config.queueUrl,
+                QueueUrl: this.#config.queueUrl,
                 ReceiptHandle: message.ReceiptHandle,
               }),
             );
@@ -93,7 +100,9 @@ export class SqsAdapter implements EventAdapter {
         }
       }
     } catch (err) {
-      console.error("[SQS Adapter] Poll error:", err);
+      logger.error("SQS poll error", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
 
     // Schedule next poll

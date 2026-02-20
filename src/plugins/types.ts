@@ -137,7 +137,9 @@ export interface PluginContext {
   /** Plugin configuration values */
   config: Record<string, unknown>;
   /** Secrets available to the plugin (redacted in logs) */
-  secrets: Record<string, string>;
+  secrets: Record<string, unknown>;
+  /** External service connections available to the plugin */
+  connections?: Record<string, Record<string, unknown>>;
 }
 
 /** Plugin registry entry */

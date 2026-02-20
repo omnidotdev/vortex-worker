@@ -471,7 +471,10 @@ const remove = async (
         success: true,
         output: {
           deleted: response.Deleted?.length ?? 0,
-          errors: response.Errors?.map((e) => ({ key: e.Key, message: e.Message })),
+          errors: response.Errors?.map((e) => ({
+            key: e.Key,
+            message: e.Message,
+          })),
         },
         durationMs: performance.now() - startTime,
       };
@@ -577,14 +580,17 @@ const presign = async (
 
     if (input.provider === "s3") {
       const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
-      const { GetObjectCommand, PutObjectCommand } = await import("@aws-sdk/client-s3");
+      const { GetObjectCommand, PutObjectCommand } = await import(
+        "@aws-sdk/client-s3"
+      );
 
       const client = await getS3Client(input);
       const expiresIn = input.expiresIn ?? 3600;
 
-      const command = input.operation === "put"
-        ? new PutObjectCommand({ Bucket: input.bucket, Key: input.key })
-        : new GetObjectCommand({ Bucket: input.bucket, Key: input.key });
+      const command =
+        input.operation === "put"
+          ? new PutObjectCommand({ Bucket: input.bucket, Key: input.key })
+          : new GetObjectCommand({ Bucket: input.bucket, Key: input.key });
 
       const url = await getSignedUrl(client, command, { expiresIn });
 
@@ -651,10 +657,12 @@ const exists = async (
       const client = await getS3Client(input);
 
       try {
-        await client.send(new HeadObjectCommand({
-          Bucket: input.bucket,
-          Key: input.key,
-        }));
+        await client.send(
+          new HeadObjectCommand({
+            Bucket: input.bucket,
+            Key: input.key,
+          }),
+        );
 
         return {
           success: true,
@@ -719,10 +727,12 @@ const head = async (
       const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
       const client = await getS3Client(input);
 
-      const response = await client.send(new HeadObjectCommand({
-        Bucket: input.bucket,
-        Key: input.key,
-      }));
+      const response = await client.send(
+        new HeadObjectCommand({
+          Bucket: input.bucket,
+          Key: input.key,
+        }),
+      );
 
       return {
         success: true,

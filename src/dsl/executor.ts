@@ -2,10 +2,23 @@ import Hatchet from "@hatchet-dev/typescript-sdk";
 import { eq } from "drizzle-orm";
 import { match } from "ts-pattern";
 
+import {
+  CancelledError,
+  ConfigError,
+  ExecutionError,
+  IntegrationError,
+  MCPError,
+  NotFoundError,
+  PluginError,
+  TimeoutError,
+  ValidationError,
+} from "lib/errors";
+import logger from "lib/logger";
 import { executeConnectorAction } from "../connectors/executor";
 import { getDb } from "../db";
 import { createWorkflowRun } from "../db/runLogger";
 import { workflowRunTable, workflowTable } from "../db/schema";
+import { isInitialized, publish } from "../events/publisher";
 import { getIntegrationCredentials } from "../integrations/credentials";
 import { connectMCPServer, getMCPClient } from "../mcp";
 import {
@@ -478,6 +491,19 @@ export async function executeStep(
     .with({ type: "state_get" }, (s) => executeStateGet(s, ctx))
     .with({ type: "state_set" }, (s) => executeStateSet(s, ctx))
     .with({ type: "state_wait" }, (s) => executeStateWait(s, ctx))
+    // Workflow primitives
+    .with({ type: "stop" }, (s) => ({ stopped: true, ...s.stop }))
+    .with({ type: "noop" }, () => ({ skipped: true, type: "noop" }))
+    .with({ type: "debounce" }, () => executeNotImplemented("debounce"))
+    .with({ type: "diff" }, () => executeNotImplemented("diff"))
+    .with({ type: "change_detector" }, () =>
+      executeNotImplemented("change_detector"),
+    )
+    .with({ type: "time_window" }, () => executeNotImplemented("time_window"))
+    .with({ type: "ai_transform" }, () => executeNotImplemented("ai_transform"))
+    .with({ type: "ai_guardrails" }, () =>
+      executeNotImplemented("ai_guardrails"),
+    )
     .exhaustive();
 
   ctx.stepResults[step.id] = result;
@@ -541,7 +567,9 @@ const executeAction = async (
   if (action.integrationId) {
     const connectorId = INTEGRATION_TO_CONNECTOR[action.integrationId];
     if (!connectorId) {
-      throw new Error(`Unknown integration: ${action.integrationId}`);
+      throw new IntegrationError("Unknown integration", {
+        integrationId: action.integrationId,
+      });
     }
 
     // Fetch credentials from database if organizationId is available
@@ -554,21 +582,21 @@ const executeAction = async (
         action.integrationId,
       );
       if (auth) {
-        // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-        console.log(
-          `[Executor] Loaded credentials for integration=${action.integrationId} org=${ctx.organizationId} type=${auth.type}`,
-        );
+        logger.debug("Loaded credentials", {
+          integrationId: action.integrationId,
+          organizationId: ctx.organizationId,
+          authType: auth.type,
+        });
       } else {
-        // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-        console.log(
-          `[Executor] No credentials found for integration=${action.integrationId} org=${ctx.organizationId}`,
-        );
+        logger.debug("No credentials found", {
+          integrationId: action.integrationId,
+          organizationId: ctx.organizationId,
+        });
       }
     } else {
-      // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-      console.log(
-        `[Executor] No organizationId in context, skipping credential lookup for integration=${action.integrationId}`,
-      );
+      logger.debug("No organizationId in context, skipping credential lookup", {
+        integrationId: action.integrationId,
+      });
     }
 
     const callResult = await executeConnectorAction(
@@ -580,7 +608,11 @@ const executeAction = async (
     );
 
     if (!callResult.success) {
-      throw new Error(`Integration action failed: ${callResult.error}`);
+      throw new IntegrationError("Integration action failed", {
+        integrationId: action.integrationId,
+        operation: action.operation,
+        error: callResult.error,
+      });
     }
 
     output = callResult.output || { success: true };
@@ -596,7 +628,11 @@ const executeAction = async (
       );
 
       if (!callResult.success) {
-        throw new Error(`Action execution failed: ${callResult.error}`);
+        throw new ExecutionError("Action execution failed", {
+          pluginId: action.pluginId,
+          operation: action.operation,
+          error: callResult.error,
+        });
       }
 
       output = callResult.output || { success: true };
@@ -607,7 +643,9 @@ const executeAction = async (
       const loadedPlugin = host.get(action.pluginId);
 
       if (!loadedPlugin) {
-        throw new Error(`Plugin not loaded: ${action.pluginId}`);
+        throw new PluginError("Plugin not loaded", {
+          pluginId: action.pluginId,
+        });
       }
 
       const callResult = await loadedPlugin.call(
@@ -617,16 +655,20 @@ const executeAction = async (
       );
 
       if (!callResult.success) {
-        throw new Error(`Action execution failed: ${callResult.error}`);
+        throw new ExecutionError("Action execution failed", {
+          pluginId: action.pluginId,
+          operation: action.operation,
+          error: callResult.error,
+        });
       }
 
       output = callResult.output || { success: true };
       durationMs = callResult.durationMs;
     }
   } else {
-    throw new Error(
-      `Action step "${step.name || step.id}" is missing both integrationId and pluginId. ` +
-        "All action nodes must specify either an integration or a plugin to execute.",
+    throw new ConfigError(
+      "Action step is missing both integrationId and pluginId",
+      { stepId: step.id, stepName: step.name },
     );
   }
 
@@ -785,11 +827,14 @@ async function executeLoop(
       if (Array.isArray(collection)) {
         for (let i = 0; i < collection.length && i < maxIterations; i++) {
           const iterationResult = await executeBodyOnce(i, collection[i]);
-          results.push({
+          const entry: Record<string, unknown> = {
             index: i,
             item: collection[i],
-            result: iterationResult,
-          });
+          };
+          if (Array.isArray(iterationResult) && iterationResult.length > 0) {
+            entry.result = iterationResult;
+          }
+          results.push(entry);
           iterations++;
         }
       }
@@ -799,7 +844,11 @@ async function executeLoop(
       const count = loop.count ?? 0;
       for (let i = 0; i < count && i < maxIterations; i++) {
         const iterationResult = await executeBodyOnce(i);
-        results.push({ index: i, result: iterationResult });
+        const entry: Record<string, unknown> = { index: i };
+        if (Array.isArray(iterationResult) && iterationResult.length > 0) {
+          entry.result = iterationResult;
+        }
+        results.push(entry);
         iterations++;
       }
       break;
@@ -809,7 +858,11 @@ async function executeLoop(
         const continueLoop = evaluateExpression(loop.condition || "false", ctx);
         if (!continueLoop) break;
         const iterationResult = await executeBodyOnce(iterations);
-        results.push({ index: iterations, result: iterationResult });
+        const entry: Record<string, unknown> = { index: iterations };
+        if (Array.isArray(iterationResult) && iterationResult.length > 0) {
+          entry.result = iterationResult;
+        }
+        results.push(entry);
         iterations++;
       }
       break;
@@ -920,6 +973,19 @@ async function executeStepInternal(
     .with({ type: "state_get" }, (s) => executeStateGet(s, ctx))
     .with({ type: "state_set" }, (s) => executeStateSet(s, ctx))
     .with({ type: "state_wait" }, (s) => executeStateWait(s, ctx))
+    // Workflow primitives
+    .with({ type: "stop" }, (s) => ({ stopped: true, ...s.stop }))
+    .with({ type: "noop" }, () => ({ skipped: true, type: "noop" }))
+    .with({ type: "debounce" }, () => executeNotImplemented("debounce"))
+    .with({ type: "diff" }, () => executeNotImplemented("diff"))
+    .with({ type: "change_detector" }, () =>
+      executeNotImplemented("change_detector"),
+    )
+    .with({ type: "time_window" }, () => executeNotImplemented("time_window"))
+    .with({ type: "ai_transform" }, () => executeNotImplemented("ai_transform"))
+    .with({ type: "ai_guardrails" }, () =>
+      executeNotImplemented("ai_guardrails"),
+    )
     .exhaustive();
 
   // Store result
@@ -1103,7 +1169,7 @@ const executePlugin = async (
     const loadedPlugin = host.get(plugin.pluginId);
 
     if (!loadedPlugin) {
-      throw new Error(`Plugin not loaded: ${plugin.pluginId}`);
+      throw new PluginError("Plugin not loaded", { pluginId: plugin.pluginId });
     }
 
     callResult = await loadedPlugin.call(
@@ -1114,7 +1180,11 @@ const executePlugin = async (
   }
 
   if (!callResult.success) {
-    throw new Error(`Plugin execution failed: ${callResult.error}`);
+    throw new PluginError("Plugin execution failed", {
+      pluginId: plugin.pluginId,
+      operation: plugin.function,
+      error: callResult.error,
+    });
   }
 
   const result = {
@@ -1148,7 +1218,7 @@ const executeMCP = async (
 
   // Check if server is connected
   if (!mcpClient.isConnected(mcp.serverId)) {
-    throw new Error(`MCP server not connected: ${mcp.serverId}`);
+    throw new MCPError("MCP server not connected", { serverId: mcp.serverId });
   }
 
   // Resolve input expressions from context
@@ -1162,7 +1232,11 @@ const executeMCP = async (
   );
 
   if (!callResult.success) {
-    throw new Error(`MCP tool execution failed: ${callResult.error}`);
+    throw new MCPError("MCP tool execution failed", {
+      serverId: mcp.serverId,
+      tool: mcp.tool,
+      error: callResult.error,
+    });
   }
 
   // Extract text content from result
@@ -1215,7 +1289,9 @@ const executeLLM = async (
   if (!mcpClient.isConnected(llm.serverId)) {
     const connected = await connectMCPServer(llm.serverId);
     if (!connected) {
-      throw new Error(`LLM MCP server not available: ${llm.serverId}`);
+      throw new MCPError("LLM MCP server not available", {
+        serverId: llm.serverId,
+      });
     }
   }
 
@@ -1276,9 +1352,11 @@ const executeLLM = async (
   }
 
   if (!callResult || !callResult.success) {
-    throw new Error(
-      `LLM execution failed: ${callResult?.error || "No compatible tool found"}`,
-    );
+    throw new ExecutionError("LLM execution failed", {
+      serverId: llm.serverId,
+      model: llm.model,
+      error: callResult?.error || "No compatible tool found",
+    });
   }
 
   // Extract text content from result
@@ -1340,9 +1418,9 @@ const executeCode = async (
   if (!mcpClient.isConnected(code.serverId)) {
     const connected = await connectMCPServer(code.serverId);
     if (!connected) {
-      throw new Error(
-        `Code sandbox MCP server not available: ${code.serverId}`,
-      );
+      throw new MCPError("Code sandbox MCP server not available", {
+        serverId: code.serverId,
+      });
     }
   }
 
@@ -1384,9 +1462,10 @@ const executeCode = async (
   }
 
   if (!callResult || !callResult.success) {
-    throw new Error(
-      `Code execution failed: ${callResult?.error || "No compatible tool found"}`,
-    );
+    throw new ExecutionError("Code execution failed", {
+      serverId: code.serverId,
+      error: callResult?.error || "No compatible tool found",
+    });
   }
 
   // Extract output from result
@@ -1436,9 +1515,9 @@ const executeDatabase = async (
   if (!mcpClient.isConnected(database.serverId)) {
     const connected = await connectMCPServer(database.serverId);
     if (!connected) {
-      throw new Error(
-        `Database MCP server not available: ${database.serverId}`,
-      );
+      throw new MCPError("Database MCP server not available", {
+        serverId: database.serverId,
+      });
     }
   }
 
@@ -1479,9 +1558,10 @@ const executeDatabase = async (
   }
 
   if (!callResult || !callResult.success) {
-    throw new Error(
-      `Database operation failed: ${callResult?.error || "No compatible tool found"}`,
-    );
+    throw new ExecutionError("Database operation failed", {
+      serverId: database.serverId,
+      error: callResult?.error || "No compatible tool found",
+    });
   }
 
   // Extract output from result
@@ -1543,11 +1623,11 @@ async function executeSubworkflow(
     .limit(1);
 
   if (!targetWorkflow) {
-    throw new Error(`Subworkflow not found: ${workflowId}`);
+    throw new NotFoundError("Subworkflow not found", { workflowId });
   }
 
   if (!targetWorkflow.isActive) {
-    throw new Error(`Subworkflow is disabled: ${workflowId}`);
+    throw new ConfigError("Subworkflow is disabled", { workflowId });
   }
 
   // Generate a unique run ID for the child workflow
@@ -1597,7 +1677,9 @@ async function executeSubworkflow(
       .limit(1);
 
     if (!runStatus) {
-      throw new Error(`Workflow run record not found: ${dbRunId}`);
+      throw new NotFoundError("Workflow run record not found", {
+        runId: dbRunId,
+      });
     }
 
     if (runStatus.status === "completed") {
@@ -1621,13 +1703,14 @@ async function executeSubworkflow(
     }
 
     if (runStatus.status === "failed") {
-      throw new Error(
-        `Subworkflow failed: ${runStatus.error || "Unknown error"}`,
-      );
+      throw new ExecutionError("Subworkflow failed", {
+        workflowId,
+        error: runStatus.error || "Unknown error",
+      });
     }
 
     if (runStatus.status === "cancelled") {
-      throw new Error("Subworkflow was cancelled");
+      throw new CancelledError("Subworkflow was cancelled", { workflowId });
     }
 
     // Wait before next poll
@@ -1635,7 +1718,7 @@ async function executeSubworkflow(
   }
 
   // Timeout reached
-  throw new Error(`Subworkflow timed out after ${timeoutMs}ms`);
+  throw new TimeoutError("Subworkflow timed out", { workflowId, timeoutMs });
 }
 
 /**
@@ -1674,16 +1757,38 @@ async function executeWait(
  */
 async function executeEvent(
   step: EventStep,
-  _ctx: ExecutionContext,
+  ctx: ExecutionContext,
 ): Promise<unknown> {
   const { event } = step;
-  // TODO: Implement actual event bus integration
-  // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-  console.log(`[Event] Emitting "${event.eventName}"`);
+
+  if (!isInitialized()) {
+    logger.warn("Event publisher not initialized, skipping emit", {
+      eventName: event.eventName,
+    });
+    return { emitted: false };
+  }
+
+  if (!ctx.organizationId) {
+    throw new ValidationError("organizationId is required to emit events");
+  }
+
+  const resolvedPayload = event.payload
+    ? resolveInputs(event.payload, ctx)
+    : {};
+
+  const published = await publish({
+    type: event.eventName,
+    source: "vortex.workflow",
+    data: resolvedPayload,
+    organizationId: ctx.organizationId,
+    correlationId: ctx.runId,
+  });
+
   return {
+    eventId: published?.id,
     eventName: event.eventName,
-    payload: event.payload,
-    emittedAt: new Date().toISOString(),
+    payload: resolvedPayload,
+    emittedAt: published?.timestamp,
   };
 }
 
@@ -1961,9 +2066,9 @@ async function executeError(
   if (!result.success) {
     const output = result.output as Record<string, unknown> | undefined;
     if (output?.fatal) {
-      throw new Error(`Fatal workflow error: ${result.error}`);
+      throw new ExecutionError("Fatal workflow error", { error: result.error });
     }
-    throw new Error(result.error || "Workflow error");
+    throw new ExecutionError(result.error || "Workflow error");
   }
 
   return result.output;
@@ -2059,7 +2164,7 @@ async function executeEmail(
   );
 
   if (!result.success) {
-    throw new Error(`Email send failed: ${result.error}`);
+    throw new ExecutionError("Email send failed", { error: result.error });
   }
 
   return result.output;
@@ -2123,7 +2228,7 @@ async function executeFile(
   );
 
   if (!result.success) {
-    throw new Error(`File operation failed: ${result.error}`);
+    throw new ExecutionError("File operation failed", { error: result.error });
   }
 
   if (result.success && file.outputVariable && result.output) {
@@ -2176,7 +2281,7 @@ async function executeQueue(
   );
 
   if (!result.success) {
-    throw new Error(`Queue operation failed: ${result.error}`);
+    throw new ExecutionError("Queue operation failed", { error: result.error });
   }
 
   if (result.success && queue.outputVariable && result.output) {
@@ -2214,7 +2319,9 @@ async function executeEmbedding(
   );
 
   if (!result.success) {
-    throw new Error(`Embedding generation failed: ${result.error}`);
+    throw new ExecutionError("Embedding generation failed", {
+      error: result.error,
+    });
   }
 
   if (result.success && embedding.outputVariable && result.output) {
@@ -2261,7 +2368,7 @@ async function executeVectorSearch(
   );
 
   if (!result.success) {
-    throw new Error(`Vector search failed: ${result.error}`);
+    throw new ExecutionError("Vector search failed", { error: result.error });
   }
 
   if (result.success && vectorSearch.outputVariable && result.output) {
@@ -2332,7 +2439,7 @@ async function executeAssert(
   );
 
   if (!result.success && !assert.softFail) {
-    throw new Error(`Assertion failed: ${result.error}`);
+    throw new ValidationError("Assertion failed", { error: result.error });
   }
 
   if (result.success && assert.outputVariable && result.output) {
@@ -2605,7 +2712,7 @@ function convertToMs(duration: number, unit: string): number {
 async function executeNotImplemented(
   stepType: string,
 ): Promise<{ error: string }> {
-  console.warn(`[Executor] Step type "${stepType}" is not yet implemented`);
+  logger.warn("Step type is not yet implemented", { stepType });
   return { error: `Step type "${stepType}" is not yet implemented` };
 }
 
@@ -3076,12 +3183,12 @@ async function executeValidate(
   }
 
   if (!result.success) {
-    throw new Error(result.error || "Validation failed");
+    throw new ValidationError(result.error || "Validation failed");
   }
 
   const output = result.output as Record<string, unknown>;
   if (!output.valid) {
-    throw new Error(`Validation failed: ${JSON.stringify(output.errors)}`);
+    throw new ValidationError("Validation failed", { errors: output.errors });
   }
 
   return result.output;
@@ -3572,7 +3679,9 @@ async function executeTryCatch(
     for (const stepId of stepIds) {
       const targetStep = def.steps.find((s) => s.id === stepId);
       if (!targetStep) {
-        throw new Error(`Step not found in try/catch branch: ${stepId}`);
+        throw new NotFoundError("Step not found in try/catch branch", {
+          stepId,
+        });
       }
 
       const { result } = await executeStepInternal(def, targetStep, ctx);
@@ -3596,10 +3705,10 @@ async function executeTryCatch(
 
       // Log retry attempt
       if (attempt < maxRetries) {
-        // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-        console.log(
-          `[TryCatch] Attempt ${attempt + 1} failed, retrying... Error: ${lastError.message}`,
-        );
+        logger.debug("Attempt failed, retrying", {
+          attempt: attempt + 1,
+          error: lastError.message,
+        });
 
         if (tryCatch.retryDelay) {
           await sleep(parseDelay(tryCatch.retryDelay));
@@ -3617,10 +3726,9 @@ async function executeTryCatch(
     attempts: maxRetries + 1,
   };
 
-  // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-  console.log(
-    `[TryCatch] All ${maxRetries + 1} attempts failed, running catch branch`,
-  );
+  logger.debug("All attempts failed, running catch branch", {
+    attempts: maxRetries + 1,
+  });
 
   try {
     await executeBranch(tryCatch.catchBranch);
@@ -3628,7 +3736,7 @@ async function executeTryCatch(
     // If catch branch also fails, propagate the error
     const catchErr =
       catchError instanceof Error ? catchError : new Error(String(catchError));
-    console.error(`[TryCatch] Catch branch failed: ${catchErr.message}`);
+    logger.error("Catch branch failed", { error: catchErr.message });
     throw catchErr;
   }
 
@@ -3669,7 +3777,7 @@ async function executeRace(
     for (const stepId of branchStepIds) {
       const targetStep = def.steps.find((s) => s.id === stepId);
       if (!targetStep) {
-        throw new Error(`Step not found in race branch: ${stepId}`);
+        throw new NotFoundError("Step not found in race branch", { stepId });
       }
 
       const { result } = await executeStepInternal(def, targetStep, branchCtx);
@@ -3708,8 +3816,7 @@ async function executeRace(
   ctx.variables[race.output] = winner.result;
   ctx.variables[race.winnerIndex] = winner.index;
 
-  // biome-ignore lint/suspicious/noConsole: Intentional runtime logging
-  console.log(`[Race] Branch ${winner.index} won`);
+  logger.debug("Race branch won", { winnerIndex: winner.index });
 
   return {
     winnerIndex: winner.index,
@@ -3805,7 +3912,9 @@ async function executeStateWait(
     await sleep(pollIntervalMs);
   }
 
-  throw new Error(
-    `State wait timed out after ${timeoutMs}ms waiting for key "${key}" condition "${stateWait.condition}"`,
-  );
+  throw new TimeoutError("State wait timed out", {
+    key,
+    condition: stateWait.condition,
+    timeoutMs,
+  });
 }

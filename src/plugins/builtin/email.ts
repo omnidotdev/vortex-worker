@@ -4,6 +4,8 @@
  * Sends emails via SMTP or integration.
  */
 
+import logger from "lib/logger";
+
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
@@ -85,9 +87,8 @@ const sendEmail = async (
       attachments,
     };
 
-    // TODO: Integrate with actual SMTP transport via MCP or direct.
-    // biome-ignore lint/suspicious/noConsole: Intentional runtime logging for plugin placeholder
-    console.log("[Email Plugin] Would send:", emailData);
+    // TODO: Integrate with actual SMTP transport via MCP or direct
+    logger.debug("Would send email", { emailData });
 
     return {
       success: true,

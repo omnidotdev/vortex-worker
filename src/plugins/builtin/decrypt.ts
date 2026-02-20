@@ -29,7 +29,7 @@ const base64ToBuffer = (base64: string): ArrayBuffer => {
 const deriveKey = async (
   password: string,
   salt: Uint8Array,
-  algorithm: string,
+  algorithm: "AES-GCM" | "AES-CBC",
 ): Promise<CryptoKey> => {
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
@@ -42,7 +42,7 @@ const deriveKey = async (
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt,
+      salt: salt as BufferSource,
       iterations: 100000,
       hash: "SHA-256",
     },

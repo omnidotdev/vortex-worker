@@ -174,9 +174,13 @@ const query = async (
 
       clearTimeout(timeoutId);
 
-      const result = await response.json() as {
+      const result = (await response.json()) as {
         data?: Record<string, unknown>;
-        errors?: Array<{ message: string; path?: string[]; locations?: Array<{ line: number; column: number }> }>;
+        errors?: Array<{
+          message: string;
+          path?: string[];
+          locations?: Array<{ line: number; column: number }>;
+        }>;
       };
 
       if (result.errors && result.errors.length > 0) {
@@ -248,7 +252,7 @@ const introspect = async (
       body: JSON.stringify({ query: INTROSPECTION_QUERY }),
     });
 
-    const result = await response.json() as {
+    const result = (await response.json()) as {
       data?: { __schema: Record<string, unknown> };
       errors?: Array<{ message: string }>;
     };
@@ -264,19 +268,26 @@ const introspect = async (
     const schema = result.data?.__schema;
 
     // Extract useful summary.
-    const types = (schema?.types as Array<{ kind: string; name: string }>) ?? [];
+    const types =
+      (schema?.types as Array<{ kind: string; name: string }>) ?? [];
     const queryType = schema?.queryType as { name: string } | undefined;
     const mutationType = schema?.mutationType as { name: string } | undefined;
-    const subscriptionType = schema?.subscriptionType as { name: string } | undefined;
+    const subscriptionType = schema?.subscriptionType as
+      | { name: string }
+      | undefined;
 
     const summary = {
       queryType: queryType?.name,
       mutationType: mutationType?.name,
       subscriptionType: subscriptionType?.name,
       typeCount: types.length,
-      objectTypes: types.filter((t) => t.kind === "OBJECT" && !t.name.startsWith("__")).length,
+      objectTypes: types.filter(
+        (t) => t.kind === "OBJECT" && !t.name.startsWith("__"),
+      ).length,
       inputTypes: types.filter((t) => t.kind === "INPUT_OBJECT").length,
-      enumTypes: types.filter((t) => t.kind === "ENUM" && !t.name.startsWith("__")).length,
+      enumTypes: types.filter(
+        (t) => t.kind === "ENUM" && !t.name.startsWith("__"),
+      ).length,
       interfaceTypes: types.filter((t) => t.kind === "INTERFACE").length,
       unionTypes: types.filter((t) => t.kind === "UNION").length,
     };
@@ -339,7 +350,7 @@ const batch = async (
 
       clearTimeout(timeoutId);
 
-      const results = await response.json() as Array<{
+      const results = (await response.json()) as Array<{
         data?: Record<string, unknown>;
         errors?: Array<{ message: string }>;
       }>;
@@ -354,8 +365,11 @@ const batch = async (
             data: r.data,
             errors: r.errors,
           })),
-          successCount: results.filter((r) => !r.errors || r.errors.length === 0).length,
-          errorCount: results.filter((r) => r.errors && r.errors.length > 0).length,
+          successCount: results.filter(
+            (r) => !r.errors || r.errors.length === 0,
+          ).length,
+          errorCount: results.filter((r) => r.errors && r.errors.length > 0)
+            .length,
         },
         durationMs: performance.now() - startTime,
       };
@@ -387,7 +401,9 @@ const parseQuery = async (
     const query = input.query;
 
     // Extract operation type and name.
-    const operationMatch = query.match(/^\s*(query|mutation|subscription)\s+(\w+)?/m);
+    const operationMatch = query.match(
+      /^\s*(query|mutation|subscription)\s+(\w+)?/m,
+    );
     const operationType = operationMatch?.[1] ?? "query";
     const operationName = operationMatch?.[2];
 
@@ -475,7 +491,10 @@ const buildQuery = async (
     }
 
     // Build fields.
-    const buildFields = (fields: string | string[] | Record<string, unknown>, indent = 2): string => {
+    const buildFields = (
+      fields: string | string[] | Record<string, unknown>,
+      indent = 2,
+    ): string => {
       const pad = " ".repeat(indent);
 
       if (typeof fields === "string") {

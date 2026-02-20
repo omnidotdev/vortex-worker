@@ -4,6 +4,8 @@
  * Structured logging for workflows.
  */
 
+import logger from "lib/logger";
+
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
@@ -31,7 +33,12 @@ const write = async (
   const startTime = performance.now();
 
   try {
-    const { level = "info", message, data, tags } = inputs as unknown as LogInput;
+    const {
+      level = "info",
+      message,
+      data,
+      tags,
+    } = inputs as unknown as LogInput;
 
     if (!message) {
       return {
@@ -51,9 +58,7 @@ const write = async (
       ...(tags && { tags }),
     };
 
-    // biome-ignore lint/suspicious/noConsole: Intentional logging for workflow log plugin
-    const logFn = console[level] || console.log;
-    logFn("[Workflow Log]", JSON.stringify(logEntry, null, 2));
+    logger[level](message, { ...logEntry });
 
     return {
       success: true,

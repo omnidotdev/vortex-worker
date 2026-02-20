@@ -36,7 +36,15 @@ interface AddInput {
   /** Amount to add (negative to subtract) */
   amount: number;
   /** Unit of time */
-  unit: "milliseconds" | "seconds" | "minutes" | "hours" | "days" | "weeks" | "months" | "years";
+  unit:
+    | "milliseconds"
+    | "seconds"
+    | "minutes"
+    | "hours"
+    | "days"
+    | "weeks"
+    | "months"
+    | "years";
 }
 
 /** Difference between dates input */
@@ -46,7 +54,15 @@ interface DiffInput {
   /** End date */
   end: string | number;
   /** Unit for result */
-  unit?: "milliseconds" | "seconds" | "minutes" | "hours" | "days" | "weeks" | "months" | "years";
+  unit?:
+    | "milliseconds"
+    | "seconds"
+    | "minutes"
+    | "hours"
+    | "days"
+    | "weeks"
+    | "months"
+    | "years";
 }
 
 /** Compare dates input */
@@ -111,7 +127,12 @@ const parseDate = (input: string | number): Date => {
 /**
  * Format date using Intl.DateTimeFormat or custom patterns.
  */
-const formatDate = (date: Date, format?: string, locale = "en-US", timezone?: string): string => {
+const formatDate = (
+  date: Date,
+  format?: string,
+  locale = "en-US",
+  timezone?: string,
+): string => {
   const options: Intl.DateTimeFormatOptions = {};
   if (timezone) {
     options.timeZone = timezone;
@@ -138,7 +159,10 @@ const formatDate = (date: Date, format?: string, locale = "en-US", timezone?: st
 
     const patternOptions = patterns[format];
     if (patternOptions) {
-      const formatted = new Intl.DateTimeFormat(locale, { ...options, ...patternOptions }).format(date);
+      const formatted = new Intl.DateTimeFormat(locale, {
+        ...options,
+        ...patternOptions,
+      }).format(date);
       return formatted;
     }
 
@@ -186,7 +210,12 @@ const format = async (
   try {
     const input = inputs as unknown as FormatInput;
     const date = parseDate(input.date);
-    const formatted = formatDate(date, input.format, input.locale, input.timezone);
+    const formatted = formatDate(
+      date,
+      input.format,
+      input.locale,
+      input.timezone,
+    );
 
     return {
       success: true,
@@ -238,7 +267,10 @@ const parse = async (
   } catch (error) {
     return {
       success: true,
-      output: { valid: false, error: error instanceof Error ? error.message : String(error) },
+      output: {
+        valid: false,
+        error: error instanceof Error ? error.message : String(error),
+      },
       durationMs: performance.now() - startTime,
     };
   }
@@ -321,7 +353,9 @@ const diff = async (
     const unit = input.unit ?? "milliseconds";
 
     if (unit === "months") {
-      value = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+      value =
+        (end.getFullYear() - start.getFullYear()) * 12 +
+        (end.getMonth() - start.getMonth());
     } else if (unit === "years") {
       value = end.getFullYear() - start.getFullYear();
     } else {
@@ -536,7 +570,9 @@ const businessDays = async (
     const input = inputs as unknown as BusinessDaysInput;
     const date = parseDate(input.date);
     const weekendDays = new Set(input.weekendDays ?? [0, 6]);
-    const holidays = new Set(input.holidays?.map((h) => new Date(h).toDateString()) ?? []);
+    const holidays = new Set(
+      input.holidays?.map((h) => new Date(h).toDateString()) ?? [],
+    );
 
     let remaining = Math.abs(input.days);
     const direction = input.days >= 0 ? 1 : -1;

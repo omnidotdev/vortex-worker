@@ -80,7 +80,10 @@ interface InfoInput extends FtpConfig {
 /**
  * Execute SFTP/SCP command using Bun shell.
  */
-const execSftp = async (config: FtpConfig, commands: string[]): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+const execSftp = async (
+  config: FtpConfig,
+  commands: string[],
+): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
   const port = config.port ?? (config.secure ? 22 : 21);
 
   if (config.secure || port === 22) {
@@ -144,7 +147,14 @@ const execSftp = async (config: FtpConfig, commands: string[]): Promise<{ stdout
         curlArgs = ["-s", "-Q", `RMD ${parts[1]}`, baseUrl];
         break;
       case "rename":
-        curlArgs = ["-s", "-Q", `RNFR ${parts[1]}`, "-Q", `RNTO ${parts[2]}`, baseUrl];
+        curlArgs = [
+          "-s",
+          "-Q",
+          `RNFR ${parts[1]}`,
+          "-Q",
+          `RNTO ${parts[2]}`,
+          baseUrl,
+        ];
         break;
       default:
         continue;
@@ -314,7 +324,10 @@ const list = async (
     }
 
     // Parse ls output.
-    const lines = result.stdout.trim().split("\n").filter((line) => line.trim() && !line.startsWith("sftp>"));
+    const lines = result.stdout
+      .trim()
+      .split("\n")
+      .filter((line) => line.trim() && !line.startsWith("sftp>"));
 
     const files = lines.map((line) => {
       const parts = line.split(/\s+/);
@@ -322,7 +335,11 @@ const list = async (
         const permissions = parts[0];
         const size = Number.parseInt(parts[4], 10);
         const name = parts.slice(8).join(" ");
-        const type = permissions.startsWith("d") ? "directory" : permissions.startsWith("l") ? "link" : "file";
+        const type = permissions.startsWith("d")
+          ? "directory"
+          : permissions.startsWith("l")
+            ? "link"
+            : "file";
         return { name, type, size, permissions };
       }
       return { name: line };
@@ -437,17 +454,24 @@ const mkdir = async (
     const input = inputs as unknown as MkdirInput;
 
     const commands = input.recursive
-      ? input.path.split("/").filter(Boolean).reduce<string[]>((acc, part, i, arr) => {
-          const path = "/" + arr.slice(0, i + 1).join("/");
-          acc.push(`mkdir ${path}`);
-          return acc;
-        }, [])
+      ? input.path
+          .split("/")
+          .filter(Boolean)
+          .reduce<string[]>((acc, _part, i, arr) => {
+            const path = `/${arr.slice(0, i + 1).join("/")}`;
+            acc.push(`mkdir ${path}`);
+            return acc;
+          }, [])
       : [`mkdir ${input.path}`];
 
     const result = await execSftp(input, commands);
 
     // Ignore "already exists" errors.
-    if (result.exitCode !== 0 && !result.stderr.includes("already exists") && !result.stderr.includes("Failure")) {
+    if (
+      result.exitCode !== 0 &&
+      !result.stderr.includes("already exists") &&
+      !result.stderr.includes("Failure")
+    ) {
       throw new Error(`mkdir failed: ${result.stderr}`);
     }
 
@@ -487,7 +511,10 @@ const info = async (
       throw new Error(`Failed to get file info: ${result.stderr}`);
     }
 
-    const line = result.stdout.trim().split("\n").find((l) => l.trim() && !l.startsWith("sftp>"));
+    const line = result.stdout
+      .trim()
+      .split("\n")
+      .find((l) => l.trim() && !l.startsWith("sftp>"));
 
     if (!line) {
       return {
@@ -501,7 +528,11 @@ const info = async (
     const permissions = parts[0] ?? "";
     const size = Number.parseInt(parts[4] ?? "0", 10);
     const name = parts.slice(8).join(" ");
-    const type = permissions.startsWith("d") ? "directory" : permissions.startsWith("l") ? "link" : "file";
+    const type = permissions.startsWith("d")
+      ? "directory"
+      : permissions.startsWith("l")
+        ? "link"
+        : "file";
 
     return {
       success: true,

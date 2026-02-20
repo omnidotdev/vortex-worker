@@ -89,7 +89,13 @@ interface SanitizeInput {
  */
 const parseHtml = (html: string) => {
   return {
-    querySelector: (selector: string): { text: string; html: string; attr: (name: string) => string | null } | null => {
+    querySelector: (
+      selector: string,
+    ): {
+      text: string;
+      html: string;
+      attr: (name: string) => string | null;
+    } | null => {
       // Simple tag selector.
       const tagMatch = selector.match(/^(\w+)$/);
       if (tagMatch) {
@@ -101,7 +107,9 @@ const parseHtml = (html: string) => {
             text: match[1].replace(/<[^>]+>/g, "").trim(),
             html: match[0],
             attr: (name: string) => {
-              const attrMatch = match[0].match(new RegExp(`${name}=["']([^"']*)["']`));
+              const attrMatch = match[0].match(
+                new RegExp(`${name}=["']([^"']*)["']`),
+              );
               return attrMatch ? attrMatch[1] : null;
             },
           };
@@ -113,14 +121,19 @@ const parseHtml = (html: string) => {
       if (classMatch) {
         const tag = classMatch[1] || "\\w+";
         const className = classMatch[2];
-        const regex = new RegExp(`<(${tag})[^>]*class=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>([\\s\\S]*?)</\\1>`, "i");
+        const regex = new RegExp(
+          `<(${tag})[^>]*class=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>([\\s\\S]*?)</\\1>`,
+          "i",
+        );
         const match = html.match(regex);
         if (match) {
           return {
             text: match[2].replace(/<[^>]+>/g, "").trim(),
             html: match[0],
             attr: (name: string) => {
-              const attrMatch = match[0].match(new RegExp(`${name}=["']([^"']*)["']`));
+              const attrMatch = match[0].match(
+                new RegExp(`${name}=["']([^"']*)["']`),
+              );
               return attrMatch ? attrMatch[1] : null;
             },
           };
@@ -132,14 +145,19 @@ const parseHtml = (html: string) => {
       if (idMatch) {
         const tag = idMatch[1] || "\\w+";
         const id = idMatch[2];
-        const regex = new RegExp(`<(${tag})[^>]*id=["']${id}["'][^>]*>([\\s\\S]*?)</\\1>`, "i");
+        const regex = new RegExp(
+          `<(${tag})[^>]*id=["']${id}["'][^>]*>([\\s\\S]*?)</\\1>`,
+          "i",
+        );
         const match = html.match(regex);
         if (match) {
           return {
             text: match[2].replace(/<[^>]+>/g, "").trim(),
             html: match[0],
             attr: (name: string) => {
-              const attrMatch = match[0].match(new RegExp(`${name}=["']([^"']*)["']`));
+              const attrMatch = match[0].match(
+                new RegExp(`${name}=["']([^"']*)["']`),
+              );
               return attrMatch ? attrMatch[1] : null;
             },
           };
@@ -148,22 +166,33 @@ const parseHtml = (html: string) => {
 
       return null;
     },
-    querySelectorAll: (selector: string): Array<{ text: string; html: string; attr: (name: string) => string | null }> => {
-      const results: Array<{ text: string; html: string; attr: (name: string) => string | null }> = [];
+    querySelectorAll: (
+      selector: string,
+    ): Array<{
+      text: string;
+      html: string;
+      attr: (name: string) => string | null;
+    }> => {
+      const results: Array<{
+        text: string;
+        html: string;
+        attr: (name: string) => string | null;
+      }> = [];
 
       // Simple tag selector.
       const tagMatch = selector.match(/^(\w+)$/);
       if (tagMatch) {
         const tag = tagMatch[1];
         const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "gi");
-        let match;
-        while ((match = regex.exec(html)) !== null) {
+        for (const match of html.matchAll(regex)) {
           const matchHtml = match[0];
           results.push({
             text: match[1].replace(/<[^>]+>/g, "").trim(),
             html: matchHtml,
             attr: (name: string) => {
-              const attrMatch = matchHtml.match(new RegExp(`${name}=["']([^"']*)["']`));
+              const attrMatch = matchHtml.match(
+                new RegExp(`${name}=["']([^"']*)["']`),
+              );
               return attrMatch ? attrMatch[1] : null;
             },
           });
@@ -178,12 +207,13 @@ const parseHtml = (html: string) => {
 /**
  * Extract all links from HTML.
  */
-const extractAllLinks = (html: string): Array<{ href: string; text: string }> => {
+const extractAllLinks = (
+  html: string,
+): Array<{ href: string; text: string }> => {
   const links: Array<{ href: string; text: string }> = [];
   const regex = /<a[^>]*href=["']([^"']*)["'][^>]*>([^<]*)<\/a>/gi;
-  let match;
-  while ((match = regex.exec(html)) !== null) {
-    links.push({ href: match[1], text: match[2].trim() });
+  for (const match of html.matchAll(regex)) {
+    links.push({ href: match[1] ?? "", text: (match[2] ?? "").trim() });
   }
   return links;
 };
@@ -191,12 +221,14 @@ const extractAllLinks = (html: string): Array<{ href: string; text: string }> =>
 /**
  * Extract all images from HTML.
  */
-const extractAllImages = (html: string): Array<{ src: string; alt: string }> => {
+const extractAllImages = (
+  html: string,
+): Array<{ src: string; alt: string }> => {
   const images: Array<{ src: string; alt: string }> = [];
-  const regex = /<img[^>]*src=["']([^"']*)["'][^>]*(?:alt=["']([^"']*)["'])?[^>]*>/gi;
-  let match;
-  while ((match = regex.exec(html)) !== null) {
-    images.push({ src: match[1], alt: match[2] || "" });
+  const regex =
+    /<img[^>]*src=["']([^"']*)["'][^>]*(?:alt=["']([^"']*)["'])?[^>]*>/gi;
+  for (const match of html.matchAll(regex)) {
+    images.push({ src: match[1] ?? "", alt: match[2] ?? "" });
   }
   return images;
 };
@@ -206,16 +238,17 @@ const extractAllImages = (html: string): Array<{ src: string; alt: string }> => 
  */
 const extractMetaTags = (html: string): Record<string, string> => {
   const meta: Record<string, string> = {};
-  const regex = /<meta[^>]*(?:name|property)=["']([^"']*)["'][^>]*content=["']([^"']*)["'][^>]*>/gi;
-  let match;
-  while ((match = regex.exec(html)) !== null) {
-    meta[match[1]] = match[2];
+  const regex =
+    /<meta[^>]*(?:name|property)=["']([^"']*)["'][^>]*content=["']([^"']*)["'][^>]*>/gi;
+  for (const match of html.matchAll(regex)) {
+    meta[match[1] ?? ""] = match[2] ?? "";
   }
 
   // Also try content before name.
-  const regex2 = /<meta[^>]*content=["']([^"']*)["'][^>]*(?:name|property)=["']([^"']*)["'][^>]*>/gi;
-  while ((match = regex2.exec(html)) !== null) {
-    meta[match[2]] = match[1];
+  const regex2 =
+    /<meta[^>]*content=["']([^"']*)["'][^>]*(?:name|property)=["']([^"']*)["'][^>]*>/gi;
+  for (const match of html.matchAll(regex2)) {
+    meta[match[2] ?? ""] = match[1] ?? "";
   }
 
   return meta;
@@ -238,7 +271,9 @@ const parse = async (
     if (input.isUrl) {
       const response = await fetch(input.source);
       if (!response.ok) {
-        throw new Error(`Failed to fetch URL: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch URL: ${response.status} ${response.statusText}`,
+        );
       }
       html = await response.text();
     }
@@ -251,13 +286,15 @@ const parse = async (
       result.selectors = {};
       for (const [key, selector] of Object.entries(input.selectors)) {
         const el = doc.querySelector(selector);
-        (result.selectors as Record<string, string | null>)[key] = el?.text ?? null;
+        (result.selectors as Record<string, string | null>)[key] =
+          el?.text ?? null;
       }
     }
 
     // Extract all text.
     if (input.extractText) {
-      result.text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      result.text = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
         .replace(/<[^>]+>/g, " ")
         .replace(/\s+/g, " ")
@@ -308,7 +345,9 @@ const query = async (
 
     if (input.all) {
       const elements = doc.querySelectorAll(input.selector);
-      const results = elements.map((el) => input.attribute ? el.attr(input.attribute) : el.text);
+      const results = elements.map((el) =>
+        input.attribute ? el.attr(input.attribute) : el.text,
+      );
 
       return {
         success: true,
@@ -326,7 +365,9 @@ const query = async (
       };
     }
 
-    const value = input.attribute ? element.attr(input.attribute) : element.text;
+    const value = input.attribute
+      ? element.attr(input.attribute)
+      : element.text;
 
     return {
       success: true,
@@ -356,8 +397,13 @@ const extractTable = async (
     const tableSelector = input.selector || "table";
 
     // Find table.
-    const tableMatch = input.html.match(new RegExp(`<${tableSelector}[^>]*>([\\s\\S]*?)<\\/${tableSelector}>`, "i"))
-      || input.html.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
+    const tableMatch =
+      input.html.match(
+        new RegExp(
+          `<${tableSelector}[^>]*>([\\s\\S]*?)<\\/${tableSelector}>`,
+          "i",
+        ),
+      ) || input.html.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
 
     if (!tableMatch) {
       return {
@@ -372,15 +418,13 @@ const extractTable = async (
     // Extract rows.
     const rows: string[][] = [];
     const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-    let rowMatch;
 
-    while ((rowMatch = rowRegex.exec(tableHtml)) !== null) {
+    for (const rowMatch of tableHtml.matchAll(rowRegex)) {
       const cells: string[] = [];
       const cellRegex = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
-      let cellMatch;
 
-      while ((cellMatch = cellRegex.exec(rowMatch[1])) !== null) {
-        cells.push(cellMatch[1].replace(/<[^>]+>/g, "").trim());
+      for (const cellMatch of (rowMatch[1] ?? "").matchAll(cellRegex)) {
+        cells.push((cellMatch[1] ?? "").replace(/<[^>]+>/g, "").trim());
       }
 
       if (cells.length > 0) {
@@ -440,7 +484,9 @@ const scrape = async (
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch: ${response.status} ${response.statusText}`,
+        );
       }
 
       const html = await response.text();

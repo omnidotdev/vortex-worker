@@ -5,6 +5,8 @@
  * (from the UI) when triggered via API or webhook.
  */
 
+import logger from "lib/logger";
+
 import type {
   ActionStep,
   AggregateStep,
@@ -381,8 +383,12 @@ function waitNodeToStep(node: ReactFlowNode): WaitStep {
       webhookSuffix: data.webhookSuffix as string | undefined,
       eventName: data.eventName as string | undefined,
       timeout: data.timeout as number | undefined,
-      timeoutUnit:
-        data.timeoutUnit as "seconds" | "minutes" | "hours" | "days" | undefined,
+      timeoutUnit: data.timeoutUnit as
+        | "seconds"
+        | "minutes"
+        | "hours"
+        | "days"
+        | undefined,
       timeoutAction: (data.timeoutAction as "continue" | "error") || "error",
       outputs: data.outputs as Record<string, string> | undefined,
     },
@@ -490,7 +496,7 @@ function nodeToStep(node: ReactFlowNode, edges: ReactFlowEdge[]): Step | null {
     case "cache":
       return cacheNodeToStep(node);
     default:
-      console.warn("Unknown node type:", node.type);
+      logger.warn("Unknown node type", { nodeType: node.type });
       return null;
   }
 }

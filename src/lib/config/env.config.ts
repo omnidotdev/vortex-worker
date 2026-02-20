@@ -70,18 +70,18 @@ function assertProdEnv(name: string, value: string | undefined): void {
   }
 }
 
-// Validate required environment variables
-assertEnv("DATABASE_URL", DATABASE_URL);
+/** Validate required env vars. Call once at startup */
+export function validateEnv(): void {
+  assertEnv("DATABASE_URL", DATABASE_URL);
 
-// Validate executor-specific requirements
-if (VORTEX_EXECUTOR === "hatchet") {
-  assertEnv("HATCHET_CLIENT_TOKEN", HATCHET_CLIENT_TOKEN);
-} else if (VORTEX_EXECUTOR === "temporal") {
-  assertEnv("TEMPORAL_ADDRESS", TEMPORAL_ADDRESS);
+  if (VORTEX_EXECUTOR === "hatchet") {
+    assertEnv("HATCHET_CLIENT_TOKEN", HATCHET_CLIENT_TOKEN);
+  } else if (VORTEX_EXECUTOR === "temporal") {
+    assertEnv("TEMPORAL_ADDRESS", TEMPORAL_ADDRESS);
+  }
+
+  assertProdEnv("RESEND_API_KEY", RESEND_API_KEY);
 }
-
-// Validate production-only requirements
-assertProdEnv("RESEND_API_KEY", RESEND_API_KEY);
 
 // Export validated variables
 export {

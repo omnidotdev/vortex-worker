@@ -199,9 +199,7 @@ const s3Provider: FileProviderImpl = {
         };
       }
 
-      const { S3Client, GetObjectCommand } = await import(
-        "@aws-sdk/client-s3"
-      );
+      const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
       const client = new S3Client({
         region: config.region ?? "us-east-1",
         ...(config.endpoint && { endpoint: config.endpoint }),
@@ -256,9 +254,7 @@ const s3Provider: FileProviderImpl = {
         };
       }
 
-      const { S3Client, PutObjectCommand } = await import(
-        "@aws-sdk/client-s3"
-      );
+      const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
       const client = new S3Client({
         region: config.region ?? "us-east-1",
         ...(config.endpoint && { endpoint: config.endpoint }),
@@ -996,7 +992,11 @@ const azureProvider: FileProviderImpl = {
 
       return {
         success: true,
-        output: { path: input.path, container: config.container, deleted: true },
+        output: {
+          path: input.path,
+          container: config.container,
+          deleted: true,
+        },
         durationMs: performance.now() - startTime,
       };
     } catch (error) {
@@ -1154,8 +1154,7 @@ const azureProvider: FileProviderImpl = {
       if (!config.accountName || !config.accountKey) {
         return {
           success: false,
-          error:
-            "Azure accountName and accountKey required for presigned URLs",
+          error: "Azure accountName and accountKey required for presigned URLs",
           durationMs: performance.now() - startTime,
         };
       }
@@ -1277,7 +1276,11 @@ const listFiles = async (
 ): Promise<PluginCallResult> => {
   const input = inputs as unknown as FileListInput;
   if (!input.path && !input.pattern) {
-    return { success: false, error: "Path or pattern is required", durationMs: 0 };
+    return {
+      success: false,
+      error: "Path or pattern is required",
+      durationMs: 0,
+    };
   }
   return getProvider(input.provider).list(input);
 };

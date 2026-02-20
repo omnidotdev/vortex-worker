@@ -23,13 +23,8 @@ const analyzeImage = async (
   const startTime = performance.now();
 
   try {
-    const {
-      serverId,
-      model,
-      image,
-      task,
-      prompt,
-    } = inputs as unknown as VisionInput;
+    const { serverId, model, image, task, prompt } =
+      inputs as unknown as VisionInput;
 
     if (!serverId) {
       return {
@@ -66,7 +61,7 @@ const analyzeImage = async (
     return {
       success: true,
       output: {
-        ...taskResults[task],
+        ...(taskResults[task] as Record<string, unknown>),
         task,
         model: model || "default",
         prompt,

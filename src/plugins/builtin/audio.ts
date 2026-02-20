@@ -24,14 +24,8 @@ const processAudio = async (
   const startTime = performance.now();
 
   try {
-    const {
-      serverId,
-      model,
-      task,
-      input,
-      language,
-      voice,
-    } = inputs as unknown as AudioInput;
+    const { serverId, model, task, input, language, voice } =
+      inputs as unknown as AudioInput;
 
     if (!serverId) {
       return {

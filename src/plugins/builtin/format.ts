@@ -44,11 +44,7 @@ const BYTE_UNITS_BINARY = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
 /**
  * Format a byte value to human-readable string.
  */
-const formatBytes = (
-  bytes: number,
-  decimals = 2,
-  binary = false,
-): string => {
+const formatBytes = (bytes: number, decimals = 2, binary = false): string => {
   if (bytes === 0) return "0 B";
 
   const base = binary ? 1024 : 1000;
@@ -65,10 +61,7 @@ const formatBytes = (
 /**
  * Format a date value.
  */
-const formatDate = (
-  input: unknown,
-  options: FormatOptions = {},
-): string => {
+const formatDate = (input: unknown, options: FormatOptions = {}): string => {
   const { locale = "en-US", pattern = "medium", timezone } = options;
 
   let date: Date;
@@ -111,10 +104,7 @@ const formatDate = (
 /**
  * Format a number value.
  */
-const formatNumber = (
-  input: unknown,
-  options: FormatOptions = {},
-): string => {
+const formatNumber = (input: unknown, options: FormatOptions = {}): string => {
   const { locale = "en-US", decimals } = options;
 
   const num = Number(input);
@@ -240,7 +230,11 @@ const formatData = async (
             durationMs: performance.now() - startTime,
           };
         }
-        result = formatBytes(num, options.decimals ?? 2, options.binary ?? false);
+        result = formatBytes(
+          num,
+          options.decimals ?? 2,
+          options.binary ?? false,
+        );
         break;
       }
 

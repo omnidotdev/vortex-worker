@@ -101,7 +101,18 @@ export const StepType = z.enum([
 ]);
 export type StepType = z.infer<typeof StepType>;
 
-export const TriggerType = z.enum(["webhook", "cron", "event", "manual", "omni", "polling", "kafka", "sqs", "s3", "cdc"]);
+export const TriggerType = z.enum([
+  "webhook",
+  "cron",
+  "event",
+  "manual",
+  "omni",
+  "polling",
+  "kafka",
+  "sqs",
+  "s3",
+  "cdc",
+]);
 export type TriggerType = z.infer<typeof TriggerType>;
 
 export const Position = z.object({
@@ -546,7 +557,7 @@ export const QueueStep = BaseStep.extend({
   type: z.literal("queue"),
   queue: z.object({
     operation: z.enum(["push", "pull", "peek", "ack", "nack"]),
-    provider: z.enum(["memory", "redis", "sqs", "rabbitmq"]).default("memory"),
+    provider: z.enum(["memory", "valkey", "sqs", "rabbitmq"]).default("memory"),
     providerConfig: z.record(z.string(), z.unknown()).optional(),
     queueName: z.string(),
     message: z.unknown().optional(),
@@ -670,7 +681,7 @@ export const TemplateStep = BaseStep.extend({
   type: z.literal("template"),
   template: z.object({
     content: z.string(),
-    variables: z.record(z.unknown()).optional(),
+    variables: z.record(z.string(), z.unknown()).optional(),
     outputVariable: z.string(),
   }),
 });
@@ -684,7 +695,7 @@ export const PromptStep = BaseStep.extend({
     serverId: z.string().optional(),
     model: z.string(),
     template: z.string(),
-    variables: z.record(z.unknown()).optional(),
+    variables: z.record(z.string(), z.unknown()).optional(),
     temperature: z.number().min(0).max(2).optional(),
     maxTokens: z.number().positive().optional(),
     outputVariable: z.string(),
@@ -789,7 +800,7 @@ export const NotificationStep = BaseStep.extend({
     title: z.string(),
     message: z.string(),
     priority: z.enum(["low", "normal", "high", "urgent"]).default("normal"),
-    data: z.record(z.unknown()).optional(),
+    data: z.record(z.string(), z.unknown()).optional(),
   }),
 });
 export type NotificationStep = z.infer<typeof NotificationStep>;
@@ -816,7 +827,7 @@ export const ValidateStep = BaseStep.extend({
   type: z.literal("validate"),
   validate: z.object({
     input: z.string(),
-    schema: z.record(z.unknown()),
+    schema: z.record(z.string(), z.unknown()),
     strict: z.boolean().default(true),
     outputVariable: z.string().optional(),
   }),
@@ -1334,7 +1345,7 @@ export const NoopStep = BaseStep.extend({
 });
 export type NoopStep = z.infer<typeof NoopStep>;
 
-/** Coalesce rapid-fire triggers into one execution using Redis */
+/** Coalesce rapid-fire triggers into one execution using cache */
 export const DebounceStep = BaseStep.extend({
   type: z.literal("debounce"),
   debounce: z.object({
@@ -1403,7 +1414,13 @@ export const AiGuardrailsStep = BaseStep.extend({
     input: z.string(),
     rules: z.array(
       z.object({
-        type: z.enum(["regex", "contains", "not_contains", "max_length", "json_schema"]),
+        type: z.enum([
+          "regex",
+          "contains",
+          "not_contains",
+          "max_length",
+          "json_schema",
+        ]),
         value: z.string(),
       }),
     ),

@@ -12,6 +12,8 @@
  * - Memory-based run storage
  */
 
+import { VortexError } from "lib/errors";
+import logger from "lib/logger";
 import {
   createExecutionContext,
   executeStep,
@@ -145,7 +147,10 @@ export class LocalExecutor implements WorkflowExecutor {
     } else {
       // Fire and forget - execute in background
       this.executeWorkflow(runId).catch((error) => {
-        console.error(`Workflow ${runId} failed:`, error);
+        logger.error("Workflow execution failed", {
+          runId,
+          error: error instanceof Error ? error.message : String(error),
+        });
       });
     }
 
@@ -362,17 +367,31 @@ export class LocalExecutor implements WorkflowExecutor {
           stepResult.error =
             stepError instanceof Error ? stepError.message : String(stepError);
 
-          // Emit step fail event
+          // Emit step fail event with typed error details when available
+          const errorData: Record<string, unknown> = {
+            error: stepResult.error,
+          };
+          if (stepError instanceof VortexError) {
+            errorData.code = stepError.code;
+            errorData.meta = stepError.meta;
+          }
+
           this.emitEvent(runId, {
             type: "step:fail",
             runId,
             stepId: step.id,
             timestamp: new Date(),
-            data: { error: stepResult.error },
+            data: errorData,
           });
 
           throw stepError;
         }
+      }
+
+      // Respect cancellation that occurred during execution
+      // (cancel() mutates status externally; TS narrows to "running" here)
+      if ((run.status as string) === "cancelled") {
+        return;
       }
 
       // Workflow completed successfully
@@ -391,10 +410,19 @@ export class LocalExecutor implements WorkflowExecutor {
       // Workflow failed
       run.status = "failed";
       run.completedAt = new Date();
-      run.error = {
-        code: "EXECUTION_FAILED",
-        message: error instanceof Error ? error.message : String(error),
-      };
+
+      if (error instanceof VortexError) {
+        run.error = {
+          code: error.code,
+          message: error.message,
+          meta: error.meta,
+        };
+      } else {
+        run.error = {
+          code: "EXECUTION_FAILED",
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
 
       // Emit run fail event
       this.emitEvent(runId, {

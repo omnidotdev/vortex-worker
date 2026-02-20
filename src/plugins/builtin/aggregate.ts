@@ -19,7 +19,11 @@ const executeAggregate = async (
   const startTime = performance.now();
 
   try {
-    const { mode = "collect", source, groupBy: _groupBy } = inputs as {
+    const {
+      mode = "collect",
+      source,
+      groupBy: _groupBy,
+    } = inputs as {
       mode?: AggregateMode;
       source: unknown;
       groupBy?: string;
@@ -44,9 +48,7 @@ const executeAggregate = async (
       case "merge":
         result = Object.assign(
           {},
-          ...items.filter(
-            (item) => typeof item === "object" && item !== null,
-          ),
+          ...items.filter((item) => typeof item === "object" && item !== null),
         );
         break;
 

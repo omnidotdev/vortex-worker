@@ -6,6 +6,7 @@
 
 import { eq } from "drizzle-orm";
 
+import logger from "lib/logger";
 import { db, schema } from "../db";
 import { getMCPClient } from "./client";
 
@@ -52,15 +53,18 @@ export async function initializeMCPServers(): Promise<void> {
     }
 
     if (failed.length > 0) {
-      console.error(`Failed to connect to ${failed.length} MCP server(s):`);
-      for (const result of failed) {
-        if (result.status === "rejected") {
-          console.error(`  - ${result.reason}`);
-        }
-      }
+      const reasons = failed
+        .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+        .map((r) => String(r.reason));
+      logger.error("Failed to connect to MCP server(s)", {
+        count: failed.length,
+        reasons,
+      });
     }
   } catch (error) {
-    console.error("Failed to initialize MCP servers:", error);
+    logger.error("Failed to initialize MCP servers", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     // Don't throw - allow worker to start even if MCP initialization fails
   }
 }
@@ -86,12 +90,12 @@ export async function connectMCPServer(serverId: string): Promise<boolean> {
       .limit(1);
 
     if (!server) {
-      console.error(`MCP server not found: ${serverId}`);
+      logger.error("MCP server not found", { serverId });
       return false;
     }
 
     if (!server.isEnabled) {
-      console.error(`MCP server is disabled: ${serverId}`);
+      logger.error("MCP server is disabled", { serverId });
       return false;
     }
 
@@ -108,7 +112,10 @@ export async function connectMCPServer(serverId: string): Promise<boolean> {
     await mcpClient.connect(config);
     return true;
   } catch (error) {
-    console.error(`Failed to connect to MCP server ${serverId}:`, error);
+    logger.error("Failed to connect to MCP server", {
+      serverId,
+      error: error instanceof Error ? error.message : String(error),
+    });
     return false;
   }
 }

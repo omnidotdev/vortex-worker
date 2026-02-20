@@ -85,7 +85,10 @@ interface FromJsonInput {
  * Simple XML parser using regex (for basic use cases).
  * For production, use fast-xml-parser or similar.
  */
-const simpleXmlParse = (xml: string, options: { attributePrefix?: string; textNodeName?: string } = {}): Record<string, unknown> => {
+const simpleXmlParse = (
+  xml: string,
+  options: { attributePrefix?: string; textNodeName?: string } = {},
+): Record<string, unknown> => {
   const attrPrefix = options.attributePrefix ?? "@_";
   const textName = options.textNodeName ?? "#text";
 
@@ -104,10 +107,9 @@ const simpleXmlParse = (xml: string, options: { attributePrefix?: string; textNo
 
     // Match tags.
     const tagRegex = /<(\w+)([^>]*)>([\s\S]*?)<\/\1>|<(\w+)([^/>]*)\/>/g;
-    let match;
     let hasElements = false;
 
-    while ((match = tagRegex.exec(content)) !== null) {
+    for (const match of content.matchAll(tagRegex)) {
       hasElements = true;
       const tagName = match[1] ?? match[4];
       const attrs = match[2] ?? match[5] ?? "";
@@ -387,9 +389,8 @@ const validate = async (
     // Check for matching tags.
     const tagStack: string[] = [];
     const tagRegex = /<\/?(\w+)[^>]*>/g;
-    let match;
 
-    while ((match = tagRegex.exec(input.xml)) !== null) {
+    for (const match of input.xml.matchAll(tagRegex)) {
       const fullMatch = match[0];
       const tagName = match[1];
 
@@ -398,7 +399,9 @@ const validate = async (
         if (tagStack.length === 0) {
           errors.push(`Unexpected closing tag: </${tagName}>`);
         } else if (tagStack[tagStack.length - 1] !== tagName) {
-          errors.push(`Mismatched tags: expected </${tagStack[tagStack.length - 1]}>, found </${tagName}>`);
+          errors.push(
+            `Mismatched tags: expected </${tagStack[tagStack.length - 1]}>, found </${tagName}>`,
+          );
         } else {
           tagStack.pop();
         }
@@ -522,7 +525,9 @@ const format = async (
 
     // Preserve declaration if present.
     const declMatch = input.xml.match(/<\?xml[^?]*\?>/);
-    const decl = declMatch ? declMatch[0] : '<?xml version="1.0" encoding="UTF-8"?>';
+    const decl = declMatch
+      ? declMatch[0]
+      : '<?xml version="1.0" encoding="UTF-8"?>';
 
     return {
       success: true,

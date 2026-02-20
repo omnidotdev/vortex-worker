@@ -158,31 +158,104 @@ export class HatchetExecutor implements WorkflowExecutor {
   }
 
   async *stream(runId: string): AsyncIterable<ExecutionEvent> {
-    // Create event queue for this stream
     const eventQueue: ExecutionEvent[] = [];
     let resolver: (() => void) | null = null;
 
-    const listener = (event: ExecutionEvent) => {
-      eventQueue.push(event);
+    const wake = () => {
       if (resolver) {
         resolver();
         resolver = null;
       }
     };
 
-    // Register listener
+    const listener = (event: ExecutionEvent) => {
+      eventQueue.push(event);
+      wake();
+    };
+
+    // Register listener for immediate events (execute/cancel)
     const listeners = eventEmitters.get(runId) || [];
     listeners.push(listener);
     eventEmitters.set(runId, listeners);
 
+    // Track previous step states for diffing
+    const prevStepStates = new Map<string, string>();
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+    // Poll Hatchet API for step-level progress
+    const poll = async () => {
+      try {
+        const result = await this.getStatus(runId);
+
+        for (const step of result.steps) {
+          const prev = prevStepStates.get(step.stepId);
+          if (prev === step.status) continue;
+          prevStepStates.set(step.stepId, step.status);
+
+          if (step.status === "running" && prev !== "running") {
+            eventQueue.push({
+              type: "step:start",
+              runId,
+              stepId: step.stepId,
+              timestamp: step.startedAt ?? new Date(),
+            });
+          } else if (step.status === "completed") {
+            eventQueue.push({
+              type: "step:complete",
+              runId,
+              stepId: step.stepId,
+              timestamp: step.completedAt ?? new Date(),
+              data: step.output as Record<string, unknown> | undefined,
+            });
+          } else if (step.status === "failed") {
+            eventQueue.push({
+              type: "step:fail",
+              runId,
+              stepId: step.stepId,
+              timestamp: step.completedAt ?? new Date(),
+              data: step.error ? { error: step.error } : undefined,
+            });
+          } else if (step.status === "skipped") {
+            eventQueue.push({
+              type: "step:skip",
+              runId,
+              stepId: step.stepId,
+              timestamp: new Date(),
+            });
+          }
+        }
+
+        // Terminal run states
+        if (result.status === "completed") {
+          eventQueue.push({
+            type: "run:complete",
+            runId,
+            timestamp: result.completedAt ?? new Date(),
+            data: result.output,
+          });
+        } else if (result.status === "failed") {
+          eventQueue.push({
+            type: "run:fail",
+            runId,
+            timestamp: result.completedAt ?? new Date(),
+            data: result.error,
+          });
+        }
+
+        wake();
+      } catch {
+        // Ignore transient polling errors
+      }
+    };
+
+    pollInterval = setInterval(poll, 2000);
+
     try {
       while (true) {
-        // Yield any queued events
         while (eventQueue.length > 0) {
           const event = eventQueue.shift()!;
           yield event;
 
-          // Stop streaming on terminal events
           if (
             event.type === "run:complete" ||
             event.type === "run:fail" ||
@@ -192,13 +265,17 @@ export class HatchetExecutor implements WorkflowExecutor {
           }
         }
 
-        // Wait for next event
-        await new Promise<void>((resolve) => {
-          resolver = resolve;
-        });
+        // Wait for next event (from listener or poll)
+        await Promise.race([
+          new Promise<void>((resolve) => {
+            resolver = resolve;
+          }),
+          new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+        ]);
       }
     } finally {
-      // Cleanup listener
+      if (pollInterval) clearInterval(pollInterval);
+
       const currentListeners = eventEmitters.get(runId) || [];
       const index = currentListeners.indexOf(listener);
       if (index > -1) {

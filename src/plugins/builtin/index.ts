@@ -24,6 +24,7 @@ export { errorPlugin } from "./error";
 export { eventPlugin } from "./event";
 export { expressionPlugin } from "./expression";
 export { filePlugin } from "./file";
+export { filterPlugin } from "./filter";
 export { flattenPlugin } from "./flatten";
 export { formatPlugin } from "./format";
 export { ftpPlugin } from "./ftp";
@@ -39,6 +40,7 @@ export { imagePlugin } from "./image";
 export { jwtPlugin } from "./jwt";
 export { logPlugin } from "./log";
 export { loopPlugin } from "./loop";
+export { mapPlugin } from "./map";
 export { mcpPlugin } from "./mcp";
 export { modelRegistryPlugin } from "./modelRegistry";
 export { parallelPlugin } from "./parallel";
@@ -47,10 +49,12 @@ export { pdfPlugin } from "./pdf";
 export { queuePlugin } from "./queue";
 export { ragPlugin } from "./rag";
 export { rateLimitPlugin } from "./rateLimit";
+export { reducePlugin } from "./reduce";
 export { regexPlugin } from "./regex";
 export { retryPlugin } from "./retry";
 export { signPlugin } from "./sign";
 export { sleepPlugin } from "./sleep";
+export { sortPlugin } from "./sort";
 export { spreadsheetPlugin } from "./spreadsheet";
 export { sshPlugin } from "./ssh";
 export { storagePlugin } from "./storage";
@@ -60,6 +64,7 @@ export { timeoutPlugin } from "./timeout";
 export { transformPlugin } from "./transform";
 export { triggerPlugin } from "./trigger";
 export * from "./types";
+export { uniquePlugin } from "./unique";
 export { validatePlugin } from "./validate";
 export { vectorSearchPlugin } from "./vectorSearch";
 export { visionPlugin } from "./vision";
@@ -88,6 +93,7 @@ import { errorPlugin } from "./error";
 import { eventPlugin } from "./event";
 import { expressionPlugin } from "./expression";
 import { filePlugin } from "./file";
+import { filterPlugin } from "./filter";
 import { flattenPlugin } from "./flatten";
 import { formatPlugin } from "./format";
 import { ftpPlugin } from "./ftp";
@@ -103,6 +109,7 @@ import { imagePlugin } from "./image";
 import { jwtPlugin } from "./jwt";
 import { logPlugin } from "./log";
 import { loopPlugin } from "./loop";
+import { mapPlugin } from "./map";
 import { mcpPlugin } from "./mcp";
 import { modelRegistryPlugin } from "./modelRegistry";
 import { parallelPlugin } from "./parallel";
@@ -111,10 +118,12 @@ import { pdfPlugin } from "./pdf";
 import { queuePlugin } from "./queue";
 import { ragPlugin } from "./rag";
 import { rateLimitPlugin } from "./rateLimit";
+import { reducePlugin } from "./reduce";
 import { regexPlugin } from "./regex";
 import { retryPlugin } from "./retry";
 import { signPlugin } from "./sign";
 import { sleepPlugin } from "./sleep";
+import { sortPlugin } from "./sort";
 import { spreadsheetPlugin } from "./spreadsheet";
 import { sshPlugin } from "./ssh";
 import { storagePlugin } from "./storage";
@@ -123,6 +132,7 @@ import { switchPlugin } from "./switch";
 import { timeoutPlugin } from "./timeout";
 import { transformPlugin } from "./transform";
 import { triggerPlugin } from "./trigger";
+import { uniquePlugin } from "./unique";
 import { validatePlugin } from "./validate";
 import { vectorSearchPlugin } from "./vectorSearch";
 import { visionPlugin } from "./vision";
@@ -154,6 +164,7 @@ const builtinPlugins: Map<string, BuiltinPlugin> = new Map([
   [errorPlugin.id, errorPlugin],
   [eventPlugin.id, eventPlugin],
   [filePlugin.id, filePlugin],
+  [filterPlugin.id, filterPlugin],
   [flattenPlugin.id, flattenPlugin],
   [formatPlugin.id, formatPlugin],
   [gatePlugin.id, gatePlugin],
@@ -163,19 +174,23 @@ const builtinPlugins: Map<string, BuiltinPlugin> = new Map([
   [jwtPlugin.id, jwtPlugin],
   [logPlugin.id, logPlugin],
   [loopPlugin.id, loopPlugin],
+  [mapPlugin.id, mapPlugin],
   [mcpPlugin.id, mcpPlugin],
   [parallelPlugin.id, parallelPlugin],
   [parsePlugin.id, parsePlugin],
   [queuePlugin.id, queuePlugin],
   [ragPlugin.id, ragPlugin],
+  [reducePlugin.id, reducePlugin],
   [retryPlugin.id, retryPlugin],
   [signPlugin.id, signPlugin],
+  [sortPlugin.id, sortPlugin],
   [sleepPlugin.id, sleepPlugin],
   [subworkflowPlugin.id, subworkflowPlugin],
   [switchPlugin.id, switchPlugin],
   [timeoutPlugin.id, timeoutPlugin],
   [transformPlugin.id, transformPlugin],
   [triggerPlugin.id, triggerPlugin],
+  [uniquePlugin.id, uniquePlugin],
   [validatePlugin.id, validatePlugin],
   [vectorSearchPlugin.id, vectorSearchPlugin],
   [visionPlugin.id, visionPlugin],

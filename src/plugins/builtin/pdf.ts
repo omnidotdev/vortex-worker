@@ -175,7 +175,7 @@ const create = async (
         const imageBytes = await imageFile.arrayBuffer();
         const imageData = new Uint8Array(imageBytes);
 
-        let image;
+        let image: Awaited<ReturnType<typeof pdfDoc.embedPng>>;
         if (img.path.toLowerCase().endsWith(".png")) {
           image = await pdfDoc.embedPng(imageData);
         } else {
@@ -242,7 +242,11 @@ const parse = async (
         if (!targetPages.has(pd.pageIndex + 1)) {
           return "";
         }
-        return (pageData as { getTextContent: () => Promise<{ items: Array<{ str: string }> }> })
+        return (
+          pageData as {
+            getTextContent: () => Promise<{ items: Array<{ str: string }> }>;
+          }
+        )
           .getTextContent()
           .then((textContent) =>
             textContent.items.map((item) => item.str).join(" "),
@@ -405,7 +409,9 @@ const watermark = async (
 
   try {
     const input = inputs as unknown as WatermarkInput;
-    const { PDFDocument, rgb, StandardFonts, degrees } = await import("pdf-lib");
+    const { PDFDocument, rgb, StandardFonts, degrees } = await import(
+      "pdf-lib"
+    );
 
     const file = Bun.file(input.path);
     const pdfBytes = await file.arrayBuffer();
@@ -477,7 +483,9 @@ const extractPages = async (
     const newPdf = await PDFDocument.create();
 
     // Convert 1-indexed to 0-indexed.
-    const pageIndices = input.pages.map((p) => p - 1).filter((i) => i >= 0 && i < pdf.getPageCount());
+    const pageIndices = input.pages
+      .map((p) => p - 1)
+      .filter((i) => i >= 0 && i < pdf.getPageCount());
 
     const pages = await newPdf.copyPages(pdf, pageIndices);
     for (const page of pages) {
