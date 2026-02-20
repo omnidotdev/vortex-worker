@@ -22,6 +22,49 @@ import type {
   MCPToolResult,
 } from "./types";
 
+/**
+ * Create the appropriate transport for an MCP server config
+ */
+export function createTransport(
+  config: MCPServerConfig,
+): StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport {
+  const transportType = config.transport ?? "stdio";
+
+  if (transportType === "sse") {
+    if (!config.url) {
+      throw new Error(
+        `MCP server ${config.id}: url required for SSE transport`,
+      );
+    }
+    return new SSEClientTransport(new URL(config.url), {
+      requestInit: { headers: config.headers },
+    });
+  }
+
+  if (transportType === "http") {
+    if (!config.url) {
+      throw new Error(
+        `MCP server ${config.id}: url required for HTTP transport`,
+      );
+    }
+    return new StreamableHTTPClientTransport(new URL(config.url), {
+      requestInit: { headers: config.headers },
+    });
+  }
+
+  if (!config.command) {
+    throw new Error(
+      `MCP server ${config.id}: command required for stdio transport`,
+    );
+  }
+  return new StdioClientTransport({
+    command: config.command,
+    args: config.args,
+    env: config.env,
+    cwd: config.cwd,
+  });
+}
+
 export class MCPIntegrationClient {
   private clients: Map<string, Client> = new Map();
   private transports: Map<
@@ -42,43 +85,7 @@ export class MCPIntegrationClient {
     this.updateStatus(config, "connecting");
 
     try {
-      let transport:
-        | StdioClientTransport
-        | SSEClientTransport
-        | StreamableHTTPClientTransport;
-      const transportType = config.transport ?? "stdio";
-
-      if (transportType === "sse") {
-        if (!config.url) {
-          throw new Error(
-            `MCP server ${config.id}: url required for SSE transport`,
-          );
-        }
-        transport = new SSEClientTransport(new URL(config.url), {
-          requestInit: { headers: config.headers },
-        });
-      } else if (transportType === "http") {
-        if (!config.url) {
-          throw new Error(
-            `MCP server ${config.id}: url required for HTTP transport`,
-          );
-        }
-        transport = new StreamableHTTPClientTransport(new URL(config.url), {
-          requestInit: { headers: config.headers },
-        });
-      } else {
-        if (!config.command) {
-          throw new Error(
-            `MCP server ${config.id}: command required for stdio transport`,
-          );
-        }
-        transport = new StdioClientTransport({
-          command: config.command,
-          args: config.args,
-          env: config.env,
-          cwd: config.cwd,
-        });
-      }
+      const transport = createTransport(config);
 
       const client = new Client(
         { name: "vortex-worker", version: "1.0.0" },
