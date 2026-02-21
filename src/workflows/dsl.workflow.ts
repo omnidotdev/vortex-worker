@@ -7,6 +7,7 @@ import {
   markRunComplete,
   markRunFailed,
 } from "../db/runLogger";
+import { publish } from "../events/publisher";
 import {
   createExecutionContext,
   executeStep,
@@ -246,6 +247,26 @@ export const dslWorkflow: Workflow = {
             completedSteps: Object.keys(execCtx.stepResults).length,
           });
 
+          // Publish vortex.workflow.completed event (best-effort)
+          if (organizationId) {
+            publish({
+              type: "vortex.workflow.completed",
+              source: "vortex-worker",
+              subject: runId,
+              organizationId,
+              data: {
+                workflowId,
+                runId,
+                dbRunId,
+                completedSteps: Object.keys(execCtx.stepResults).length,
+              },
+            }).catch((err) => {
+              runLogger.warn("Failed to publish workflow.completed event", {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
+          }
+
           return {
             workflowId,
             runId,
@@ -258,6 +279,23 @@ export const dslWorkflow: Workflow = {
           runLogger.error("Workflow execution failed", {
             error: error instanceof Error ? error.message : String(error),
           });
+
+          // Publish vortex.workflow.failed event (best-effort)
+          if (organizationId) {
+            publish({
+              type: "vortex.workflow.failed",
+              source: "vortex-worker",
+              subject: runId,
+              organizationId,
+              data: {
+                workflowId,
+                runId,
+                dbRunId,
+                error: error instanceof Error ? error.message : String(error),
+              },
+            }).catch(() => {});
+          }
+
           throw error;
         }
       },
