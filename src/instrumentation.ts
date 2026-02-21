@@ -22,13 +22,16 @@ import {
   ATTR_SERVICE_VERSION,
 } from "@opentelemetry/semantic-conventions";
 
+// Alias to prevent bun's bundler from inlining process.env destructuring
+const env = process.env;
+
 const {
   OTEL_EXPORTER_OTLP_ENDPOINT,
   OTEL_EXPORTER_OTLP_HEADERS,
   OTEL_SERVICE_NAME = "vortex-worker",
   OTEL_SERVICE_VERSION = "1.0.0",
   NODE_ENV,
-} = process.env;
+} = env;
 
 const isProduction = NODE_ENV === "production";
 

@@ -4,6 +4,9 @@
  * Required variables are validated at startup to fail fast.
  */
 
+// Alias to prevent bun's bundler from inlining process.env destructuring
+const env = process.env;
+
 const {
   NODE_ENV,
   DATABASE_URL,
@@ -39,7 +42,7 @@ const {
   CACHE_URL,
   // Logging
   LOG_LEVEL: LOG_LEVEL_RAW,
-} = process.env;
+} = env;
 
 export const isDevEnv = NODE_ENV === "development";
 export const isProdEnv = NODE_ENV === "production";
