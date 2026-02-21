@@ -13,13 +13,13 @@ import {
   workflowTable,
 } from "db/schema";
 import { and, desc, eq } from "drizzle-orm";
-import type Redis from "ioredis";
 import jsonata from "jsonata";
 import { JSONPath } from "jsonpath-plus";
 
 import { cacheClient } from "lib/cache/client";
 import logger from "lib/logger";
 
+import type Redis from "ioredis";
 import type { OmniEvent } from "./types";
 
 /**
@@ -106,6 +106,15 @@ export const applyTransform = async (
 /** Deduplication window for correlationId-based idempotency (24 hours). */
 const DEDUP_TTL_SECONDS = 86_400;
 
+let _hatchet: ReturnType<typeof Hatchet.init> | null = null;
+
+function getHatchet(): ReturnType<typeof Hatchet.init> {
+  if (!_hatchet) {
+    _hatchet = Hatchet.init();
+  }
+  return _hatchet;
+}
+
 /**
  * Check and mark an event as seen for idempotency.
  *
@@ -152,7 +161,7 @@ export const isDuplicate = async (
  */
 async function routeEvent(event: OmniEvent): Promise<void> {
   const db = getDb();
-  const hatchet = Hatchet.init();
+  const hatchet = getHatchet();
 
   // Find enabled routing rules for this organization, highest priority first
   const rules = await db.query.eventRoutingRuleTable.findMany({
@@ -197,6 +206,7 @@ async function routeEvent(event: OmniEvent): Promise<void> {
     logger.info("Skipping duplicate event (already routed)", {
       eventId: event.id,
       correlationId: event.correlationId,
+      matchedRuleCount: matchingRules.length,
     });
     return;
   }
@@ -211,20 +221,19 @@ async function routeEvent(event: OmniEvent): Promise<void> {
       !Array.isArray(rawTransformed)
     ) {
       transformedData = rawTransformed as Record<string, unknown>;
-    } else if (rawTransformed !== event.data) {
-      // Transform returned a non-object (scalar or array) — fall back
-      logger.warn(
-        "Transform returned non-object result, using original event data",
-        {
-          workflowId: rule.workflowId,
-          transform: rule.transform,
-          resultType: Array.isArray(rawTransformed)
-            ? "array"
-            : typeof rawTransformed,
-        },
-      );
-      transformedData = event.data;
     } else {
+      if (rawTransformed !== event.data) {
+        logger.warn(
+          "Transform returned non-object result, using original event data",
+          {
+            workflowId: rule.workflowId,
+            transform: rule.transform,
+            resultType: Array.isArray(rawTransformed)
+              ? "array"
+              : typeof rawTransformed,
+          },
+        );
+      }
       transformedData = event.data;
     }
 
