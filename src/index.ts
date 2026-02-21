@@ -143,8 +143,9 @@ async function main() {
 
 main().catch((err) => {
   Sentry.captureException(err);
-  logger.error("Worker failed to start", {
-    error: err instanceof Error ? err.message : String(err),
-  });
+  logger.error(
+    `Worker failed to start: ${err instanceof Error ? err.message : String(err)}`,
+    { stack: err instanceof Error ? err.stack : undefined },
+  );
   process.exit(1);
 });
