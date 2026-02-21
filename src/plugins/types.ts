@@ -134,6 +134,8 @@ export interface PluginContext {
   runId: string;
   /** Current step ID */
   stepId: string;
+  /** Organization ID for state-scoped host function access */
+  organizationId?: string;
   /** Plugin configuration values */
   config: Record<string, unknown>;
   /** Secrets available to the plugin (redacted in logs) */

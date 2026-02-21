@@ -14,7 +14,8 @@ import {
   PluginTimeoutError,
 } from "./interface";
 
-import type { Plugin as ExtismPlugin } from "@extism/extism";
+import type { CallContext, Plugin as ExtismPlugin } from "@extism/extism";
+import { stateStore } from "../state/store";
 import type { LoadedPlugin, PluginHost } from "./interface";
 import type {
   PluginCallResult,
@@ -47,7 +48,7 @@ class ExtismLoadedPlugin implements LoadedPlugin {
   async call(
     functionName: string,
     inputs: Record<string, unknown>,
-    _context?: PluginContext,
+    context?: PluginContext,
   ): Promise<PluginCallResult> {
     if (!this.plugin) {
       return {
@@ -82,7 +83,7 @@ class ExtismLoadedPlugin implements LoadedPlugin {
 
       // Call the function with JSON input
       const inputJson = JSON.stringify(inputs);
-      const result = await this.plugin.call(functionName, inputJson);
+      const result = await this.plugin.call(functionName, inputJson, context);
 
       const durationMs = performance.now() - startTime;
 
@@ -245,10 +246,12 @@ export class ExtismPluginHost implements PluginHost {
       // Create plugin with options
       const plugin = await createPlugin(extismManifest, {
         useWasi: true,
+        runInWorker: true, // Required for async host functions in Bun (no JSPI support)
         timeoutMs: manifest.limits?.timeout || 30000,
         allowedHosts: this.getAllowedHosts(manifest),
         allowedPaths: this.getAllowedPaths(manifest),
         logger: this.logger,
+        functions: this.buildHostFunctions(),
       });
 
       const loaded = new ExtismLoadedPlugin(manifest.id, manifest, plugin);
@@ -288,6 +291,135 @@ export class ExtismPluginHost implements PluginHost {
 
   isLoaded(pluginId: string): boolean {
     return this.plugins.get(pluginId)?.isLoaded ?? false;
+  }
+
+  /**
+   * Build the vortex_host namespace of host functions for plugins.
+   *
+   * - vortex_log: write a log message to the host logger
+   * - vortex_state_get: read an org-scoped key from the Redis state store
+   * - vortex_state_set: write an org-scoped key to the Redis state store
+   * - vortex_http: make an outbound HTTP request and return the response
+   */
+  private buildHostFunctions(): {
+    vortex_host: Record<
+      string,
+      (ctx: CallContext, ...ptrs: bigint[]) => unknown
+    >;
+  } {
+    const hostLogger = this.logger;
+
+    return {
+      vortex_host: {
+        vortex_log: (ctx: CallContext, ptr: bigint): void => {
+          const message = ctx.read(ptr)?.text() ?? "";
+          hostLogger.info(`[plugin] ${message}`);
+        },
+
+        vortex_state_get: async (
+          ctx: CallContext,
+          orgPtr: bigint,
+          keyPtr: bigint,
+        ): Promise<bigint> => {
+          const orgId =
+            ctx.read(orgPtr)?.text() ||
+            ctx.hostContext<{ organizationId?: string }>()?.organizationId ||
+            "";
+          const key = ctx.read(keyPtr)?.text() ?? "";
+
+          if (!orgId || !key) {
+            return ctx.store(JSON.stringify(null));
+          }
+
+          try {
+            const value = await stateStore.get(orgId, key);
+            return ctx.store(JSON.stringify(value));
+          } catch (err) {
+            hostLogger.warn("vortex_state_get failed", {
+              orgId,
+              key,
+              error: err instanceof Error ? err.message : String(err),
+            });
+            return ctx.store(JSON.stringify(null));
+          }
+        },
+
+        vortex_state_set: async (
+          ctx: CallContext,
+          orgPtr: bigint,
+          keyPtr: bigint,
+          valuePtr: bigint,
+        ): Promise<void> => {
+          const orgId =
+            ctx.read(orgPtr)?.text() ||
+            ctx.hostContext<{ organizationId?: string }>()?.organizationId ||
+            "";
+          const key = ctx.read(keyPtr)?.text() ?? "";
+          const rawValue = ctx.read(valuePtr)?.text() ?? "null";
+
+          if (!orgId || !key) return;
+
+          try {
+            const value = JSON.parse(rawValue);
+            await stateStore.set(orgId, key, value);
+          } catch (err) {
+            hostLogger.warn("vortex_state_set failed", {
+              orgId,
+              key,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        },
+
+        vortex_http: async (
+          ctx: CallContext,
+          requestPtr: bigint,
+        ): Promise<bigint> => {
+          const rawRequest = ctx.read(requestPtr)?.text() ?? "{}";
+          let request: {
+            url?: string;
+            method?: string;
+            headers?: Record<string, string>;
+            body?: string;
+          };
+
+          try {
+            request = JSON.parse(rawRequest);
+          } catch {
+            return ctx.store(JSON.stringify({ error: "Invalid request JSON" }));
+          }
+
+          if (!request.url) {
+            return ctx.store(
+              JSON.stringify({ error: "Missing url in request" }),
+            );
+          }
+
+          try {
+            const response = await fetch(request.url, {
+              method: request.method ?? "GET",
+              headers: request.headers,
+              body: request.body,
+            });
+
+            const responseBody = await response.text();
+            return ctx.store(
+              JSON.stringify({
+                status: response.status,
+                headers: Object.fromEntries(response.headers.entries()),
+                body: responseBody,
+              }),
+            );
+          } catch (err) {
+            return ctx.store(
+              JSON.stringify({
+                error: err instanceof Error ? err.message : String(err),
+              }),
+            );
+          }
+        },
+      },
+    };
   }
 
   /**
