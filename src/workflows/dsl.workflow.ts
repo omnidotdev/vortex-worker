@@ -7,13 +7,13 @@ import {
   markRunComplete,
   markRunFailed,
 } from "../db/runLogger";
-import { publish } from "../events/publisher";
 import {
   createExecutionContext,
   executeStep,
   findTriggerStep,
 } from "../dsl/executor";
 import { isReactFlowFormat, reactFlowToDsl } from "../dsl/reactFlowToDsl";
+import { publish } from "../events/publisher";
 
 import type { Workflow } from "@hatchet-dev/typescript-sdk";
 import type { WorkflowDefinition } from "../dsl/types";

@@ -60,7 +60,10 @@ export async function initializeMCPServers(): Promise<void> {
             r.status === "fulfilled",
         )
         .map((r) => r.value);
-      logger.info("MCP servers connected", { count: successful.length, servers });
+      logger.info("MCP servers connected", {
+        count: successful.length,
+        servers,
+      });
     }
 
     if (failed.length > 0) {

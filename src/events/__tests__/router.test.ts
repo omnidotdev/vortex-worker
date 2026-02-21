@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 
-import type Redis from "ioredis";
-
 import { applyTransform, evaluateCondition, isDuplicate } from "../router";
+
+import type Redis from "ioredis";
 
 describe("evaluateCondition", () => {
   it("returns true when condition is null (no filter)", () => {

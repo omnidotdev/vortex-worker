@@ -7,6 +7,7 @@
 
 import { createPlugin } from "@extism/extism";
 
+import { stateStore } from "../state/store";
 import {
   PluginFunctionNotFoundError,
   PluginInputValidationError,
@@ -15,7 +16,6 @@ import {
 } from "./interface";
 
 import type { CallContext, Plugin as ExtismPlugin } from "@extism/extism";
-import { stateStore } from "../state/store";
 import type { LoadedPlugin, PluginHost } from "./interface";
 import type {
   PluginCallResult,

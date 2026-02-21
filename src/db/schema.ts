@@ -229,20 +229,17 @@ export type NewWorkflowStepLog = typeof workflowStepLogTable.$inferInsert;
 /**
  * Event log table - mirrored from vortex-api for logging incoming events.
  */
-export const eventLogTable = pgTable(
-  "event_log",
-  {
-    id: uuid().primaryKey().defaultRandom(),
-    type: text().notNull(),
-    source: text().notNull(),
-    subject: text(),
-    organizationId: text("organization_id").notNull(),
-    data: jsonb().notNull().default({}),
-    correlationId: text("correlation_id"),
-    schemaId: text("schema_id"),
-    timestamp: text().notNull(),
-    recordedAt: timestamp("recorded_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-);
+export const eventLogTable = pgTable("event_log", {
+  id: uuid().primaryKey().defaultRandom(),
+  type: text().notNull(),
+  source: text().notNull(),
+  subject: text(),
+  organizationId: text("organization_id").notNull(),
+  data: jsonb().notNull().default({}),
+  correlationId: text("correlation_id"),
+  schemaId: text("schema_id"),
+  timestamp: text().notNull(),
+  recordedAt: timestamp("recorded_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
