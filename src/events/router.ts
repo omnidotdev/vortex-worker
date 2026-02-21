@@ -13,6 +13,7 @@ import {
   workflowTable,
 } from "db/schema";
 import { and, desc, eq } from "drizzle-orm";
+import { JSONPath } from "jsonpath-plus";
 
 import logger from "lib/logger";
 
@@ -35,6 +36,27 @@ const matchGlobPattern = (pattern: string, value: string): boolean => {
 
   const regex = new RegExp(`^${regexPattern}$`);
   return regex.test(value);
+};
+
+/**
+ * Evaluate a JSONPath condition against event data.
+ *
+ * Returns `true` when `condition` is null (no filter) or when the
+ * JSONPath expression returns a non-empty result set. Returns `false`
+ * when the path matches nothing or on evaluation error.
+ */
+export const evaluateCondition = (
+  condition: string | null,
+  data: Record<string, unknown>,
+): boolean => {
+  if (!condition) return true;
+
+  try {
+    const result = JSONPath({ path: condition, json: data, wrap: true });
+    return Array.isArray(result) && result.length > 0;
+  } catch {
+    return false;
+  }
 };
 
 /**
@@ -68,6 +90,9 @@ async function routeEvent(event: OmniEvent): Promise<void> {
     ) {
       return false;
     }
+
+    // If the rule specifies a JSONPath condition, it must evaluate to a match
+    if (!evaluateCondition(rule.condition, event.data)) return false;
 
     return true;
   });
