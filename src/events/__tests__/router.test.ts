@@ -1,5 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
+import { cacheClient } from "lib/cache/client";
+
 import { applyTransform, evaluateCondition, isDuplicate } from "../router";
 
 describe("evaluateCondition", () => {
@@ -47,7 +49,9 @@ describe("isDuplicate", () => {
   });
 
   it("returns false when correlationId is undefined (no dedup key)", async () => {
-    expect(await isDuplicate(null, "org1", undefined)).toBe(false);
+    // Pass a non-null mock so the correlationId guard is what triggers early return
+    const mockCache = {} as typeof cacheClient;
+    expect(await isDuplicate(mockCache, "org1", undefined)).toBe(false);
   });
 });
 
