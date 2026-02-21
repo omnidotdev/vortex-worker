@@ -16,6 +16,7 @@ import { and, desc, eq } from "drizzle-orm";
 import jsonata from "jsonata";
 import { JSONPath } from "jsonpath-plus";
 
+import { cacheClient } from "lib/cache/client";
 import logger from "lib/logger";
 
 import type { OmniEvent } from "./types";
@@ -82,9 +83,12 @@ export const applyTransform = async (
     const result = await expr.evaluate(data);
 
     if (result === undefined) {
-      logger.warn("Transform returned undefined, falling back to original data", {
-        transform,
-      });
+      logger.warn(
+        "Transform returned undefined, falling back to original data",
+        {
+          transform,
+        },
+      );
       return data;
     }
 
@@ -96,6 +100,28 @@ export const applyTransform = async (
     });
     return data;
   }
+};
+
+/**
+ * Check and mark an event as seen for idempotency.
+ *
+ * Uses Redis SET NX to atomically check-and-set a deduplication key
+ * keyed on `correlationId`. Returns `true` if this `correlationId` has
+ * been seen before within the 24-hour TTL (skip routing). Returns `false`
+ * if it is new (proceed), or when Redis is unavailable or `correlationId`
+ * is absent.
+ */
+export const isDuplicate = async (
+  cache: typeof cacheClient,
+  organizationId: string,
+  correlationId: string | undefined,
+): Promise<boolean> => {
+  if (!cache || !correlationId) return false;
+
+  const key = `dedup:${organizationId}:${correlationId}`;
+  // SET NX: returns "OK" on first write, null if key already existed
+  const result = await cache.set(key, "1", "EX", 86400, "NX");
+  return result === null; // null = already existed = duplicate
 };
 
 /**
@@ -145,6 +171,15 @@ async function routeEvent(event: OmniEvent): Promise<void> {
     return;
   }
 
+  // Skip if this correlationId has already been routed (idempotency)
+  if (await isDuplicate(cacheClient, event.organizationId, event.correlationId)) {
+    logger.debug("Skipping duplicate event (already routed)", {
+      eventId: event.id,
+      correlationId: event.correlationId,
+    });
+    return;
+  }
+
   for (const rule of matchingRules) {
     const rawTransformed = await applyTransform(rule.transform, event.data);
 
@@ -157,11 +192,16 @@ async function routeEvent(event: OmniEvent): Promise<void> {
       transformedData = rawTransformed as Record<string, unknown>;
     } else if (rawTransformed !== event.data) {
       // Transform returned a non-object (scalar or array) — fall back
-      logger.warn("Transform returned non-object result, using original event data", {
-        workflowId: rule.workflowId,
-        transform: rule.transform,
-        resultType: Array.isArray(rawTransformed) ? "array" : typeof rawTransformed,
-      });
+      logger.warn(
+        "Transform returned non-object result, using original event data",
+        {
+          workflowId: rule.workflowId,
+          transform: rule.transform,
+          resultType: Array.isArray(rawTransformed)
+            ? "array"
+            : typeof rawTransformed,
+        },
+      );
       transformedData = event.data;
     } else {
       transformedData = event.data;

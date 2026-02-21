@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { applyTransform, evaluateCondition } from "../router";
+import { applyTransform, evaluateCondition, isDuplicate } from "../router";
 
 describe("evaluateCondition", () => {
   it("returns true when condition is null (no filter)", () => {
@@ -38,6 +38,16 @@ describe("evaluateCondition", () => {
   it("returns true when condition is an empty string (not a valid path, treated as invalid)", () => {
     // Empty string is not null — it goes through JSONPath evaluation and returns false
     expect(evaluateCondition("", {})).toBe(false);
+  });
+});
+
+describe("isDuplicate", () => {
+  it("returns false when cache is null (no Redis configured)", async () => {
+    expect(await isDuplicate(null, "org1", "corr1")).toBe(false);
+  });
+
+  it("returns false when correlationId is undefined (no dedup key)", async () => {
+    expect(await isDuplicate(null, "org1", undefined)).toBe(false);
   });
 });
 
