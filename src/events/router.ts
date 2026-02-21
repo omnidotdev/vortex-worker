@@ -49,12 +49,17 @@ export const evaluateCondition = (
   condition: string | null,
   data: Record<string, unknown>,
 ): boolean => {
-  if (!condition) return true;
+  if (condition === null) return true;
 
   try {
+    // `wrap: true` ensures the result is always an array, even for scalar matches
     const result = JSONPath({ path: condition, json: data, wrap: true });
     return Array.isArray(result) && result.length > 0;
-  } catch {
+  } catch (err) {
+    logger.warn("Failed to evaluate routing rule condition", {
+      condition,
+      error: err instanceof Error ? err.message : String(err),
+    });
     return false;
   }
 };
