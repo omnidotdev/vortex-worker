@@ -13,6 +13,7 @@ import {
   workflowTable,
 } from "db/schema";
 import { and, desc, eq } from "drizzle-orm";
+import type Redis from "ioredis";
 import jsonata from "jsonata";
 import { JSONPath } from "jsonpath-plus";
 
@@ -102,6 +103,9 @@ export const applyTransform = async (
   }
 };
 
+/** Deduplication window for correlationId-based idempotency (24 hours). */
+const DEDUP_TTL_SECONDS = 86_400;
+
 /**
  * Check and mark an event as seen for idempotency.
  *
@@ -109,19 +113,34 @@ export const applyTransform = async (
  * keyed on `correlationId`. Returns `true` if this `correlationId` has
  * been seen before within the 24-hour TTL (skip routing). Returns `false`
  * if it is new (proceed), or when Redis is unavailable or `correlationId`
- * is absent.
+ * is absent (fail open).
+ *
+ * Note: the dedup key is written before the workflow run is persisted.
+ * In the event of a crash between the SET NX and a successful DB insert,
+ * the event will be treated as a duplicate for up to 24 hours. This is an
+ * accepted trade-off for simplicity; operators can clear the Redis key
+ * manually to force re-processing.
  */
 export const isDuplicate = async (
-  cache: typeof cacheClient,
+  cache: Redis | null,
   organizationId: string,
   correlationId: string | undefined,
 ): Promise<boolean> => {
   if (!cache || !correlationId) return false;
 
-  const key = `dedup:${organizationId}:${correlationId}`;
-  // SET NX: returns "OK" on first write, null if key already existed
-  const result = await cache.set(key, "1", "EX", 86400, "NX");
-  return result === null; // null = already existed = duplicate
+  try {
+    const key = `dedup:${organizationId}:${correlationId}`;
+    // SET NX: returns "OK" on first write, null if key already existed
+    const result = await cache.set(key, "1", "EX", DEDUP_TTL_SECONDS, "NX");
+    return result === null; // null = already existed = duplicate
+  } catch (err) {
+    logger.warn("Dedup check failed, proceeding without deduplication", {
+      organizationId,
+      correlationId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return false;
+  }
 };
 
 /**
@@ -172,8 +191,10 @@ async function routeEvent(event: OmniEvent): Promise<void> {
   }
 
   // Skip if this correlationId has already been routed (idempotency)
-  if (await isDuplicate(cacheClient, event.organizationId, event.correlationId)) {
-    logger.debug("Skipping duplicate event (already routed)", {
+  if (
+    await isDuplicate(cacheClient, event.organizationId, event.correlationId)
+  ) {
+    logger.info("Skipping duplicate event (already routed)", {
       eventId: event.id,
       correlationId: event.correlationId,
     });

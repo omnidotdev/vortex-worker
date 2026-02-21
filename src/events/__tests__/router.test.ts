@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { cacheClient } from "lib/cache/client";
+import type Redis from "ioredis";
 
 import { applyTransform, evaluateCondition, isDuplicate } from "../router";
 
@@ -50,8 +50,31 @@ describe("isDuplicate", () => {
 
   it("returns false when correlationId is undefined (no dedup key)", async () => {
     // Pass a non-null mock so the correlationId guard is what triggers early return
-    const mockCache = {} as typeof cacheClient;
+    const mockCache = {} as Redis | null;
     expect(await isDuplicate(mockCache, "org1", undefined)).toBe(false);
+  });
+
+  it("returns false when event is new (first delivery)", async () => {
+    const mockCache = {
+      set: async () => "OK",
+    } as unknown as Redis | null;
+    expect(await isDuplicate(mockCache, "org1", "corr1")).toBe(false);
+  });
+
+  it("returns true when event is a duplicate (already seen)", async () => {
+    const mockCache = {
+      set: async () => null,
+    } as unknown as Redis | null;
+    expect(await isDuplicate(mockCache, "org1", "corr1")).toBe(true);
+  });
+
+  it("returns false when Redis throws (fail open)", async () => {
+    const mockCache = {
+      set: async () => {
+        throw new Error("READONLY");
+      },
+    } as unknown as Redis | null;
+    expect(await isDuplicate(mockCache, "org1", "corr1")).toBe(false);
   });
 });
 
