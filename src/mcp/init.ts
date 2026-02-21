@@ -31,7 +31,8 @@ export async function initializeMCPServers(): Promise<void> {
         const config: MCPServerConfig = {
           id: server.id,
           name: server.name,
-          transport: (server.transport as MCPServerConfig["transport"]) ?? "stdio",
+          transport:
+            (server.transport as MCPServerConfig["transport"]) ?? "stdio",
           command: server.command ?? undefined,
           args: server.args as string[],
           env: server.env as Record<string, string>,
@@ -53,6 +54,13 @@ export async function initializeMCPServers(): Promise<void> {
     const failed = connectionResults.filter((r) => r.status === "rejected");
 
     if (successful.length > 0) {
+      const servers = successful
+        .filter(
+          (r): r is PromiseFulfilledResult<{ id: string; name: string }> =>
+            r.status === "fulfilled",
+        )
+        .map((r) => r.value);
+      logger.info("MCP servers connected", { count: successful.length, servers });
     }
 
     if (failed.length > 0) {
