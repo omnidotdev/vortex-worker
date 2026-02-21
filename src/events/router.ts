@@ -13,6 +13,7 @@ import {
   workflowTable,
 } from "db/schema";
 import { and, desc, eq } from "drizzle-orm";
+import jsonata from "jsonata";
 import { JSONPath } from "jsonpath-plus";
 
 import logger from "lib/logger";
@@ -65,6 +66,31 @@ export const evaluateCondition = (
 };
 
 /**
+ * Apply a JSONata expression to transform event data.
+ *
+ * Returns transformed result on success. On evaluation error or when
+ * `transform` is null, returns the original data unchanged.
+ */
+export const applyTransform = async (
+  transform: string | null,
+  data: Record<string, unknown>,
+): Promise<unknown> => {
+  if (transform === null) return data;
+
+  try {
+    const expr = jsonata(transform);
+    const result = await expr.evaluate(data);
+    return result ?? data;
+  } catch (err) {
+    logger.warn("Failed to apply routing rule transform", {
+      transform,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return data;
+  }
+};
+
+/**
  * Route an incoming event to matching workflows.
  *
  * Queries enabled routing rules for the event's organization, filters
@@ -112,6 +138,11 @@ async function routeEvent(event: OmniEvent): Promise<void> {
   }
 
   for (const rule of matchingRules) {
+    const transformedData = (await applyTransform(
+      rule.transform,
+      event.data,
+    )) as Record<string, unknown>;
+
     const workflow = await db.query.workflowTable.findFirst({
       where: and(
         eq(workflowTable.id, rule.workflowId),
@@ -138,7 +169,7 @@ async function routeEvent(event: OmniEvent): Promise<void> {
               type: event.type,
               subject: event.subject,
               source: event.source,
-              data: event.data,
+              data: transformedData,
               correlationId: event.correlationId,
               timestamp: event.timestamp,
             },
@@ -156,7 +187,7 @@ async function routeEvent(event: OmniEvent): Promise<void> {
             type: event.type,
             subject: event.subject,
             source: event.source,
-            data: event.data,
+            data: transformedData,
             correlationId: event.correlationId,
             timestamp: event.timestamp,
           },

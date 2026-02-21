@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { evaluateCondition } from "../router";
+import { applyTransform, evaluateCondition } from "../router";
 
 describe("evaluateCondition", () => {
   it("returns true when condition is null (no filter)", () => {
@@ -38,5 +38,29 @@ describe("evaluateCondition", () => {
   it("returns true when condition is an empty string (not a valid path, treated as invalid)", () => {
     // Empty string is not null — it goes through JSONPath evaluation and returns false
     expect(evaluateCondition("", {})).toBe(false);
+  });
+});
+
+describe("applyTransform", () => {
+  it("returns original data when transform is null", async () => {
+    const data = { count: 5 };
+    expect(await applyTransform(null, data)).toEqual(data);
+  });
+
+  it("transforms data with a JSONata expression", async () => {
+    const data = { count: 5, price: 10 };
+    const result = await applyTransform("{ 'total': count * price }", data);
+    expect(result).toEqual({ total: 50 });
+  });
+
+  it("extracts a field with JSONata", async () => {
+    const data = { user: { id: "u1", name: "Alice" } };
+    const result = await applyTransform("user.id", data);
+    expect(result).toBe("u1");
+  });
+
+  it("returns original data on invalid expression (safe fallback)", async () => {
+    const data = { count: 5 };
+    expect(await applyTransform("!!!invalid$$$", data)).toEqual(data);
   });
 });
