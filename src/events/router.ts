@@ -80,7 +80,15 @@ export const applyTransform = async (
   try {
     const expr = jsonata(transform);
     const result = await expr.evaluate(data);
-    return result ?? data;
+
+    if (result === undefined) {
+      logger.warn("Transform returned undefined, falling back to original data", {
+        transform,
+      });
+      return data;
+    }
+
+    return result;
   } catch (err) {
     logger.warn("Failed to apply routing rule transform", {
       transform,
@@ -138,10 +146,26 @@ async function routeEvent(event: OmniEvent): Promise<void> {
   }
 
   for (const rule of matchingRules) {
-    const transformedData = (await applyTransform(
-      rule.transform,
-      event.data,
-    )) as Record<string, unknown>;
+    const rawTransformed = await applyTransform(rule.transform, event.data);
+
+    let transformedData: Record<string, unknown>;
+    if (
+      rawTransformed !== null &&
+      typeof rawTransformed === "object" &&
+      !Array.isArray(rawTransformed)
+    ) {
+      transformedData = rawTransformed as Record<string, unknown>;
+    } else if (rawTransformed !== event.data) {
+      // Transform returned a non-object (scalar or array) — fall back
+      logger.warn("Transform returned non-object result, using original event data", {
+        workflowId: rule.workflowId,
+        transform: rule.transform,
+        resultType: Array.isArray(rawTransformed) ? "array" : typeof rawTransformed,
+      });
+      transformedData = event.data;
+    } else {
+      transformedData = event.data;
+    }
 
     const workflow = await db.query.workflowTable.findFirst({
       where: and(
