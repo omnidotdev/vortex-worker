@@ -8,6 +8,7 @@
 import Hatchet from "@hatchet-dev/typescript-sdk";
 import { getDb } from "db";
 import {
+  eventLogTable,
   eventRoutingRuleTable,
   workflowRunTable,
   workflowTable,
@@ -162,6 +163,23 @@ export const isDuplicate = async (
 async function routeEvent(event: OmniEvent): Promise<void> {
   const db = getDb();
   const hatchet = getHatchet();
+
+  // Log this event for audit and replay (best-effort, never blocks routing)
+  db.insert(eventLogTable).values({
+    type: event.type,
+    source: event.source,
+    subject: event.subject,
+    organizationId: event.organizationId,
+    data: event.data,
+    correlationId: event.correlationId,
+    schemaId: event.schemaId,
+    timestamp: event.timestamp,
+  }).catch((err) => {
+    logger.warn("Failed to write event to event_log", {
+      eventId: event.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   // Find enabled routing rules for this organization, highest priority first
   const rules = await db.query.eventRoutingRuleTable.findMany({
