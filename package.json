@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "build": "bun build --target node --outdir build src/index.ts src/instrumentation.ts",
+    "build": "bun build --target node --outdir build --external loader-utils --external @swc/wasm src/index.ts src/instrumentation.ts",
     "start": "bun run --import ./build/instrumentation.js build/index.js",
     "lint": "biome lint",
     "format": "biome format --write",
