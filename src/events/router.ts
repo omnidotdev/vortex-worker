@@ -17,15 +17,17 @@ import {
 import { and, desc, eq } from "drizzle-orm";
 import jsonata from "jsonata";
 import { JSONPath } from "jsonpath-plus";
-
-import { cacheClient } from "lib/cache/client";
-import logger from "lib/logger";
 import {
   endSpan,
   extractTraceContext,
   injectTraceContext,
   startRouterSpan,
 } from "tracing/propagation";
+
+import { cacheClient } from "lib/cache/client";
+import logger from "lib/logger";
+
+import { withRetry, writeToDlq } from "./dlq";
 
 import type Redis from "ioredis";
 import type { OmniEvent } from "./types";
@@ -172,131 +174,127 @@ async function routeEvent(event: OmniEvent): Promise<void> {
   const routerSpan = startRouterSpan(event.type, event.source, parentCtx);
 
   try {
-    await context.with(
-      trace.setSpan(parentCtx, routerSpan),
-      async () => {
-        const db = getDb();
-        const hatchet = getHatchet();
+    await context.with(trace.setSpan(parentCtx, routerSpan), async () => {
+      const db = getDb();
+      const hatchet = getHatchet();
 
-        // Log this event for audit and replay (best-effort, never blocks routing)
-        db.insert(eventLogTable)
-          .values({
-            type: event.type,
-            source: event.source,
-            subject: event.subject,
-            organizationId: event.organizationId,
-            data: event.data,
-            correlationId: event.correlationId,
-            schemaId: event.schemaId,
-            timestamp: event.timestamp,
-          })
-          .catch((err) => {
-            logger.warn("Failed to write event to event_log", {
-              eventId: event.id,
-              error: err instanceof Error ? err.message : String(err),
-            });
-          });
-
-        // Find enabled routing rules for this organization, highest priority first
-        const rules = await db.query.eventRoutingRuleTable.findMany({
-          where: and(
-            eq(eventRoutingRuleTable.organizationId, event.organizationId),
-            eq(eventRoutingRuleTable.enabled, true),
-          ),
-          orderBy: [desc(eventRoutingRuleTable.priority)],
-        });
-
-        // Filter rules whose patterns match this event
-        const matchingRules = rules.filter((rule) => {
-          if (!matchGlobPattern(rule.typePattern, event.type)) return false;
-
-          // If the rule specifies a source pattern, it must also match
-          if (
-            rule.sourcePattern &&
-            !matchGlobPattern(rule.sourcePattern, event.source)
-          ) {
-            return false;
-          }
-
-          // If the rule specifies a JSONPath condition, it must evaluate to a match
-          if (!evaluateCondition(rule.condition, event.data)) return false;
-
-          return true;
-        });
-
-        routerSpan.setAttribute(
-          "vortex.routing.matched_rules",
-          matchingRules.length,
-        );
-
-        if (matchingRules.length === 0) {
-          logger.debug("No routing rules matched", {
+      // Log this event for audit and replay (best-effort, never blocks routing)
+      db.insert(eventLogTable)
+        .values({
+          type: event.type,
+          source: event.source,
+          subject: event.subject,
+          organizationId: event.organizationId,
+          data: event.data,
+          correlationId: event.correlationId,
+          schemaId: event.schemaId,
+          timestamp: event.timestamp,
+        })
+        .catch((err) => {
+          logger.warn("Failed to write event to event_log", {
             eventId: event.id,
-            type: event.type,
-            organizationId: event.organizationId,
+            error: err instanceof Error ? err.message : String(err),
           });
-          return;
-        }
+        });
 
-        // Skip if this correlationId has already been routed (idempotency)
+      // Find enabled routing rules for this organization, highest priority first
+      const rules = await db.query.eventRoutingRuleTable.findMany({
+        where: and(
+          eq(eventRoutingRuleTable.organizationId, event.organizationId),
+          eq(eventRoutingRuleTable.enabled, true),
+        ),
+        orderBy: [desc(eventRoutingRuleTable.priority)],
+      });
+
+      // Filter rules whose patterns match this event
+      const matchingRules = rules.filter((rule) => {
+        if (!matchGlobPattern(rule.typePattern, event.type)) return false;
+
+        // If the rule specifies a source pattern, it must also match
         if (
-          await isDuplicate(
-            cacheClient,
-            event.organizationId,
-            event.correlationId,
-          )
+          rule.sourcePattern &&
+          !matchGlobPattern(rule.sourcePattern, event.source)
         ) {
-          logger.info("Skipping duplicate event (already routed)", {
-            eventId: event.id,
-            correlationId: event.correlationId,
-            matchedRuleCount: matchingRules.length,
-          });
-          return;
+          return false;
         }
 
-        for (const rule of matchingRules) {
-          const rawTransformed = await applyTransform(
-            rule.transform,
-            event.data,
-          );
+        // If the rule specifies a JSONPath condition, it must evaluate to a match
+        if (!evaluateCondition(rule.condition, event.data)) return false;
 
-          let transformedData: Record<string, unknown>;
-          if (
-            rawTransformed !== null &&
-            typeof rawTransformed === "object" &&
-            !Array.isArray(rawTransformed)
-          ) {
-            transformedData = rawTransformed as Record<string, unknown>;
-          } else {
-            if (rawTransformed !== event.data) {
-              logger.warn(
-                "Transform returned non-object result, using original event data",
-                {
-                  workflowId: rule.workflowId,
-                  transform: rule.transform,
-                  resultType: Array.isArray(rawTransformed)
-                    ? "array"
-                    : typeof rawTransformed,
-                },
-              );
-            }
-            transformedData = event.data;
+        return true;
+      });
+
+      routerSpan.setAttribute(
+        "vortex.routing.matched_rules",
+        matchingRules.length,
+      );
+
+      if (matchingRules.length === 0) {
+        logger.debug("No routing rules matched", {
+          eventId: event.id,
+          type: event.type,
+          organizationId: event.organizationId,
+        });
+        return;
+      }
+
+      // Skip if this correlationId has already been routed (idempotency)
+      if (
+        await isDuplicate(
+          cacheClient,
+          event.organizationId,
+          event.correlationId,
+        )
+      ) {
+        logger.info("Skipping duplicate event (already routed)", {
+          eventId: event.id,
+          correlationId: event.correlationId,
+          matchedRuleCount: matchingRules.length,
+        });
+        return;
+      }
+
+      for (const rule of matchingRules) {
+        const rawTransformed = await applyTransform(rule.transform, event.data);
+
+        let transformedData: Record<string, unknown>;
+        if (
+          rawTransformed !== null &&
+          typeof rawTransformed === "object" &&
+          !Array.isArray(rawTransformed)
+        ) {
+          transformedData = rawTransformed as Record<string, unknown>;
+        } else {
+          if (rawTransformed !== event.data) {
+            logger.warn(
+              "Transform returned non-object result, using original event data",
+              {
+                workflowId: rule.workflowId,
+                transform: rule.transform,
+                resultType: Array.isArray(rawTransformed)
+                  ? "array"
+                  : typeof rawTransformed,
+              },
+            );
           }
+          transformedData = event.data;
+        }
 
-          const workflow = await db.query.workflowTable.findFirst({
-            where: and(
-              eq(workflowTable.id, rule.workflowId),
-              eq(workflowTable.isActive, true),
-            ),
-          });
+        const workflow = await db.query.workflowTable.findFirst({
+          where: and(
+            eq(workflowTable.id, rule.workflowId),
+            eq(workflowTable.isActive, true),
+          ),
+        });
 
-          if (!workflow) continue;
+        if (!workflow) continue;
 
-          try {
+        try {
+          const run = await withRetry(async () => {
             const engineWorkflowId = `event-${workflow.id}-${Date.now()}`;
             const engineRunId = `run-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-            const [run] = await db
+            const [inserted] = await db
               .insert(workflowRunTable)
               .values({
                 workflowId: workflow.id,
@@ -322,7 +320,7 @@ async function routeEvent(event: OmniEvent): Promise<void> {
 
             await hatchet.event.push("workflow:execute", {
               workflowId: engineWorkflowId,
-              runId: run.id,
+              runId: inserted.id,
               organizationId: event.organizationId,
               traceContext: traceCtx,
               triggerData: {
@@ -343,24 +341,28 @@ async function routeEvent(event: OmniEvent): Promise<void> {
             await db
               .update(workflowRunTable)
               .set({ status: "running" })
-              .where(eq(workflowRunTable.id, run.id));
+              .where(eq(workflowRunTable.id, inserted.id));
 
-            logger.info("Routed event to workflow", {
-              eventId: event.id,
-              type: event.type,
-              workflowId: workflow.id,
-              runId: run.id,
-            });
-          } catch (err) {
-            logger.error("Failed to route event to workflow", {
-              eventId: event.id,
-              workflowId: workflow.id,
-              error: err instanceof Error ? err.message : String(err),
-            });
-          }
+            return inserted;
+          });
+
+          logger.info("Routed event to workflow", {
+            eventId: event.id,
+            type: event.type,
+            workflowId: workflow.id,
+            runId: run.id,
+          });
+        } catch (err) {
+          logger.error("Failed to route event after retries", {
+            eventId: event.id,
+            workflowId: workflow.id,
+            error: err instanceof Error ? err.message : String(err),
+          });
+
+          await writeToDlq(event, rule.id, err, "DISPATCH_ERROR", 3);
         }
-      },
-    );
+      }
+    });
 
     endSpan(routerSpan);
   } catch (err) {

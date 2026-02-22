@@ -304,3 +304,37 @@ export const pluginUsageTable = pgTable(
 
 export type PluginUsage = typeof pluginUsageTable.$inferSelect;
 export type NewPluginUsage = typeof pluginUsageTable.$inferInsert;
+
+/**
+ * Dead letter event table - stores failed routing events for retry/debugging.
+ * Mirrored from vortex-api for DLQ writes in the worker.
+ */
+export const deadLetterEventTable = pgTable(
+  "dead_letter_event",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    originalEventId: text("original_event_id").notNull(),
+    eventType: text("event_type").notNull(),
+    eventSource: text("event_source").notNull(),
+    eventData: jsonb("event_data").notNull(),
+    error: text().notNull(),
+    errorCode: text("error_code").notNull(),
+    routingRuleId: uuid("routing_rule_id")
+      .notNull()
+      .references(() => eventRoutingRuleTable.id, { onDelete: "cascade" }),
+    attempts: integer().notNull().default(1),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    organizationId: text("organization_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("dead_letter_event_org_idx").on(table.organizationId),
+    index("dead_letter_event_resolved_idx").on(table.resolvedAt),
+    index("dead_letter_event_type_idx").on(table.eventType),
+  ],
+);
+
+export type DeadLetterEvent = typeof deadLetterEventTable.$inferSelect;

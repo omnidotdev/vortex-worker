@@ -1,16 +1,119 @@
 /**
- * DLQ reader for inspecting and managing failed events.
+ * DLQ reader and retry utilities for event routing.
  *
- * Provides functions to list, inspect, replay, and discard dead-letter
- * queue events. Connects to Iggy using the same client patterns as
- * the main consumer.
+ * Provides:
+ * - `withRetry` — retry with exponential backoff
+ * - `writeToDlq` — persist failed events to Postgres dead_letter_event table
+ * - Iggy-backed DLQ inspection and management (list, stats, replay, discard)
  */
 
 import { Client, Partitioning } from "@iggy.rs/sdk";
+import { getDb } from "db";
+import { deadLetterEventTable } from "db/schema";
 
 import logger from "lib/logger";
 
-import type { DlqEvent, EventsConfig } from "./types";
+import type { DlqEvent, EventsConfig, OmniEvent } from "./types";
+
+// -- Retry + Postgres DLQ writer --
+
+type RetryConfig = {
+  /** Maximum number of attempts (including the first). */
+  maxAttempts: number;
+  /** Base delay in milliseconds; scaled by 4^(attempt-1). */
+  baseDelayMs: number;
+};
+
+const DEFAULT_RETRY_CONFIG: RetryConfig = {
+  maxAttempts: 3,
+  baseDelayMs: 1_000,
+};
+
+type DlqErrorCode =
+  | "ROUTING_ERROR"
+  | "TRANSFORM_ERROR"
+  | "SCHEMA_VALIDATION_ERROR"
+  | "DISPATCH_ERROR";
+
+/**
+ * Retry a function with exponential backoff.
+ *
+ * Delays between attempts follow `baseDelayMs * 4^(attempt-1)`:
+ * 1s, 4s, 16s (with default config).
+ * @param fn - Async function to retry
+ * @param config - Retry configuration (maxAttempts, baseDelayMs)
+ * @returns Result of the function on success
+ * @throws Last error after all attempts are exhausted
+ */
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  config?: Partial<RetryConfig>,
+): Promise<T> {
+  const { maxAttempts, baseDelayMs } = { ...DEFAULT_RETRY_CONFIG, ...config };
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+
+      if (attempt < maxAttempts) {
+        const delay = baseDelayMs * 4 ** (attempt - 1);
+        await Bun.sleep(delay);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Write a failed event to the Postgres dead_letter_event table.
+ *
+ * Wrapped in try/catch so DLQ write failures never crash the consumer loop.
+ * @param event - Original event that failed to route
+ * @param routingRuleId - ID of the routing rule that matched
+ * @param error - Error that caused the failure
+ * @param errorCode - Classification of the failure
+ * @param attempts - Number of retry attempts made
+ */
+async function writeToDlq(
+  event: OmniEvent,
+  routingRuleId: string,
+  error: unknown,
+  errorCode: DlqErrorCode,
+  attempts: number,
+): Promise<void> {
+  try {
+    const db = getDb();
+
+    await db.insert(deadLetterEventTable).values({
+      originalEventId: event.id,
+      eventType: event.type,
+      eventSource: event.source,
+      eventData: event.data,
+      error: error instanceof Error ? error.message : String(error),
+      errorCode,
+      routingRuleId,
+      attempts,
+      lastAttemptAt: new Date(),
+      organizationId: event.organizationId,
+    });
+
+    logger.info("Event written to dead-letter table", {
+      eventId: event.id,
+      errorCode,
+      routingRuleId,
+      attempts,
+    });
+  } catch (dlqErr) {
+    logger.error("Failed to write to dead-letter table", {
+      eventId: event.id,
+      error: dlqErr instanceof Error ? dlqErr.message : String(dlqErr),
+    });
+  }
+}
 
 const STREAM_ID = 1;
 const DLQ_CONSUMER_GROUP = "vortex-dlq-reader";
@@ -368,6 +471,13 @@ async function discardDlqEvent(
   }
 }
 
-export { discardDlqEvent, getDlqStats, listDlqEvents, replayDlqEvent };
+export {
+  discardDlqEvent,
+  getDlqStats,
+  listDlqEvents,
+  replayDlqEvent,
+  withRetry,
+  writeToDlq,
+};
 
-export type { DlqQuery, DlqStats };
+export type { DlqErrorCode, DlqQuery, DlqStats, RetryConfig };
