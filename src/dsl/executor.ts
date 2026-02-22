@@ -1010,8 +1010,8 @@ async function executeStepInternal(
     .with({ type: "time_window" }, (s) => executeTimeWindow(s, ctx))
     .with({ type: "ai_transform" }, (s) => executeAiTransform(s, ctx))
     .with({ type: "ai_guardrails" }, (s) => executeAiGuardrails(s, ctx))
-    // Event batching/windowing
-    .with({ type: "window" }, async (windowStep) => {
+    // TODO: implement sliding/session window logic, groupBy, and emit strategy
+    .with({ type: "window" }, async (windowStep: WindowStep) => {
       const events = ctx.variables.events ?? [];
       let filtered = Array.isArray(events) ? events : [events];
 
