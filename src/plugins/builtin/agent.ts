@@ -192,7 +192,9 @@ const executeAgent = async (
         MEMORY_KEY(context.organizationId, conversationId),
       );
       // Take the last MAX_MEMORY_MESSAGES messages to avoid context overflow
-      conversationHistory = stored.slice(-MAX_MEMORY_MESSAGES) as OpenAIMessage[];
+      conversationHistory = stored.slice(
+        -MAX_MEMORY_MESSAGES,
+      ) as OpenAIMessage[];
     }
 
     const messages: OpenAIMessage[] = [
@@ -246,7 +248,11 @@ const executeAgent = async (
       };
       messages.push(assistantMessage);
 
-      const iterationSteps: Array<{ tool: string; args: unknown; result: unknown }> = [];
+      const iterationSteps: Array<{
+        tool: string;
+        args: unknown;
+        result: unknown;
+      }> = [];
       const toolResultMessages: OpenAIMessage[] = [];
 
       // Execute each tool call and feed results back
@@ -292,7 +298,10 @@ const executeAgent = async (
 
       // Persist assistant message + tool results to Redis memory
       if (conversationId && context?.organizationId) {
-        const messagesToAppend: OpenAIMessage[] = [assistantMessage, ...toolResultMessages];
+        const messagesToAppend: OpenAIMessage[] = [
+          assistantMessage,
+          ...toolResultMessages,
+        ];
         for (const msg of messagesToAppend) {
           await stateStore.append(
             context.organizationId,

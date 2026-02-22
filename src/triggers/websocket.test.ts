@@ -1,12 +1,14 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 
 // Mock WebSocket global
 const mockWs = {
-  addEventListener: mock((event: string, handler: (...args: unknown[]) => void) => {
-    if (event === "open") {
-      setTimeout(() => handler({}), 0);
-    }
-  }),
+  addEventListener: mock(
+    (event: string, handler: (...args: unknown[]) => void) => {
+      if (event === "open") {
+        setTimeout(() => handler({}), 0);
+      }
+    },
+  ),
   send: mock(() => {}),
   close: mock(() => {}),
   readyState: 1, // OPEN
@@ -25,7 +27,9 @@ mock.module("db", () => ({
       },
     },
     insert: mock(() => ({
-      values: () => ({ returning: async () => [{ id: "run-1", engineWorkflowId: "eng-1" }] }),
+      values: () => ({
+        returning: async () => [{ id: "run-1", engineWorkflowId: "eng-1" }],
+      }),
     })),
     update: mock(() => ({
       set: () => ({ where: async () => [] }),
@@ -178,7 +182,11 @@ describe("WebSocket trigger runner", () => {
                 type: "trigger",
                 trigger: {
                   type: "kafka",
-                  config: { brokers: ["localhost:9092"], topic: "events", groupId: "g1" },
+                  config: {
+                    brokers: ["localhost:9092"],
+                    topic: "events",
+                    groupId: "g1",
+                  },
                 },
               },
             ],

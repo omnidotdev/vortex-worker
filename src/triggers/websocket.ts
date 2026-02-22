@@ -42,7 +42,9 @@ type WebSocketTriggerConfig = {
   maxReconnectAttempts?: number;
 };
 
-function extractWebSocketConfig(definition: unknown): WebSocketTriggerConfig | null {
+function extractWebSocketConfig(
+  definition: unknown,
+): WebSocketTriggerConfig | null {
   const def = definition as {
     steps?: Array<{
       type: string;

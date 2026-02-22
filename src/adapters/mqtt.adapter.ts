@@ -1,6 +1,6 @@
 import mqtt from "mqtt";
-import type { MqttClient } from "mqtt";
 
+import type { MqttClient } from "mqtt";
 import type { EventAdapter, NormalizedEvent } from "./types";
 
 export class MqttAdapter implements EventAdapter {

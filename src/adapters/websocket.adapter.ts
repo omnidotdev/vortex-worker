@@ -21,7 +21,9 @@ export class WebSocketAdapter implements EventAdapter {
   private running = false;
   private reconnectAttempts = 0;
 
-  #config: Required<Omit<WebSocketAdapterConfig, "authHeaders" | "initMessage">> & {
+  #config: Required<
+    Omit<WebSocketAdapterConfig, "authHeaders" | "initMessage">
+  > & {
     authHeaders?: Record<string, string>;
     initMessage?: unknown;
   };
@@ -106,7 +108,10 @@ export class WebSocketAdapter implements EventAdapter {
         this.ws.addEventListener("close", () => {
           this.#clearHeartbeat();
 
-          if (this.running && this.reconnectAttempts < this.#config.maxReconnectAttempts) {
+          if (
+            this.running &&
+            this.reconnectAttempts < this.#config.maxReconnectAttempts
+          ) {
             this.reconnectAttempts++;
             this.reconnectTimer = setTimeout(() => {
               this.#connect().catch(() => {});

@@ -18,6 +18,9 @@ const result = await Bun.build({
 	entrypoints: ["src/index.ts", "src/instrumentation.ts"],
 	outdir: "build",
 	target: "node",
+	// Prevent bundler from inlining process.env values at build time;
+	// env vars must be read at runtime
+	env: "disable",
 	external,
 });
 

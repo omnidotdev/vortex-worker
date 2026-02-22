@@ -27,11 +27,8 @@ import {
   startKafkaTriggerRunner,
   stopKafkaTriggerRunner,
 } from "./triggers/kafka";
+import { startMqttTriggerRunner, stopMqttTriggerRunner } from "./triggers/mqtt";
 import { startSqsTriggerRunner, stopSqsTriggerRunner } from "./triggers/sqs";
-import {
-  startMqttTriggerRunner,
-  stopMqttTriggerRunner,
-} from "./triggers/mqtt";
 import {
   startWebSocketTriggerRunner,
   stopWebSocketTriggerRunner,
