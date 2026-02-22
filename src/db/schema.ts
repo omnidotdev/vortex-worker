@@ -137,6 +137,7 @@ export const eventRoutingRuleTable = pgTable(
     sourcePattern: text("source_pattern"),
     typePattern: text("type_pattern").notNull(),
     condition: text(),
+    celCondition: text("cel_condition"),
     transform: text(),
     priority: integer().notNull().default(0),
     enabled: boolean().notNull().default(true),

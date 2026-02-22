@@ -27,6 +27,7 @@ import {
 
 import { cacheClient } from "lib/cache/client";
 import logger from "lib/logger";
+import { evaluateCel } from "./cel-evaluator";
 import { withRetry, writeToDlq } from "./dlq";
 import { validateEventData } from "./schema-validator";
 
@@ -220,7 +221,12 @@ async function routeEvent(event: OmniEvent): Promise<void> {
           return false;
         }
 
-        // If the rule specifies a JSONPath condition, it must evaluate to a match
+        // CEL condition takes precedence over legacy JSONPath condition
+        if (rule.celCondition) {
+          return evaluateCel(rule.celCondition, event);
+        }
+
+        // Fall back to legacy JSONPath condition
         if (!evaluateCondition(rule.condition, event.data)) return false;
 
         return true;
