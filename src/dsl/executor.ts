@@ -28,6 +28,7 @@ import {
 } from "../plugins";
 import { getPluginRegistry } from "../plugins/registry";
 import { stateStore } from "../state";
+import { endSpan, startStepSpan } from "../tracing/propagation";
 
 import type { PluginCallResult } from "../plugins/types";
 import type {
@@ -414,131 +415,145 @@ export async function executeStep(
   step: Step,
   ctx: ExecutionContext,
 ): Promise<{ nextSteps: Step[]; result: unknown }> {
-  const result = await match(step)
-    .with({ type: "trigger" }, (s) => executeTrigger(s, ctx))
-    .with({ type: "action" }, (s) => executeAction(s, ctx))
-    .with({ type: "condition" }, (s) => executeCondition(s, ctx, def))
-    .with({ type: "switch" }, (s) => executeSwitch(s, ctx, def))
-    .with({ type: "delay" }, (s) => executeDelay(s, ctx))
-    .with({ type: "loop" }, (s) => executeLoop(s, ctx, def))
-    .with({ type: "parallel" }, (s) => executeParallel(s, ctx, def))
-    .with({ type: "gate" }, (s) => executeGate(s, ctx))
-    .with({ type: "plugin" }, (s) => executePlugin(s, ctx))
-    .with({ type: "mcp" }, (s) => executeMCP(s, ctx))
-    .with({ type: "llm" }, (s) => executeLLM(s, ctx))
-    .with({ type: "code" }, (s) => executeCode(s, ctx))
-    .with({ type: "database" }, (s) => executeDatabase(s, ctx))
-    .with({ type: "subworkflow" }, (s) => executeSubworkflow(s, ctx))
-    .with({ type: "wait" }, (s) => executeWait(s, ctx))
-    .with({ type: "event" }, (s) => executeEvent(s, ctx))
-    .with({ type: "aggregate" }, (s) => executeAggregate(s, ctx))
-    .with({ type: "cache" }, (s) => executeCache(s, ctx))
-    .with({ type: "merge" }, (s) => executeMerge(s, ctx))
-    .with({ type: "split" }, (s) => executeSplit(s, ctx))
-    .with({ type: "filter" }, (s) => executeFilter(s, ctx))
-    .with({ type: "set" }, (s) => executeSet(s, ctx))
-    .with({ type: "error" }, (s) => executeError(s, ctx))
-    .with({ type: "retry" }, (s) => executeRetry(s, ctx))
-    .with({ type: "timeout" }, (s) => executeTimeout(s, ctx))
-    .with({ type: "email" }, (s) => executeEmail(s, ctx))
-    .with({ type: "webhookResponse" }, (s) => executeWebhookResponse(s, ctx))
-    .with({ type: "file" }, (s) => executeFile(s, ctx))
-    .with({ type: "queue" }, (s) => executeQueue(s, ctx))
-    .with({ type: "embedding" }, (s) => executeEmbedding(s, ctx))
-    .with({ type: "vectorSearch" }, (s) => executeVectorSearch(s, ctx))
-    .with({ type: "log" }, (s) => executeLog(s, ctx))
-    .with({ type: "assert" }, (s) => executeAssert(s, ctx))
-    .with({ type: "sleep" }, (s) => executeSleep(s, ctx))
-    // Additional core nodes - Data Transformation
-    .with({ type: "map" }, (s) => executeMap(s, ctx))
-    .with({ type: "reduce" }, (s) => executeReduce(s, ctx))
-    .with({ type: "sort" }, (s) => executeSort(s, ctx))
-    .with({ type: "unique" }, (s) => executeUnique(s, ctx))
-    .with({ type: "template" }, (s) => executeTemplate(s, ctx))
-    // Additional core nodes - AI/ML
-    .with({ type: "prompt" }, (s) => executePrompt(s, ctx))
-    .with({ type: "chat" }, (s) => executeChat(s, ctx))
-    .with({ type: "summarize" }, (s) => executeSummarize(s, ctx))
-    .with({ type: "classify" }, (s) => executeClassify(s, ctx))
-    // Additional core nodes - Human-in-the-Loop
-    .with({ type: "approval" }, (s) => executeApproval(s, ctx))
-    .with({ type: "input" }, (s) => executeInput(s, ctx))
-    .with({ type: "notification" }, (s) => executeNotification(s, ctx))
-    // Additional core nodes - Utility
-    .with({ type: "parse" }, (s) => executeParse(s, ctx))
-    .with({ type: "validate" }, (s) => executeValidate(s, ctx))
-    .with({ type: "format" }, (s) => executeFormat(s, ctx))
-    .with({ type: "hash" }, (s) => executeHash(s, ctx))
-    // Advanced core nodes - Array Operations
-    .with({ type: "group" }, (s) => executeGroup(s, ctx))
-    .with({ type: "flatten" }, (s) => executeFlatten(s, ctx))
-    .with({ type: "chunk" }, (s) => executeChunk(s, ctx))
-    .with({ type: "zip" }, (s) => executeZip(s, ctx))
-    // Advanced core nodes - Security
-    .with({ type: "encrypt" }, (s) => executeEncrypt(s, ctx))
-    .with({ type: "decrypt" }, (s) => executeDecrypt(s, ctx))
-    .with({ type: "sign" }, (s) => executeSign(s, ctx))
-    .with({ type: "jwt" }, (s) => executeJwt(s, ctx))
-    // Advanced core nodes - AI Extensions
-    .with({ type: "agent" }, (s) => executeAgent(s, ctx))
-    .with({ type: "rag" }, (s) => executeRag(s, ctx))
-    .with({ type: "vision" }, (s) => executeVision(s, ctx))
-    .with({ type: "audio" }, (s) => executeAudio(s, ctx))
-    // Integration steps
-    .with({ type: "spreadsheet" }, (s) => executeSpreadsheet(s, ctx))
-    .with({ type: "googleSheets" }, (s) => executeGoogleSheets(s, ctx))
-    .with({ type: "modelRegistry" }, (s) => executeModelRegistry(s, ctx))
-    .with({ type: "webhookVerify" }, (s) => executeWebhookVerify(s, ctx))
-    .with({ type: "pdf" }, (s) => executePdf(s, ctx))
-    .with({ type: "rateLimit" }, (s) => executeRateLimit(s, ctx))
-    // Flow control
-    .with({ type: "try_catch" }, (s) => executeTryCatch(s, ctx, def))
-    .with({ type: "race" }, (s) => executeRace(s, ctx, def))
-    // Documentation (skip during execution)
-    .with({ type: "comment" }, () => ({ skipped: true, type: "comment" }))
-    // State management
-    .with({ type: "state_get" }, (s) => executeStateGet(s, ctx))
-    .with({ type: "state_set" }, (s) => executeStateSet(s, ctx))
-    .with({ type: "state_wait" }, (s) => executeStateWait(s, ctx))
-    // Workflow primitives
-    .with({ type: "stop" }, (s) => ({ stopped: true, ...s.stop }))
-    .with({ type: "noop" }, () => ({ skipped: true, type: "noop" }))
-    .with({ type: "debounce" }, (s) => executeDebounce(s, ctx))
-    .with({ type: "diff" }, (s) => executeDiff(s, ctx))
-    .with({ type: "change_detector" }, (s) => executeChangeDetector(s, ctx))
-    .with({ type: "time_window" }, (s) => executeTimeWindow(s, ctx))
-    .with({ type: "ai_transform" }, (s) => executeAiTransform(s, ctx))
-    .with({ type: "ai_guardrails" }, (s) => executeAiGuardrails(s, ctx))
-    .exhaustive();
+  const span = startStepSpan(step.id, step.type, step.name);
 
-  ctx.stepResults[step.id] = result;
+  try {
+    const result = await match(step)
+      .with({ type: "trigger" }, (s) => executeTrigger(s, ctx))
+      .with({ type: "action" }, (s) => executeAction(s, ctx))
+      .with({ type: "condition" }, (s) => executeCondition(s, ctx, def))
+      .with({ type: "switch" }, (s) => executeSwitch(s, ctx, def))
+      .with({ type: "delay" }, (s) => executeDelay(s, ctx))
+      .with({ type: "loop" }, (s) => executeLoop(s, ctx, def))
+      .with({ type: "parallel" }, (s) => executeParallel(s, ctx, def))
+      .with({ type: "gate" }, (s) => executeGate(s, ctx))
+      .with({ type: "plugin" }, (s) => executePlugin(s, ctx))
+      .with({ type: "mcp" }, (s) => executeMCP(s, ctx))
+      .with({ type: "llm" }, (s) => executeLLM(s, ctx))
+      .with({ type: "code" }, (s) => executeCode(s, ctx))
+      .with({ type: "database" }, (s) => executeDatabase(s, ctx))
+      .with({ type: "subworkflow" }, (s) => executeSubworkflow(s, ctx))
+      .with({ type: "wait" }, (s) => executeWait(s, ctx))
+      .with({ type: "event" }, (s) => executeEvent(s, ctx))
+      .with({ type: "aggregate" }, (s) => executeAggregate(s, ctx))
+      .with({ type: "cache" }, (s) => executeCache(s, ctx))
+      .with({ type: "merge" }, (s) => executeMerge(s, ctx))
+      .with({ type: "split" }, (s) => executeSplit(s, ctx))
+      .with({ type: "filter" }, (s) => executeFilter(s, ctx))
+      .with({ type: "set" }, (s) => executeSet(s, ctx))
+      .with({ type: "error" }, (s) => executeError(s, ctx))
+      .with({ type: "retry" }, (s) => executeRetry(s, ctx))
+      .with({ type: "timeout" }, (s) => executeTimeout(s, ctx))
+      .with({ type: "email" }, (s) => executeEmail(s, ctx))
+      .with({ type: "webhookResponse" }, (s) =>
+        executeWebhookResponse(s, ctx),
+      )
+      .with({ type: "file" }, (s) => executeFile(s, ctx))
+      .with({ type: "queue" }, (s) => executeQueue(s, ctx))
+      .with({ type: "embedding" }, (s) => executeEmbedding(s, ctx))
+      .with({ type: "vectorSearch" }, (s) => executeVectorSearch(s, ctx))
+      .with({ type: "log" }, (s) => executeLog(s, ctx))
+      .with({ type: "assert" }, (s) => executeAssert(s, ctx))
+      .with({ type: "sleep" }, (s) => executeSleep(s, ctx))
+      // Additional core nodes - Data Transformation
+      .with({ type: "map" }, (s) => executeMap(s, ctx))
+      .with({ type: "reduce" }, (s) => executeReduce(s, ctx))
+      .with({ type: "sort" }, (s) => executeSort(s, ctx))
+      .with({ type: "unique" }, (s) => executeUnique(s, ctx))
+      .with({ type: "template" }, (s) => executeTemplate(s, ctx))
+      // Additional core nodes - AI/ML
+      .with({ type: "prompt" }, (s) => executePrompt(s, ctx))
+      .with({ type: "chat" }, (s) => executeChat(s, ctx))
+      .with({ type: "summarize" }, (s) => executeSummarize(s, ctx))
+      .with({ type: "classify" }, (s) => executeClassify(s, ctx))
+      // Additional core nodes - Human-in-the-Loop
+      .with({ type: "approval" }, (s) => executeApproval(s, ctx))
+      .with({ type: "input" }, (s) => executeInput(s, ctx))
+      .with({ type: "notification" }, (s) => executeNotification(s, ctx))
+      // Additional core nodes - Utility
+      .with({ type: "parse" }, (s) => executeParse(s, ctx))
+      .with({ type: "validate" }, (s) => executeValidate(s, ctx))
+      .with({ type: "format" }, (s) => executeFormat(s, ctx))
+      .with({ type: "hash" }, (s) => executeHash(s, ctx))
+      // Advanced core nodes - Array Operations
+      .with({ type: "group" }, (s) => executeGroup(s, ctx))
+      .with({ type: "flatten" }, (s) => executeFlatten(s, ctx))
+      .with({ type: "chunk" }, (s) => executeChunk(s, ctx))
+      .with({ type: "zip" }, (s) => executeZip(s, ctx))
+      // Advanced core nodes - Security
+      .with({ type: "encrypt" }, (s) => executeEncrypt(s, ctx))
+      .with({ type: "decrypt" }, (s) => executeDecrypt(s, ctx))
+      .with({ type: "sign" }, (s) => executeSign(s, ctx))
+      .with({ type: "jwt" }, (s) => executeJwt(s, ctx))
+      // Advanced core nodes - AI Extensions
+      .with({ type: "agent" }, (s) => executeAgent(s, ctx))
+      .with({ type: "rag" }, (s) => executeRag(s, ctx))
+      .with({ type: "vision" }, (s) => executeVision(s, ctx))
+      .with({ type: "audio" }, (s) => executeAudio(s, ctx))
+      // Integration steps
+      .with({ type: "spreadsheet" }, (s) => executeSpreadsheet(s, ctx))
+      .with({ type: "googleSheets" }, (s) => executeGoogleSheets(s, ctx))
+      .with({ type: "modelRegistry" }, (s) => executeModelRegistry(s, ctx))
+      .with({ type: "webhookVerify" }, (s) => executeWebhookVerify(s, ctx))
+      .with({ type: "pdf" }, (s) => executePdf(s, ctx))
+      .with({ type: "rateLimit" }, (s) => executeRateLimit(s, ctx))
+      // Flow control
+      .with({ type: "try_catch" }, (s) => executeTryCatch(s, ctx, def))
+      .with({ type: "race" }, (s) => executeRace(s, ctx, def))
+      // Documentation (skip during execution)
+      .with({ type: "comment" }, () => ({ skipped: true, type: "comment" }))
+      // State management
+      .with({ type: "state_get" }, (s) => executeStateGet(s, ctx))
+      .with({ type: "state_set" }, (s) => executeStateSet(s, ctx))
+      .with({ type: "state_wait" }, (s) => executeStateWait(s, ctx))
+      // Workflow primitives
+      .with({ type: "stop" }, (s) => ({ stopped: true, ...s.stop }))
+      .with({ type: "noop" }, () => ({ skipped: true, type: "noop" }))
+      .with({ type: "debounce" }, (s) => executeDebounce(s, ctx))
+      .with({ type: "diff" }, (s) => executeDiff(s, ctx))
+      .with({ type: "change_detector" }, (s) =>
+        executeChangeDetector(s, ctx),
+      )
+      .with({ type: "time_window" }, (s) => executeTimeWindow(s, ctx))
+      .with({ type: "ai_transform" }, (s) => executeAiTransform(s, ctx))
+      .with({ type: "ai_guardrails" }, (s) => executeAiGuardrails(s, ctx))
+      .exhaustive();
 
-  // Determine the source handle for finding next steps
-  const sourceHandle = match(step)
-    .with({ type: "condition" }, () => {
-      const condResult = result as { branch: string };
-      return condResult.branch;
-    })
-    .with({ type: "switch" }, () => {
-      const switchResult = result as { case: string };
-      return switchResult.case;
-    })
-    .with({ type: "loop" }, () => {
-      // After loop completes, follow "done" handle
-      // First try "done", then fall back to default (no handle)
-      const doneSteps = findNextSteps(def, step.id, "done");
-      return doneSteps.length > 0 ? "done" : undefined;
-    })
-    .with({ type: "parallel" }, () => {
-      // After parallel completes, follow "done" handle
-      const doneSteps = findNextSteps(def, step.id, "done");
-      return doneSteps.length > 0 ? "done" : undefined;
-    })
-    .otherwise(() => undefined);
+    ctx.stepResults[step.id] = result;
 
-  const nextSteps = findNextSteps(def, step.id, sourceHandle);
+    // Determine the source handle for finding next steps
+    const sourceHandle = match(step)
+      .with({ type: "condition" }, () => {
+        const condResult = result as { branch: string };
+        return condResult.branch;
+      })
+      .with({ type: "switch" }, () => {
+        const switchResult = result as { case: string };
+        return switchResult.case;
+      })
+      .with({ type: "loop" }, () => {
+        // After loop completes, follow "done" handle
+        // First try "done", then fall back to default (no handle)
+        const doneSteps = findNextSteps(def, step.id, "done");
+        return doneSteps.length > 0 ? "done" : undefined;
+      })
+      .with({ type: "parallel" }, () => {
+        // After parallel completes, follow "done" handle
+        const doneSteps = findNextSteps(def, step.id, "done");
+        return doneSteps.length > 0 ? "done" : undefined;
+      })
+      .otherwise(() => undefined);
 
-  return { nextSteps, result };
+    const nextSteps = findNextSteps(def, step.id, sourceHandle);
+
+    span.setAttribute("step.status", "completed");
+    endSpan(span);
+
+    return { nextSteps, result };
+  } catch (err) {
+    endSpan(span, err);
+    throw err;
+  }
 }
 
 async function executeTrigger(

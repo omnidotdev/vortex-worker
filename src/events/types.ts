@@ -15,6 +15,11 @@ export type OmniEvent = {
   organizationId: string;
   correlationId?: string;
   schemaId?: string;
+  /** W3C Trace Context for distributed tracing */
+  traceContext?: {
+    traceparent?: string;
+    tracestate?: string;
+  };
 };
 
 /**

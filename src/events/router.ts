@@ -6,6 +6,7 @@
  */
 
 import Hatchet from "@hatchet-dev/typescript-sdk";
+import { context, trace } from "@opentelemetry/api";
 import { getDb } from "db";
 import {
   eventLogTable,
@@ -19,6 +20,12 @@ import { JSONPath } from "jsonpath-plus";
 
 import { cacheClient } from "lib/cache/client";
 import logger from "lib/logger";
+import {
+  endSpan,
+  extractTraceContext,
+  injectTraceContext,
+  startRouterSpan,
+} from "../tracing/propagation";
 
 import type Redis from "ioredis";
 import type { OmniEvent } from "./types";
@@ -161,173 +168,204 @@ export const isDuplicate = async (
  * a `workflow:execute` event to Hatchet for each match.
  */
 async function routeEvent(event: OmniEvent): Promise<void> {
-  const db = getDb();
-  const hatchet = getHatchet();
+  const parentCtx = extractTraceContext(event.traceContext);
+  const routerSpan = startRouterSpan(event.type, event.source, parentCtx);
 
-  // Log this event for audit and replay (best-effort, never blocks routing)
-  db.insert(eventLogTable)
-    .values({
-      type: event.type,
-      source: event.source,
-      subject: event.subject,
-      organizationId: event.organizationId,
-      data: event.data,
-      correlationId: event.correlationId,
-      schemaId: event.schemaId,
-      timestamp: event.timestamp,
-    })
-    .catch((err) => {
-      logger.warn("Failed to write event to event_log", {
-        eventId: event.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    });
+  try {
+    await context.with(
+      trace.setSpan(parentCtx, routerSpan),
+      async () => {
+        const db = getDb();
+        const hatchet = getHatchet();
 
-  // Find enabled routing rules for this organization, highest priority first
-  const rules = await db.query.eventRoutingRuleTable.findMany({
-    where: and(
-      eq(eventRoutingRuleTable.organizationId, event.organizationId),
-      eq(eventRoutingRuleTable.enabled, true),
-    ),
-    orderBy: [desc(eventRoutingRuleTable.priority)],
-  });
-
-  // Filter rules whose patterns match this event
-  const matchingRules = rules.filter((rule) => {
-    if (!matchGlobPattern(rule.typePattern, event.type)) return false;
-
-    // If the rule specifies a source pattern, it must also match
-    if (
-      rule.sourcePattern &&
-      !matchGlobPattern(rule.sourcePattern, event.source)
-    ) {
-      return false;
-    }
-
-    // If the rule specifies a JSONPath condition, it must evaluate to a match
-    if (!evaluateCondition(rule.condition, event.data)) return false;
-
-    return true;
-  });
-
-  if (matchingRules.length === 0) {
-    logger.debug("No routing rules matched", {
-      eventId: event.id,
-      type: event.type,
-      organizationId: event.organizationId,
-    });
-    return;
-  }
-
-  // Skip if this correlationId has already been routed (idempotency)
-  if (
-    await isDuplicate(cacheClient, event.organizationId, event.correlationId)
-  ) {
-    logger.info("Skipping duplicate event (already routed)", {
-      eventId: event.id,
-      correlationId: event.correlationId,
-      matchedRuleCount: matchingRules.length,
-    });
-    return;
-  }
-
-  for (const rule of matchingRules) {
-    const rawTransformed = await applyTransform(rule.transform, event.data);
-
-    let transformedData: Record<string, unknown>;
-    if (
-      rawTransformed !== null &&
-      typeof rawTransformed === "object" &&
-      !Array.isArray(rawTransformed)
-    ) {
-      transformedData = rawTransformed as Record<string, unknown>;
-    } else {
-      if (rawTransformed !== event.data) {
-        logger.warn(
-          "Transform returned non-object result, using original event data",
-          {
-            workflowId: rule.workflowId,
-            transform: rule.transform,
-            resultType: Array.isArray(rawTransformed)
-              ? "array"
-              : typeof rawTransformed,
-          },
-        );
-      }
-      transformedData = event.data;
-    }
-
-    const workflow = await db.query.workflowTable.findFirst({
-      where: and(
-        eq(workflowTable.id, rule.workflowId),
-        eq(workflowTable.isActive, true),
-      ),
-    });
-
-    if (!workflow) continue;
-
-    try {
-      const engineWorkflowId = `event-${workflow.id}-${Date.now()}`;
-      const engineRunId = `run-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-
-      const [run] = await db
-        .insert(workflowRunTable)
-        .values({
-          workflowId: workflow.id,
-          engineWorkflowId,
-          engineRunId,
-          status: "pending",
-          input: {
-            event: {
-              id: event.id,
-              type: event.type,
-              subject: event.subject,
-              source: event.source,
-              data: transformedData,
-              correlationId: event.correlationId,
-              timestamp: event.timestamp,
-            },
-          },
-        })
-        .returning();
-
-      await hatchet.event.push("workflow:execute", {
-        workflowId: engineWorkflowId,
-        runId: run.id,
-        organizationId: event.organizationId,
-        triggerData: {
-          event: {
-            id: event.id,
+        // Log this event for audit and replay (best-effort, never blocks routing)
+        db.insert(eventLogTable)
+          .values({
             type: event.type,
-            subject: event.subject,
             source: event.source,
-            data: transformedData,
+            subject: event.subject,
+            organizationId: event.organizationId,
+            data: event.data,
             correlationId: event.correlationId,
+            schemaId: event.schemaId,
             timestamp: event.timestamp,
-          },
-        },
-        definition: workflow.definition,
-      });
+          })
+          .catch((err) => {
+            logger.warn("Failed to write event to event_log", {
+              eventId: event.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
 
-      // Optimistically mark as running after successful Hatchet push
-      await db
-        .update(workflowRunTable)
-        .set({ status: "running" })
-        .where(eq(workflowRunTable.id, run.id));
+        // Find enabled routing rules for this organization, highest priority first
+        const rules = await db.query.eventRoutingRuleTable.findMany({
+          where: and(
+            eq(eventRoutingRuleTable.organizationId, event.organizationId),
+            eq(eventRoutingRuleTable.enabled, true),
+          ),
+          orderBy: [desc(eventRoutingRuleTable.priority)],
+        });
 
-      logger.info("Routed event to workflow", {
-        eventId: event.id,
-        type: event.type,
-        workflowId: workflow.id,
-        runId: run.id,
-      });
-    } catch (err) {
-      logger.error("Failed to route event to workflow", {
-        eventId: event.id,
-        workflowId: workflow.id,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+        // Filter rules whose patterns match this event
+        const matchingRules = rules.filter((rule) => {
+          if (!matchGlobPattern(rule.typePattern, event.type)) return false;
+
+          // If the rule specifies a source pattern, it must also match
+          if (
+            rule.sourcePattern &&
+            !matchGlobPattern(rule.sourcePattern, event.source)
+          ) {
+            return false;
+          }
+
+          // If the rule specifies a JSONPath condition, it must evaluate to a match
+          if (!evaluateCondition(rule.condition, event.data)) return false;
+
+          return true;
+        });
+
+        routerSpan.setAttribute(
+          "routing.matched_rules",
+          matchingRules.length,
+        );
+
+        if (matchingRules.length === 0) {
+          logger.debug("No routing rules matched", {
+            eventId: event.id,
+            type: event.type,
+            organizationId: event.organizationId,
+          });
+          return;
+        }
+
+        // Skip if this correlationId has already been routed (idempotency)
+        if (
+          await isDuplicate(
+            cacheClient,
+            event.organizationId,
+            event.correlationId,
+          )
+        ) {
+          logger.info("Skipping duplicate event (already routed)", {
+            eventId: event.id,
+            correlationId: event.correlationId,
+            matchedRuleCount: matchingRules.length,
+          });
+          return;
+        }
+
+        for (const rule of matchingRules) {
+          const rawTransformed = await applyTransform(
+            rule.transform,
+            event.data,
+          );
+
+          let transformedData: Record<string, unknown>;
+          if (
+            rawTransformed !== null &&
+            typeof rawTransformed === "object" &&
+            !Array.isArray(rawTransformed)
+          ) {
+            transformedData = rawTransformed as Record<string, unknown>;
+          } else {
+            if (rawTransformed !== event.data) {
+              logger.warn(
+                "Transform returned non-object result, using original event data",
+                {
+                  workflowId: rule.workflowId,
+                  transform: rule.transform,
+                  resultType: Array.isArray(rawTransformed)
+                    ? "array"
+                    : typeof rawTransformed,
+                },
+              );
+            }
+            transformedData = event.data;
+          }
+
+          const workflow = await db.query.workflowTable.findFirst({
+            where: and(
+              eq(workflowTable.id, rule.workflowId),
+              eq(workflowTable.isActive, true),
+            ),
+          });
+
+          if (!workflow) continue;
+
+          try {
+            const engineWorkflowId = `event-${workflow.id}-${Date.now()}`;
+            const engineRunId = `run-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+            const [run] = await db
+              .insert(workflowRunTable)
+              .values({
+                workflowId: workflow.id,
+                engineWorkflowId,
+                engineRunId,
+                status: "pending",
+                input: {
+                  event: {
+                    id: event.id,
+                    type: event.type,
+                    subject: event.subject,
+                    source: event.source,
+                    data: transformedData,
+                    correlationId: event.correlationId,
+                    timestamp: event.timestamp,
+                  },
+                },
+              })
+              .returning();
+
+            // Inject trace context so downstream workflow execution continues the trace
+            const traceCtx = injectTraceContext();
+
+            await hatchet.event.push("workflow:execute", {
+              workflowId: engineWorkflowId,
+              runId: run.id,
+              organizationId: event.organizationId,
+              traceContext: traceCtx,
+              triggerData: {
+                event: {
+                  id: event.id,
+                  type: event.type,
+                  subject: event.subject,
+                  source: event.source,
+                  data: transformedData,
+                  correlationId: event.correlationId,
+                  timestamp: event.timestamp,
+                },
+              },
+              definition: workflow.definition,
+            });
+
+            // Optimistically mark as running after successful Hatchet push
+            await db
+              .update(workflowRunTable)
+              .set({ status: "running" })
+              .where(eq(workflowRunTable.id, run.id));
+
+            logger.info("Routed event to workflow", {
+              eventId: event.id,
+              type: event.type,
+              workflowId: workflow.id,
+              runId: run.id,
+            });
+          } catch (err) {
+            logger.error("Failed to route event to workflow", {
+              eventId: event.id,
+              workflowId: workflow.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+      },
+    );
+
+    endSpan(routerSpan);
+  } catch (err) {
+    endSpan(routerSpan, err);
+    throw err;
   }
 }
 
