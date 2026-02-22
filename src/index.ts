@@ -19,6 +19,7 @@ import { closePublisher, initPublisher } from "./events/publisher";
 import routeEvent from "./events/router";
 import { initializeMCPServers } from "./mcp";
 import { getPluginRegistry } from "./plugins/registry";
+import { startAmqpTriggerRunner, stopAmqpTriggerRunner } from "./triggers/amqp";
 import { startCdcTriggerRunner, stopCdcTriggerRunner } from "./triggers/cdc";
 import {
   startGraphQLSubscriptionTriggerRunner,
@@ -133,6 +134,9 @@ async function main() {
   // Start GraphQL subscription trigger runner
   startGraphQLSubscriptionTriggerRunner();
 
+  // Start AMQP trigger runner
+  startAmqpTriggerRunner();
+
   // Start MQTT trigger runner
   startMqttTriggerRunner();
 
@@ -174,6 +178,7 @@ async function main() {
     eventsConsumer?.stop();
     closePublisher();
     await Promise.all([
+      stopAmqpTriggerRunner(),
       stopKafkaTriggerRunner(),
       stopSqsTriggerRunner(),
       stopGraphQLSubscriptionTriggerRunner(),
