@@ -9,7 +9,7 @@ import Redis from "ioredis";
 
 import logger from "lib/logger";
 
-const { CACHE_URL } = process.env;
+const CACHE_URL = process.env.CACHE_URL;
 
 /**
  * Cache client instance.

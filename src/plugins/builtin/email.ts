@@ -27,7 +27,7 @@ const getResendClient = (apiKey?: string): Resend => {
   }
 
   if (!resendClient) {
-    const { RESEND_API_KEY } = process.env;
+    const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
     if (!RESEND_API_KEY) {
       throw new Error(

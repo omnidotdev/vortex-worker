@@ -2,7 +2,7 @@ import { Resend } from "resend";
 
 import logger from "lib/logger";
 
-const { RESEND_API_KEY } = process.env;
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
 // Initialize Resend client (lazy to allow for missing API key during tests)
 let resendClient: Resend | null = null;
