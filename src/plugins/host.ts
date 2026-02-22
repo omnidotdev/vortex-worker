@@ -11,6 +11,7 @@ import {
   PluginFunctionNotFoundError,
   PluginInputValidationError,
   PluginLoadError,
+  PluginMemoryError,
   PluginTimeoutError,
 } from "./interface";
 import PluginPool from "./pool";
@@ -113,6 +114,17 @@ class ExtismLoadedPlugin implements LoadedPlugin {
 
       const durationMs = performance.now() - startTime;
 
+      // Enforce maxOutputSize limit
+      if (result !== null && this.manifest.limits?.maxOutputSize) {
+        const outputBytes = new TextEncoder().encode(result.text()).length;
+        if (outputBytes > this.manifest.limits.maxOutputSize) {
+          throw new PluginMemoryError(
+            this.id,
+            this.manifest.limits.maxOutputSize,
+          );
+        }
+      }
+
       if (result === null) {
         return {
           success: true,
@@ -138,6 +150,14 @@ class ExtismLoadedPlugin implements LoadedPlugin {
         };
       }
     } catch (error) {
+      // Re-throw plugin-specific errors
+      if (
+        error instanceof PluginMemoryError ||
+        error instanceof PluginFunctionNotFoundError
+      ) {
+        throw error;
+      }
+
       const durationMs = performance.now() - startTime;
       const message = error instanceof Error ? error.message : String(error);
 
@@ -285,6 +305,9 @@ export class ExtismPluginHost implements PluginHost {
         useWasi: true,
         runInWorker: true, // Required for async host functions in Bun (no JSPI support)
         timeoutMs: manifest.limits?.timeout || 30000,
+        memoryLimitPages: manifest.limits?.memory
+          ? Math.ceil((manifest.limits.memory * 1024 * 1024) / 65536)
+          : undefined,
         allowedHosts: this.getAllowedHosts(manifest),
         allowedPaths: this.getAllowedPaths(manifest),
         logger: this.logger,
