@@ -25,7 +25,7 @@ import {
   extractTraceContext,
   injectTraceContext,
   startRouterSpan,
-} from "../tracing/propagation";
+} from "tracing/propagation";
 
 import type Redis from "ioredis";
 import type { OmniEvent } from "./types";
@@ -225,7 +225,7 @@ async function routeEvent(event: OmniEvent): Promise<void> {
         });
 
         routerSpan.setAttribute(
-          "routing.matched_rules",
+          "vortex.routing.matched_rules",
           matchingRules.length,
         );
 

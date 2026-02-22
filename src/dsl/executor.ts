@@ -546,7 +546,7 @@ export async function executeStep(
 
     const nextSteps = findNextSteps(def, step.id, sourceHandle);
 
-    span.setAttribute("step.status", "completed");
+    span.setAttribute("vortex.step.status", "completed");
     endSpan(span);
 
     return { nextSteps, result };
