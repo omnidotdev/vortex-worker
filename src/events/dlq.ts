@@ -105,9 +105,7 @@ async function listDlqEvents(
 
     for (const message of response.messages) {
       try {
-        const dlqEvent = JSON.parse(
-          message.payload.toString(),
-        ) as DlqEvent;
+        const dlqEvent = JSON.parse(message.payload.toString()) as DlqEvent;
 
         // Apply organizationId filter
         if (
@@ -171,7 +169,7 @@ async function getDlqStats(
     // TODO: Iggy SDK — extract message count from topic metadata
     // The shape depends on the SDK version; adapt as needed
     const totalMessages =
-      (topicInfo as Record<string, unknown>).messagesCount as number ?? 0;
+      ((topicInfo as Record<string, unknown>).messagesCount as number) ?? 0;
 
     // Read first and last messages to get timestamp boundaries
     let oldestMessage: string | undefined;
@@ -336,9 +334,7 @@ async function discardDlqEvent(
 
       for (const message of response.messages) {
         try {
-          const dlqEvent = JSON.parse(
-            message.payload.toString(),
-          ) as DlqEvent;
+          const dlqEvent = JSON.parse(message.payload.toString()) as DlqEvent;
 
           if (dlqEvent.originalEvent.id === eventId) {
             found = true;

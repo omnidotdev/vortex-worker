@@ -123,8 +123,7 @@ class CircuitBreaker {
     }
 
     // Re-read state after potential transition
-    const current =
-      data.state === "open" ? await this.getState() : data;
+    const current = data.state === "open" ? await this.getState() : data;
 
     if (
       current.state === "half_open" &&

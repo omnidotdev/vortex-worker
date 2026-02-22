@@ -125,7 +125,10 @@ export class CdcAdapter implements EventAdapter {
     }
 
     // Detect deletes by diffing primary keys every 10th poll
-    if (this.#config.operations.includes("delete") && this.pollCount % 10 === 0) {
+    if (
+      this.#config.operations.includes("delete") &&
+      this.pollCount % 10 === 0
+    ) {
       await this.pollDeletes(table, escapedTable);
     }
   }
@@ -165,9 +168,7 @@ export class CdcAdapter implements EventAdapter {
 
     for (const row of rows) {
       const primaryKey = String(row.id);
-      const trackingValue = String(
-        row[this.#config.trackingColumn],
-      );
+      const trackingValue = String(row[this.#config.trackingColumn]);
 
       // Update high-water mark
       this.highWaterMarks.set(table, trackingValue);

@@ -18,6 +18,7 @@ import { RedisAdapter } from "adapters/redis.adapter";
 import { S3Adapter } from "adapters/s3.adapter";
 import { SqsAdapter } from "adapters/sqs.adapter";
 import { WebSocketAdapter } from "adapters/websocket.adapter";
+
 import logger from "lib/logger";
 
 import type { EventAdapter } from "adapters/types";
@@ -33,7 +34,9 @@ type AdapterEntry = {
 /** Built-in adapter constructors keyed by trigger type */
 const BUILTIN_ADAPTERS: Record<
   string,
-  new (config: Record<string, unknown>) => EventAdapter
+  new (
+    config: Record<string, unknown>,
+  ) => EventAdapter
 > = {
   mqtt: MqttAdapter as unknown as new (
     config: Record<string, unknown>,
@@ -131,7 +134,10 @@ async function loadExternalAdapters(dir: string): Promise<void> {
       const id = name.replace(/\.adapter$/, "");
 
       if (registry.has(id)) {
-        logger.warn("External adapter overrides built-in", { id, file: fullPath });
+        logger.warn("External adapter overrides built-in", {
+          id,
+          file: fullPath,
+        });
       }
 
       registry.set(id, { id, factory, builtin: false });

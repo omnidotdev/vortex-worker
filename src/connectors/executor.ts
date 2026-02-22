@@ -291,21 +291,18 @@ export async function executeConnectorAction(
     // Execute the action with circuit breaker + retry for transient failures
     const organizationId = pluginContext?.organizationId ?? "unknown";
 
-    const result = await withCircuitBreaker(
-      connectorId,
-      organizationId,
-      () =>
-        withRetry(() => action.run(actionContext), {
-          maxAttempts: 3,
-          onRetry: (error, attempt) => {
-            logger.warn("Retrying connector action", {
-              connectorId,
-              actionName,
-              attempt,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          },
-        }),
+    const result = await withCircuitBreaker(connectorId, organizationId, () =>
+      withRetry(() => action.run(actionContext), {
+        maxAttempts: 3,
+        onRetry: (error, attempt) => {
+          logger.warn("Retrying connector action", {
+            connectorId,
+            actionName,
+            attempt,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
+      }),
     );
 
     return {

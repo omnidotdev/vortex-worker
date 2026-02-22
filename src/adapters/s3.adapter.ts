@@ -1,7 +1,4 @@
-import {
-  ListObjectsV2Command,
-  S3Client,
-} from "@aws-sdk/client-s3";
+import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 
 import logger from "lib/logger";
 
@@ -30,7 +27,12 @@ export class S3Adapter implements EventAdapter {
   private knownObjects = new Map<string, string>();
   private initialized = false;
 
-  #config: Required<Pick<S3AdapterConfig, "bucket" | "prefix" | "region" | "events" | "intervalMs">> &
+  #config: Required<
+    Pick<
+      S3AdapterConfig,
+      "bucket" | "prefix" | "region" | "events" | "intervalMs"
+    >
+  > &
     Pick<S3AdapterConfig, "endpoint">;
 
   constructor(config: S3AdapterConfig) {
@@ -74,7 +76,10 @@ export class S3Adapter implements EventAdapter {
     if (!this.handler && this.initialized) return;
 
     try {
-      const currentObjects = new Map<string, { etag: string; size: number; lastModified: Date }>();
+      const currentObjects = new Map<
+        string,
+        { etag: string; size: number; lastModified: Date }
+      >();
       let continuationToken: string | undefined;
 
       // Paginate through all objects
@@ -112,14 +117,33 @@ export class S3Adapter implements EventAdapter {
       }
 
       // Detect created and modified objects
-      if (this.#config.events.includes("created") || this.#config.events.includes("modified")) {
+      if (
+        this.#config.events.includes("created") ||
+        this.#config.events.includes("modified")
+      ) {
         for (const [key, obj] of currentObjects) {
           const previousEtag = this.knownObjects.get(key);
 
           if (!previousEtag && this.#config.events.includes("created")) {
-            await this.emit(key, obj.etag, obj.size, obj.lastModified, "created");
-          } else if (previousEtag && previousEtag !== obj.etag && this.#config.events.includes("modified")) {
-            await this.emit(key, obj.etag, obj.size, obj.lastModified, "modified");
+            await this.emit(
+              key,
+              obj.etag,
+              obj.size,
+              obj.lastModified,
+              "created",
+            );
+          } else if (
+            previousEtag &&
+            previousEtag !== obj.etag &&
+            this.#config.events.includes("modified")
+          ) {
+            await this.emit(
+              key,
+              obj.etag,
+              obj.size,
+              obj.lastModified,
+              "modified",
+            );
           }
         }
       }

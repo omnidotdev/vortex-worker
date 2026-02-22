@@ -125,7 +125,10 @@ export class PollingAdapter implements EventAdapter {
         metadata: {
           idempotencyKey: `poll-${this.#config.url}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
           timestamp: new Date(),
-          raw: { status: response.status, headers: Object.fromEntries(response.headers.entries()) },
+          raw: {
+            status: response.status,
+            headers: Object.fromEntries(response.headers.entries()),
+          },
         },
       };
 

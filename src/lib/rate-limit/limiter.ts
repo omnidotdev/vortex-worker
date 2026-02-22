@@ -136,8 +136,7 @@ async function isRateLimited(
   organizationId: string,
   config?: RateLimitConfig,
 ): Promise<RateLimitResult> {
-  const resolvedConfig =
-    config ?? DEFAULT_LIMITS[resource] ?? FALLBACK_LIMIT;
+  const resolvedConfig = config ?? DEFAULT_LIMITS[resource] ?? FALLBACK_LIMIT;
 
   return checkRateLimit(resource, organizationId, resolvedConfig);
 }

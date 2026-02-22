@@ -19,6 +19,7 @@ import { closePublisher, initPublisher } from "./events/publisher";
 import routeEvent from "./events/router";
 import { initializeMCPServers } from "./mcp";
 import { getPluginRegistry } from "./plugins/registry";
+import { startCdcTriggerRunner, stopCdcTriggerRunner } from "./triggers/cdc";
 import {
   startGraphQLSubscriptionTriggerRunner,
   stopGraphQLSubscriptionTriggerRunner,
@@ -28,15 +29,6 @@ import {
   stopKafkaTriggerRunner,
 } from "./triggers/kafka";
 import { startMqttTriggerRunner, stopMqttTriggerRunner } from "./triggers/mqtt";
-import { startSqsTriggerRunner, stopSqsTriggerRunner } from "./triggers/sqs";
-import {
-  startWebSocketTriggerRunner,
-  stopWebSocketTriggerRunner,
-} from "./triggers/websocket";
-import {
-  startCdcTriggerRunner,
-  stopCdcTriggerRunner,
-} from "./triggers/cdc";
 import {
   startPollingTriggerRunner,
   stopPollingTriggerRunner,
@@ -45,11 +37,13 @@ import {
   startRedisTriggerRunner,
   stopRedisTriggerRunner,
 } from "./triggers/redis";
-import {
-  startS3TriggerRunner,
-  stopS3TriggerRunner,
-} from "./triggers/s3";
 import { initTriggerRegistry } from "./triggers/registry";
+import { startS3TriggerRunner, stopS3TriggerRunner } from "./triggers/s3";
+import { startSqsTriggerRunner, stopSqsTriggerRunner } from "./triggers/sqs";
+import {
+  startWebSocketTriggerRunner,
+  stopWebSocketTriggerRunner,
+} from "./triggers/websocket";
 import { authzSyncWorkflow } from "./workflows/authz.workflow";
 import { authzReconcileWorkflow } from "./workflows/authzReconcile.workflow";
 import { chronicleAuditWorkflow } from "./workflows/chronicle.workflow";

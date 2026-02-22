@@ -9,7 +9,6 @@
 import { Client } from "@iggy.rs/sdk";
 
 import logger from "lib/logger";
-
 import { publish } from "./publisher";
 
 import type { EventsConfig, OmniEvent } from "./types";
@@ -106,11 +105,7 @@ function sleep(ms: number): Promise<void> {
 /**
  * Check whether an event falls within the specified time range.
  */
-function isInTimeRange(
-  timestamp: string,
-  from: string,
-  to: string,
-): boolean {
+function isInTimeRange(timestamp: string, from: string, to: string): boolean {
   const t = new Date(timestamp).getTime();
   return t >= new Date(from).getTime() && t <= new Date(to).getTime();
 }
@@ -118,10 +113,7 @@ function isInTimeRange(
 /**
  * Check whether an event matches the replay filters.
  */
-function matchesFilters(
-  event: OmniEvent,
-  options: ReplayOptions,
-): boolean {
+function matchesFilters(event: OmniEvent, options: ReplayOptions): boolean {
   // Timestamp range is required
   if (!isInTimeRange(event.timestamp, options.from, options.to)) {
     return false;
