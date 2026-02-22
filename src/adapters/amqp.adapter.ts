@@ -1,13 +1,13 @@
 import amqplib from "amqplib";
 
-import type { Channel, Connection } from "amqplib";
+import type { Channel, ChannelModel } from "amqplib";
 import type { EventAdapter, NormalizedEvent } from "./types";
 
 export class AmqpAdapter implements EventAdapter {
   name = "amqp";
   source = "amqp";
 
-  private connection: Connection | null = null;
+  private connection: ChannelModel | null = null;
   private channel: Channel | null = null;
   private handler: ((event: NormalizedEvent) => Promise<void>) | null = null;
 
