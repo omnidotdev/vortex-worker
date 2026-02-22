@@ -29,6 +29,7 @@ import {
 import { getPluginRegistry } from "../plugins/registry";
 import { stateStore } from "../state";
 import { endSpan, startStepSpan } from "../tracing/propagation";
+import WindowStateManager from "./window-state";
 
 import type { PluginCallResult } from "../plugins/types";
 import type {
@@ -514,19 +515,24 @@ export async function executeStep(
       .with({ type: "time_window" }, (s) => executeTimeWindow(s, ctx))
       .with({ type: "ai_transform" }, (s) => executeAiTransform(s, ctx))
       .with({ type: "ai_guardrails" }, (s) => executeAiGuardrails(s, ctx))
-      // TODO: implement sliding/session window logic, groupBy, and emit strategy
       .with({ type: "window" }, async (windowStep: WindowStep) => {
-        const events = ctx.variables.events ?? [];
-        let filtered = Array.isArray(events) ? events : [events];
+        const raw = ctx.variables.events ?? [];
+        const events = Array.isArray(raw) ? raw : [raw];
 
-        if (windowStep.window.maxSize) {
-          filtered = filtered.slice(0, windowStep.window.maxSize);
+        const mgr = new WindowStateManager(windowStep.window);
+
+        for (const event of events) {
+          mgr.add(event);
         }
+
+        const frames = mgr.flush();
 
         return {
           windowType: windowStep.window.windowType,
-          events: filtered,
+          frames,
+          events: frames.flatMap((f) => f.events),
           duration: windowStep.window.duration,
+          groupBy: windowStep.window.groupBy,
         };
       })
       .exhaustive();
@@ -1010,19 +1016,24 @@ async function executeStepInternal(
     .with({ type: "time_window" }, (s) => executeTimeWindow(s, ctx))
     .with({ type: "ai_transform" }, (s) => executeAiTransform(s, ctx))
     .with({ type: "ai_guardrails" }, (s) => executeAiGuardrails(s, ctx))
-    // TODO: implement sliding/session window logic, groupBy, and emit strategy
     .with({ type: "window" }, async (windowStep: WindowStep) => {
-      const events = ctx.variables.events ?? [];
-      let filtered = Array.isArray(events) ? events : [events];
+      const raw = ctx.variables.events ?? [];
+      const events = Array.isArray(raw) ? raw : [raw];
 
-      if (windowStep.window.maxSize) {
-        filtered = filtered.slice(0, windowStep.window.maxSize);
+      const mgr = new WindowStateManager(windowStep.window);
+
+      for (const event of events) {
+        mgr.add(event);
       }
+
+      const frames = mgr.flush();
 
       return {
         windowType: windowStep.window.windowType,
-        events: filtered,
+        frames,
+        events: frames.flatMap((f) => f.events),
         duration: windowStep.window.duration,
+        groupBy: windowStep.window.groupBy,
       };
     })
     .exhaustive();
