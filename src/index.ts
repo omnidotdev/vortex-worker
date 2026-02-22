@@ -33,6 +33,23 @@ import {
   startWebSocketTriggerRunner,
   stopWebSocketTriggerRunner,
 } from "./triggers/websocket";
+import {
+  startCdcTriggerRunner,
+  stopCdcTriggerRunner,
+} from "./triggers/cdc";
+import {
+  startPollingTriggerRunner,
+  stopPollingTriggerRunner,
+} from "./triggers/polling";
+import {
+  startRedisTriggerRunner,
+  stopRedisTriggerRunner,
+} from "./triggers/redis";
+import {
+  startS3TriggerRunner,
+  stopS3TriggerRunner,
+} from "./triggers/s3";
+import { initTriggerRegistry } from "./triggers/registry";
 import { authzSyncWorkflow } from "./workflows/authz.workflow";
 import { authzReconcileWorkflow } from "./workflows/authzReconcile.workflow";
 import { chronicleAuditWorkflow } from "./workflows/chronicle.workflow";
@@ -67,6 +84,9 @@ async function main() {
 
   // Initialize plugin registry (load enabled plugins into memory)
   await getPluginRegistry().init();
+
+  // Initialize trigger adapter registry (built-in + external plugins)
+  await initTriggerRegistry();
 
   // Start Hatchet worker
   const hatchet = Hatchet.init();
@@ -124,6 +144,18 @@ async function main() {
   // Start WebSocket trigger runner
   startWebSocketTriggerRunner();
 
+  // Start polling trigger runner
+  startPollingTriggerRunner();
+
+  // Start S3 trigger runner
+  startS3TriggerRunner();
+
+  // Start CDC trigger runner
+  startCdcTriggerRunner();
+
+  // Start Redis pub/sub trigger runner
+  startRedisTriggerRunner();
+
   // Start events consumer if streaming layer is configured
   let eventsConsumer: EventsConsumer | null = null;
 
@@ -149,6 +181,10 @@ async function main() {
       stopGraphQLSubscriptionTriggerRunner(),
       stopMqttTriggerRunner(),
       stopWebSocketTriggerRunner(),
+      stopPollingTriggerRunner(),
+      stopS3TriggerRunner(),
+      stopCdcTriggerRunner(),
+      stopRedisTriggerRunner(),
     ]);
     await closeCache();
     process.exit(0);

@@ -8,6 +8,7 @@
 import { cacheClient } from "lib/cache";
 import logger from "lib/logger";
 import { withRetry } from "lib/retry";
+import { withCircuitBreaker } from "./circuit-breaker";
 import { getConnector, loadConnector } from "./registry";
 
 import type { Store, StoreScope } from "@activepieces/pieces-framework";
@@ -287,18 +288,25 @@ export async function executeConnectorAction(
     // Build Activepieces context
     const actionContext = buildActionContext(connectorContext);
 
-    // Execute the action with retry for transient failures
-    const result = await withRetry(() => action.run(actionContext), {
-      maxAttempts: 3,
-      onRetry: (error, attempt) => {
-        logger.warn("Retrying connector action", {
-          connectorId,
-          actionName,
-          attempt,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      },
-    });
+    // Execute the action with circuit breaker + retry for transient failures
+    const organizationId = pluginContext?.organizationId ?? "unknown";
+
+    const result = await withCircuitBreaker(
+      connectorId,
+      organizationId,
+      () =>
+        withRetry(() => action.run(actionContext), {
+          maxAttempts: 3,
+          onRetry: (error, attempt) => {
+            logger.warn("Retrying connector action", {
+              connectorId,
+              actionName,
+              attempt,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        }),
+    );
 
     return {
       success: true,
@@ -380,8 +388,15 @@ export async function executeConnectorTrigger(
 
     // Use test() if available, otherwise run()
     const testFn = trigger.test ?? trigger.run;
-    // biome-ignore lint/suspicious/noExplicitAny: Trigger context type varies by trigger strategy
-    const events = await testFn(triggerContext as any);
+    const organizationId = pluginContext?.organizationId ?? "unknown";
+
+    // Execute with circuit breaker
+    const events = await withCircuitBreaker(
+      connectorId,
+      organizationId,
+      // biome-ignore lint/suspicious/noExplicitAny: Trigger context type varies by trigger strategy
+      () => testFn(triggerContext as any),
+    );
 
     return {
       success: true,

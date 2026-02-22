@@ -7,6 +7,7 @@
  * Architecture:
  * - Registry: Loads and manages available connectors from npm packages
  * - Executor: Runs connector actions/triggers with proper context
+ * - Circuit Breaker: Prevents cascading failures for connector integrations
  * - Types: Shared type definitions
  *
  * @example
@@ -32,6 +33,12 @@
  * ```
  */
 
+// Circuit breaker - prevent cascading failures
+export {
+  CircuitBreaker,
+  CircuitOpenError,
+  withCircuitBreaker,
+} from "./circuit-breaker";
 // Executor - run connector actions/triggers
 export {
   executeConnectorAction,
@@ -51,6 +58,11 @@ export {
 } from "./registry";
 
 // Types
+export type {
+  CircuitBreakerConfig,
+  CircuitData,
+  CircuitState,
+} from "./circuit-breaker";
 export type {
   ConnectorAction,
   ConnectorAuth,

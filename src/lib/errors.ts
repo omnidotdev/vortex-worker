@@ -11,7 +11,9 @@ export type ErrorCode =
   | "CONFIG_ERROR"
   | "TIMEOUT"
   | "CANCELLED"
-  | "MCP_ERROR";
+  | "MCP_ERROR"
+  | "CIRCUIT_OPEN"
+  | "RATE_LIMITED";
 
 export class VortexError extends Error {
   readonly code: ErrorCode;
@@ -89,5 +91,33 @@ export class MCPError extends VortexError {
   constructor(message: string, meta: Record<string, unknown> = {}) {
     super(message, "MCP_ERROR", meta);
     this.name = "MCPError";
+  }
+}
+
+export class CircuitOpenError extends IntegrationError {
+  constructor(connectorId: string, meta: Record<string, unknown> = {}) {
+    super(`Circuit breaker open for connector: ${connectorId}`, {
+      connectorId,
+      ...meta,
+    });
+    this.name = "CircuitOpenError";
+  }
+}
+
+export class RateLimitError extends VortexError {
+  readonly retryAfterMs: number;
+
+  constructor(
+    resource: string,
+    retryAfterMs: number,
+    meta: Record<string, unknown> = {},
+  ) {
+    super(`Rate limit exceeded for: ${resource}`, "RATE_LIMITED", {
+      resource,
+      retryAfterMs,
+      ...meta,
+    });
+    this.name = "RateLimitError";
+    this.retryAfterMs = retryAfterMs;
   }
 }

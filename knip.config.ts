@@ -57,6 +57,17 @@ const knipConfig: KnipConfig = {
     "src/lib/cache/**",
     // Events consumer (wired at runtime, not yet imported from index)
     "src/events/**",
+    // Distributed cron lock (consumed by cron scheduler)
+    "src/lib/cron/**",
+    // Rate limiter (consumed by workflow executor and API middleware)
+    "src/lib/rate-limit/**",
+    // Trigger adapter registry (public API for adapter discovery)
+    "src/triggers/registry.ts",
+    // Trigger runners (buildActive* exports used in test files)
+    "src/triggers/polling.ts",
+    "src/triggers/redis.ts",
+    // Error classes (consumed by circuit-breaker, rate-limit)
+    "src/lib/errors.ts",
   ],
   ignoreDependencies: [
     // All @activepieces/* packages are dynamically loaded at runtime based on integration type
