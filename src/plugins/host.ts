@@ -3,9 +3,8 @@
  *
  * Manages loading, caching, and executing WASM plugins via the Extism runtime.
  * Provides sandboxed execution with configurable permissions and resource limits.
+ * Uses an instance pool so concurrent callers can run the same plugin in parallel.
  */
-
-import { createPlugin } from "@extism/extism";
 
 import { stateStore } from "../state/store";
 import {
@@ -14,9 +13,11 @@ import {
   PluginLoadError,
   PluginTimeoutError,
 } from "./interface";
+import PluginPool from "./pool";
 
-import type { CallContext, Plugin as ExtismPlugin } from "@extism/extism";
+import type { CallContext } from "@extism/extism";
 import type { LoadedPlugin, PluginHost } from "./interface";
+import type { CreatePluginOptions, PoolConfig } from "./pool";
 import type {
   PluginCallResult,
   PluginContext,
@@ -26,23 +27,41 @@ import type {
 } from "./types";
 
 /**
- * Internal representation of a loaded plugin with its Extism instance.
+ * Internal representation of a loaded plugin backed by the instance pool.
+ *
+ * Each `call()` acquires an Extism instance from the pool, executes the
+ * function, then releases it back so other callers can proceed concurrently.
  */
 class ExtismLoadedPlugin implements LoadedPlugin {
   readonly id: string;
   readonly manifest: PluginManifest;
   readonly loadedAt: Date;
-  private plugin: ExtismPlugin | null;
+  private closed = false;
+  private pool: PluginPool;
+  private extismManifest: {
+    wasm: Array<{ url?: string; path?: string; data?: Uint8Array }>;
+  };
+  private pluginOptions: CreatePluginOptions;
 
-  constructor(id: string, manifest: PluginManifest, plugin: ExtismPlugin) {
+  constructor(
+    id: string,
+    manifest: PluginManifest,
+    pool: PluginPool,
+    extismManifest: {
+      wasm: Array<{ url?: string; path?: string; data?: Uint8Array }>;
+    },
+    pluginOptions: CreatePluginOptions,
+  ) {
     this.id = id;
     this.manifest = manifest;
-    this.plugin = plugin;
+    this.pool = pool;
+    this.extismManifest = extismManifest;
+    this.pluginOptions = pluginOptions;
     this.loadedAt = new Date();
   }
 
   get isLoaded(): boolean {
-    return this.plugin !== null;
+    return !this.closed;
   }
 
   async call(
@@ -50,7 +69,7 @@ class ExtismLoadedPlugin implements LoadedPlugin {
     inputs: Record<string, unknown>,
     context?: PluginContext,
   ): Promise<PluginCallResult> {
-    if (!this.plugin) {
+    if (this.closed) {
       return {
         success: false,
         error: "Plugin is not loaded",
@@ -72,18 +91,25 @@ class ExtismLoadedPlugin implements LoadedPlugin {
       throw new PluginInputValidationError(this.id, validation.errors || []);
     }
 
+    // Acquire instance from pool
+    const plugin = await this.pool.acquire(
+      this.id,
+      this.extismManifest,
+      this.pluginOptions,
+    );
+
     const startTime = performance.now();
 
     try {
       // Check if function exists in WASM module
-      const exists = await this.plugin.functionExists(functionName);
+      const exists = await plugin.functionExists(functionName);
       if (!exists) {
         throw new PluginFunctionNotFoundError(this.id, functionName);
       }
 
       // Call the function with JSON input
       const inputJson = JSON.stringify(inputs);
-      const result = await this.plugin.call(functionName, inputJson, context);
+      const result = await plugin.call(functionName, inputJson, context);
 
       const durationMs = performance.now() - startTime;
 
@@ -128,6 +154,9 @@ class ExtismLoadedPlugin implements LoadedPlugin {
         error: message,
         durationMs,
       };
+    } finally {
+      // Always release back to the pool
+      this.pool.release(this.id, plugin);
     }
   }
 
@@ -209,24 +238,33 @@ class ExtismLoadedPlugin implements LoadedPlugin {
     return null;
   }
 
+  /** Mark this facade as closed; actual instances are managed by the pool */
   async close(): Promise<void> {
-    if (this.plugin) {
-      await this.plugin.close();
-      this.plugin = null;
-    }
+    this.closed = true;
   }
 }
 
+/** Options for constructing an ExtismPluginHost */
+type ExtismPluginHostOptions = {
+  logger?: Console;
+  pool?: Partial<PoolConfig>;
+};
+
 /**
  * Extism-based plugin host implementation.
+ *
+ * Uses a `PluginPool` under the hood so multiple concurrent callers can
+ * execute the same plugin in parallel without serializing.
  */
 export class ExtismPluginHost implements PluginHost {
   readonly name = "extism";
   private plugins: Map<string, ExtismLoadedPlugin> = new Map();
+  private pool: PluginPool;
   private logger: Console;
 
-  constructor(logger: Console = console) {
-    this.logger = logger;
+  constructor(options?: ExtismPluginHostOptions) {
+    this.logger = options?.logger ?? console;
+    this.pool = new PluginPool(options?.pool);
   }
 
   async load(manifest: PluginManifest): Promise<LoadedPlugin> {
@@ -243,8 +281,7 @@ export class ExtismPluginHost implements PluginHost {
       // Build Extism manifest from our manifest format
       const extismManifest = await this.buildExtismManifest(manifest);
 
-      // Create plugin with options
-      const plugin = await createPlugin(extismManifest, {
+      const pluginOptions = {
         useWasi: true,
         runInWorker: true, // Required for async host functions in Bun (no JSPI support)
         timeoutMs: manifest.limits?.timeout || 30000,
@@ -252,9 +289,16 @@ export class ExtismPluginHost implements PluginHost {
         allowedPaths: this.getAllowedPaths(manifest),
         logger: this.logger,
         functions: this.buildHostFunctions(),
-      });
+      };
 
-      const loaded = new ExtismLoadedPlugin(manifest.id, manifest, plugin);
+      const loaded = new ExtismLoadedPlugin(
+        manifest.id,
+        manifest,
+        this.pool,
+        extismManifest,
+        pluginOptions,
+      );
+
       this.plugins.set(manifest.id, loaded);
 
       this.logger.info(`Loaded plugin: ${manifest.id} v${manifest.version}`);
@@ -286,6 +330,7 @@ export class ExtismPluginHost implements PluginHost {
     const promises = Array.from(this.plugins.values()).map((p) => p.close());
     await Promise.all(promises);
     this.plugins.clear();
+    await this.pool.drain();
     this.logger.info("Unloaded all plugins");
   }
 
