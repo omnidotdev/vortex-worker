@@ -1,6 +1,7 @@
 export { CdcAdapter } from "./cdc.adapter";
 export { KafkaAdapter } from "./kafka.adapter";
 export { MqttAdapter } from "./mqtt.adapter";
+export { NatsAdapter } from "./nats.adapter";
 export { PollingAdapter } from "./polling.adapter";
 export { RedisAdapter } from "./redis.adapter";
 export { S3Adapter } from "./s3.adapter";

@@ -29,6 +29,7 @@ import {
   stopKafkaTriggerRunner,
 } from "./triggers/kafka";
 import { startMqttTriggerRunner, stopMqttTriggerRunner } from "./triggers/mqtt";
+import { startNatsTriggerRunner, stopNatsTriggerRunner } from "./triggers/nats";
 import {
   startPollingTriggerRunner,
   stopPollingTriggerRunner,
@@ -135,6 +136,9 @@ async function main() {
   // Start MQTT trigger runner
   startMqttTriggerRunner();
 
+  // Start NATS trigger runner
+  startNatsTriggerRunner();
+
   // Start WebSocket trigger runner
   startWebSocketTriggerRunner();
 
@@ -174,6 +178,7 @@ async function main() {
       stopSqsTriggerRunner(),
       stopGraphQLSubscriptionTriggerRunner(),
       stopMqttTriggerRunner(),
+      stopNatsTriggerRunner(),
       stopWebSocketTriggerRunner(),
       stopPollingTriggerRunner(),
       stopS3TriggerRunner(),
