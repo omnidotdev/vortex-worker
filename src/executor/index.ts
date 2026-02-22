@@ -44,9 +44,6 @@ export async function getExecutor(
       const { LocalExecutor } = await import("./adapters/local");
       return new LocalExecutor();
     }
-    case "trigger-dev": {
-      throw new Error("Trigger.dev adapter not yet implemented");
-    }
     default:
       throw new Error(
         `Unknown executor type: ${(config as ExecutorConfig).type}`,

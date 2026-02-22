@@ -96,7 +96,7 @@ export interface ExecuteOptions {
 /** Configuration for executor backends */
 export interface ExecutorConfig {
   /** Backend type */
-  type: "hatchet" | "local" | "trigger-dev" | "temporal";
+  type: "hatchet" | "local" | "temporal";
 
   /** Backend-specific configuration */
   options?: Record<string, unknown>;
