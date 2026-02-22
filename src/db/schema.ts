@@ -338,3 +338,28 @@ export const deadLetterEventTable = pgTable(
 );
 
 export type DeadLetterEvent = typeof deadLetterEventTable.$inferSelect;
+
+/**
+ * Event schema catalog table - mirrors vortex-api's event_schema table.
+ * Used by the router for payload validation at routing time.
+ */
+export const eventSchemaTable = pgTable("event_schema", {
+  id: uuid().primaryKey().defaultRandom(),
+  /** Dot-separated event name, e.g. "synapse.provider.health_changed" */
+  name: text().notNull().unique(),
+  /** Service that emits this event, e.g. "synapse-api" */
+  source: text().notNull(),
+  description: text(),
+  /** JSON Schema for the OmniEvent `data` field */
+  payloadSchema: jsonb(),
+  /** Enforcement level: strict (reject invalid), warn (log), none (skip) */
+  enforcement: text().notNull().default("warn"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export type EventSchema = typeof eventSchemaTable.$inferSelect;

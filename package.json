@@ -663,6 +663,7 @@
     "@temporalio/workflow": "^1.14.1",
     "@types/amqplib": "^0.10.7",
     "@types/papaparse": "^5.3.15",
+    "ajv": "^8.18.0",
     "amqplib": "^0.10.8",
     "drizzle-orm": "^0.45.1",
     "graphql-ws": "^6.0.7",

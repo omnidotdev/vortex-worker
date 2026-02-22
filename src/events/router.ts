@@ -11,6 +11,7 @@ import { getDb } from "db";
 import {
   eventLogTable,
   eventRoutingRuleTable,
+  eventSchemaTable,
   workflowRunTable,
   workflowTable,
 } from "db/schema";
@@ -26,10 +27,11 @@ import {
 
 import { cacheClient } from "lib/cache/client";
 import logger from "lib/logger";
-
 import { withRetry, writeToDlq } from "./dlq";
+import { validateEventData } from "./schema-validator";
 
 import type Redis from "ioredis";
+import type { Enforcement } from "./schema-validator";
 import type { OmniEvent } from "./types";
 
 /**
@@ -252,6 +254,42 @@ async function routeEvent(event: OmniEvent): Promise<void> {
           matchedRuleCount: matchingRules.length,
         });
         return;
+      }
+
+      // Validate event data against registered schema (if any)
+      if (event.schemaId) {
+        const schema = await db.query.eventSchemaTable.findFirst({
+          where: eq(eventSchemaTable.name, event.schemaId),
+        });
+
+        if (schema?.payloadSchema) {
+          const result = validateEventData(event.data, {
+            name: schema.name,
+            enforcement: (schema.enforcement ?? "warn") as Enforcement,
+            payloadSchema: schema.payloadSchema as Record<string, unknown>,
+          });
+
+          if (!result.valid) {
+            logger.warn("Event failed schema validation", {
+              eventId: event.id,
+              schemaId: event.schemaId,
+              errors: result.errors,
+            });
+
+            for (const rule of matchingRules) {
+              await writeToDlq(
+                event,
+                rule.id,
+                new Error(
+                  `Schema validation failed: ${result.errors.join(", ")}`,
+                ),
+                "SCHEMA_VALIDATION_ERROR",
+                1,
+              );
+            }
+            return;
+          }
+        }
       }
 
       for (const rule of matchingRules) {
