@@ -5,6 +5,7 @@ export {
   listDlqEvents,
   replayDlqEvent,
 } from "./dlq";
+export { default as OutboxSweeper } from "./outbox";
 export {
   closePublisher,
   initPublisher,

@@ -247,6 +247,29 @@ export const eventLogTable = pgTable("event_log", {
 });
 
 /**
+ * Outbox table - transactional outbox for reliable event publishing.
+ * Mirrored from vortex-api for sweeper reads/updates in the worker.
+ */
+export const outboxTable = pgTable(
+  "outbox",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    topic: text().notNull(),
+    payload: jsonb().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("outbox_pending_idx").on(table.publishedAt),
+    index().on(table.createdAt),
+  ],
+);
+
+export type OutboxRow = typeof outboxTable.$inferSelect;
+
+/**
  * Plugin table - mirrors vortex-api's plugin registry.
  */
 export const pluginTable = pgTable(
