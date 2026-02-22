@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
-import {
-  invalidateSchemaCache,
-  validateEventData,
-  type SchemaEntry,
-} from "./schema-validator";
+import { invalidateSchemaCache, validateEventData } from "./schema-validator";
+
+import type { SchemaEntry } from "./schema-validator";
 
 const STRICT_SCHEMA: SchemaEntry = {
   name: "test.strict",

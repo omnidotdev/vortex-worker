@@ -2,6 +2,7 @@
  * Event schema validation using Ajv (JSON Schema draft 2020-12).
  */
 import Ajv from "ajv";
+
 import logger from "lib/logger";
 
 const ajv = new Ajv({ allErrors: true });

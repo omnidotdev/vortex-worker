@@ -31,10 +31,7 @@ export type TriggerSchedule = {
  * Check if the given time falls within any schedule window.
  * Returns true if no schedule is defined (always-on).
  */
-export function isInWindow(
-  schedule?: TriggerSchedule,
-  now?: Date,
-): boolean {
+export function isInWindow(schedule?: TriggerSchedule, now?: Date): boolean {
   if (!schedule) return true;
 
   const currentTime = now ?? new Date();

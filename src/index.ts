@@ -16,11 +16,10 @@ import { closeCache, initCache } from "lib/cache";
 import logger from "lib/logger";
 import EventsConsumer from "./events/consumer";
 import { closePublisher, initPublisher } from "./events/publisher";
-import routeEvent from "./events/router";
+import routeEvent, { shutdownAccumulators } from "./events/router";
 import { initializeMCPServers } from "./mcp";
 import { getPluginRegistry } from "./plugins/registry";
 import { startAmqpTriggerRunner, stopAmqpTriggerRunner } from "./triggers/amqp";
-import { startScheduleQueueFlusher, stopScheduleQueueFlusher } from "./triggers/schedule-flusher";
 import { startCdcTriggerRunner, stopCdcTriggerRunner } from "./triggers/cdc";
 import {
   startGraphQLSubscriptionTriggerRunner,
@@ -43,6 +42,10 @@ import {
 } from "./triggers/redis";
 import { initTriggerRegistry } from "./triggers/registry";
 import { startS3TriggerRunner, stopS3TriggerRunner } from "./triggers/s3";
+import {
+  startScheduleQueueFlusher,
+  stopScheduleQueueFlusher,
+} from "./triggers/schedule-flusher";
 import { startSqsTriggerRunner, stopSqsTriggerRunner } from "./triggers/sqs";
 import {
   startWebSocketTriggerRunner,
@@ -186,6 +189,7 @@ async function main() {
     eventsConsumer?.stop();
     closePublisher();
     stopScheduleQueueFlusher();
+    await shutdownAccumulators();
     await Promise.all([
       stopAmqpTriggerRunner(),
       stopKafkaTriggerRunner(),

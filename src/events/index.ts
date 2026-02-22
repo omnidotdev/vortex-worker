@@ -12,7 +12,7 @@ export {
   publish,
 } from "./publisher";
 export { replayEvents } from "./replay";
-export { default as routeEvent } from "./router";
+export { default as routeEvent, shutdownAccumulators } from "./router";
 
 export type { DlqQuery, DlqStats } from "./dlq";
 export type { ReplayOptions, ReplayResult } from "./replay";

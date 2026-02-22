@@ -161,11 +161,7 @@ function startGraphQLSubscription(workflow: {
     },
     {
       next: (data) => {
-        applyScheduleFilter(
-          schedule,
-          workflow.id,
-          JSON.stringify(data.data),
-        )
+        applyScheduleFilter(schedule, workflow.id, JSON.stringify(data.data))
           .then((shouldDispatch) => {
             if (!shouldDispatch) return;
             return dispatchFromGraphQLSubscription(

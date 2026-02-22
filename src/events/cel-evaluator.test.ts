@@ -18,7 +18,7 @@ const sampleEvent: OmniEvent = {
 };
 
 afterEach(() => {
-  invalidateCelCache('event.data.amount > 100');
+  invalidateCelCache("event.data.amount > 100");
   invalidateCelCache('startsWith(event.type, "payment.")');
   invalidateCelCache('event.data.amount > 100 && event.source == "billing"');
   invalidateCelCache('event.source == "auth" || event.source == "billing"');
@@ -30,7 +30,7 @@ afterEach(() => {
   invalidateCelCache('matches(event.type, "^payment\\..*")');
   invalidateCelCache("has(event.data.amount)");
   invalidateCelCache("has(event.data.missing)");
-  invalidateCelCache('event.data.amount > 200 ? false : true');
+  invalidateCelCache("event.data.amount > 200 ? false : true");
 });
 
 describe("evaluateCel", () => {
@@ -40,27 +40,27 @@ describe("evaluateCel", () => {
   });
 
   it("evaluates startsWith via custom function", () => {
-    expect(
-      evaluateCel('startsWith(event.type, "payment.")', sampleEvent),
-    ).toBe(true);
-    expect(
-      evaluateCel('startsWith(event.type, "order.")', sampleEvent),
-    ).toBe(false);
+    expect(evaluateCel('startsWith(event.type, "payment.")', sampleEvent)).toBe(
+      true,
+    );
+    expect(evaluateCel('startsWith(event.type, "order.")', sampleEvent)).toBe(
+      false,
+    );
   });
 
   it("evaluates contains via custom function", () => {
-    expect(
-      evaluateCel('contains(event.type, "payment")', sampleEvent),
-    ).toBe(true);
-    expect(
-      evaluateCel('contains(event.type, "order")', sampleEvent),
-    ).toBe(false);
+    expect(evaluateCel('contains(event.type, "payment")', sampleEvent)).toBe(
+      true,
+    );
+    expect(evaluateCel('contains(event.type, "order")', sampleEvent)).toBe(
+      false,
+    );
   });
 
   it("evaluates endsWith via custom function", () => {
-    expect(
-      evaluateCel('endsWith(event.type, ".completed")', sampleEvent),
-    ).toBe(true);
+    expect(evaluateCel('endsWith(event.type, ".completed")', sampleEvent)).toBe(
+      true,
+    );
   });
 
   it("evaluates matches via custom function", () => {
@@ -100,9 +100,7 @@ describe("evaluateCel", () => {
   });
 
   it("evaluates NOT (!=)", () => {
-    expect(evaluateCel('event.data.currency != "EUR"', sampleEvent)).toBe(
-      true,
-    );
+    expect(evaluateCel('event.data.currency != "EUR"', sampleEvent)).toBe(true);
     expect(evaluateCel('event.data.currency != "USD"', sampleEvent)).toBe(
       false,
     );

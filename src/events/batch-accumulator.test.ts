@@ -176,7 +176,9 @@ describe("BatchAccumulator", () => {
 
     expect(flushed[0].metadata.windowStart >= beforeAdd).toBe(true);
     expect(flushed[0].metadata.windowEnd <= afterFlush).toBe(true);
-    expect(flushed[0].metadata.windowStart <= flushed[0].metadata.windowEnd).toBe(true);
+    expect(
+      flushed[0].metadata.windowStart <= flushed[0].metadata.windowEnd,
+    ).toBe(true);
 
     await acc.shutdown();
   });

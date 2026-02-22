@@ -18,6 +18,7 @@ import {
 import { and, desc, eq } from "drizzle-orm";
 import jsonata from "jsonata";
 import { JSONPath } from "jsonpath-plus";
+import { z } from "zod";
 import {
   endSpan,
   extractTraceContext,
@@ -32,7 +33,6 @@ import { evaluateCel } from "./cel-evaluator";
 import { withRetry, writeToDlq } from "./dlq";
 import { validateEventData } from "./schema-validator";
 
-import type { BatchConfig } from "./batch-accumulator";
 import type Redis from "ioredis";
 import type { Enforcement } from "./schema-validator";
 import type { OmniEvent } from "./types";
@@ -121,8 +121,30 @@ export const applyTransform = async (
 /** Deduplication window for correlationId-based idempotency (24 hours). */
 const DEDUP_TTL_SECONDS = 86_400;
 
-/** Per-rule batch accumulator cache (keyed by rule ID) */
+/** Zod schema for validating `batch` JSONB column from `event_routing_rule` */
+const BatchConfigSchema = z.object({
+  maxSize: z.number().positive(),
+  maxWaitMs: z.number().positive(),
+  partitionKey: z.string().optional(),
+});
+
+/**
+ * Per-rule batch accumulator cache (keyed by rule ID).
+ *
+ * NOTE: accumulators are not removed when a rule is disabled/deleted.
+ * Orphaned entries are inert (empty partitions, no timers) and will be
+ * replaced if the rule is re-enabled. Periodic cleanup can be added if
+ * the Map grows large enough to matter.
+ */
 const accumulators = new Map<string, BatchAccumulator>();
+
+/** Flush all active batch accumulators (call during graceful shutdown) */
+export async function shutdownAccumulators(): Promise<void> {
+  await Promise.all(
+    [...accumulators.values()].map((acc) => acc.shutdown()),
+  );
+  accumulators.clear();
+}
 
 let _hatchet: ReturnType<typeof Hatchet.init> | null = null;
 
@@ -340,69 +362,111 @@ async function routeEvent(event: OmniEvent): Promise<void> {
 
         // Route through batch accumulator when rule has batch config
         if (rule.batch) {
-          const batchConfig = rule.batch as BatchConfig;
-          let acc = accumulators.get(rule.id);
+          const parsed = BatchConfigSchema.safeParse(rule.batch);
 
-          if (!acc) {
-            acc = new BatchAccumulator(
-              rule.id,
-              batchConfig,
-              async (events, meta) => {
-                try {
-                  await withRetry(async () => {
-                    const engineWorkflowId = `event-${workflow.id}-${Date.now()}`;
-                    const engineRunId = `run-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+          if (!parsed.success) {
+            logger.warn("Invalid batch config on rule, skipping batch mode", {
+              ruleId: rule.id,
+              errors: parsed.error.issues,
+            });
+            // Fall through to non-batched dispatch below
+          } else {
+            const ruleId = rule.id;
+            const workflowId = rule.workflowId;
+            const organizationId = event.organizationId;
+            let acc = accumulators.get(ruleId);
 
-                    const [inserted] = await db
-                      .insert(workflowRunTable)
-                      .values({
-                        workflowId: workflow.id,
-                        engineWorkflowId,
-                        engineRunId,
-                        status: "pending",
-                        input: {
+            if (!acc) {
+              acc = new BatchAccumulator(
+                ruleId,
+                parsed.data,
+                async (events, meta) => {
+                  try {
+                    // Re-fetch workflow at flush time to avoid stale closures
+                    const currentWorkflow =
+                      await db.query.workflowTable.findFirst({
+                        where: and(
+                          eq(workflowTable.id, workflowId),
+                          eq(workflowTable.isActive, true),
+                        ),
+                      });
+
+                    if (!currentWorkflow) {
+                      logger.warn(
+                        "Workflow deactivated during batch window, discarding batch",
+                        {
+                          ruleId,
+                          workflowId,
+                          batchSize: meta.size,
+                        },
+                      );
+                      return;
+                    }
+
+                    await withRetry(async () => {
+                      const engineWorkflowId = `event-${currentWorkflow.id}-${Date.now()}`;
+                      const engineRunId = `run-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+                      const [inserted] = await db
+                        .insert(workflowRunTable)
+                        .values({
+                          workflowId: currentWorkflow.id,
+                          engineWorkflowId,
+                          engineRunId,
+                          status: "pending",
+                          input: {
+                            events,
+                            batchMetadata: meta,
+                          },
+                        })
+                        .returning();
+
+                      const traceCtx = injectTraceContext();
+
+                      await hatchet.event.push("workflow:execute", {
+                        workflowId: engineWorkflowId,
+                        runId: inserted.id,
+                        organizationId,
+                        traceContext: traceCtx,
+                        triggerData: {
                           events,
                           batchMetadata: meta,
                         },
-                      })
-                      .returning();
+                        definition: currentWorkflow.definition,
+                      });
 
-                    const traceCtx = injectTraceContext();
-
-                    await hatchet.event.push("workflow:execute", {
-                      workflowId: engineWorkflowId,
-                      runId: inserted.id,
-                      organizationId: event.organizationId,
-                      traceContext: traceCtx,
-                      triggerData: {
-                        events,
-                        batchMetadata: meta,
-                      },
-                      definition: workflow.definition,
+                      await db
+                        .update(workflowRunTable)
+                        .set({ status: "running" })
+                        .where(eq(workflowRunTable.id, inserted.id));
+                    });
+                  } catch (err) {
+                    logger.error("Failed to dispatch batch after retries", {
+                      ruleId,
+                      workflowId,
+                      batchSize: meta.size,
+                      error: err instanceof Error ? err.message : String(err),
                     });
 
-                    await db
-                      .update(workflowRunTable)
-                      .set({ status: "running" })
-                      .where(eq(workflowRunTable.id, inserted.id));
-                  });
-                } catch (err) {
-                  logger.error("Failed to dispatch batch after retries", {
-                    ruleId: rule.id,
-                    workflowId: workflow.id,
-                    batchSize: meta.size,
-                    error: err instanceof Error ? err.message : String(err),
-                  });
+                    // Write all batch events to DLQ so none are silently lost
+                    for (const batchEvent of events) {
+                      await writeToDlq(
+                        batchEvent as OmniEvent,
+                        ruleId,
+                        err,
+                        "DISPATCH_ERROR",
+                        3,
+                      );
+                    }
+                  }
+                },
+              );
+              accumulators.set(ruleId, acc);
+            }
 
-                  await writeToDlq(event, rule.id, err, "DISPATCH_ERROR", 3);
-                }
-              },
-            );
-            accumulators.set(rule.id, acc);
+            await acc.add({ ...event, data: transformedData });
+            continue;
           }
-
-          await acc.add({ ...event, data: transformedData });
-          continue;
         }
 
         try {
