@@ -18,6 +18,7 @@ import EventsConsumer from "./events/consumer";
 import { closePublisher, initPublisher } from "./events/publisher";
 import routeEvent from "./events/router";
 import { initializeMCPServers } from "./mcp";
+import { getPluginRegistry } from "./plugins/registry";
 import {
   startGraphQLSubscriptionTriggerRunner,
   stopGraphQLSubscriptionTriggerRunner,
@@ -27,6 +28,14 @@ import {
   stopKafkaTriggerRunner,
 } from "./triggers/kafka";
 import { startSqsTriggerRunner, stopSqsTriggerRunner } from "./triggers/sqs";
+import {
+  startMqttTriggerRunner,
+  stopMqttTriggerRunner,
+} from "./triggers/mqtt";
+import {
+  startWebSocketTriggerRunner,
+  stopWebSocketTriggerRunner,
+} from "./triggers/websocket";
 import { authzSyncWorkflow } from "./workflows/authz.workflow";
 import { authzReconcileWorkflow } from "./workflows/authzReconcile.workflow";
 import { chronicleAuditWorkflow } from "./workflows/chronicle.workflow";
@@ -58,6 +67,9 @@ function parseEventsUrl(url: string): EventsConfig {
 async function main() {
   await initCache();
   await initializeMCPServers();
+
+  // Initialize plugin registry (load enabled plugins into memory)
+  await getPluginRegistry().init();
 
   // Start Hatchet worker
   const hatchet = Hatchet.init();
@@ -109,6 +121,12 @@ async function main() {
   // Start GraphQL subscription trigger runner
   startGraphQLSubscriptionTriggerRunner();
 
+  // Start MQTT trigger runner
+  startMqttTriggerRunner();
+
+  // Start WebSocket trigger runner
+  startWebSocketTriggerRunner();
+
   // Start events consumer if streaming layer is configured
   let eventsConsumer: EventsConsumer | null = null;
 
@@ -132,6 +150,8 @@ async function main() {
       stopKafkaTriggerRunner(),
       stopSqsTriggerRunner(),
       stopGraphQLSubscriptionTriggerRunner(),
+      stopMqttTriggerRunner(),
+      stopWebSocketTriggerRunner(),
     ]);
     await closeCache();
     process.exit(0);

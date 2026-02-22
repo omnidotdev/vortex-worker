@@ -243,3 +243,64 @@ export const eventLogTable = pgTable("event_log", {
     .defaultNow()
     .notNull(),
 });
+
+/**
+ * Plugin table - mirrors vortex-api's plugin registry.
+ */
+export const pluginTable = pgTable(
+  "plugin",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organizationId: text("organization_id").notNull(),
+    name: text().notNull(),
+    description: text(),
+    version: text().notNull(),
+    manifest: jsonb().notNull(),
+    wasmUrl: text("wasm_url").notNull(),
+    wasmHash: text("wasm_hash").notNull(),
+    isEnabled: boolean("is_enabled").default(true).notNull(),
+    isVerified: boolean("is_verified").default(false).notNull(),
+    config: jsonb().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("plugin_org_id_idx").on(table.organizationId),
+    index("plugin_name_idx").on(table.name),
+    index("plugin_is_enabled_idx").on(table.isEnabled),
+  ],
+);
+
+export type Plugin = typeof pluginTable.$inferSelect;
+
+/**
+ * Plugin usage table - mirrors vortex-api's usage tracking table.
+ */
+export const pluginUsageTable = pgTable(
+  "plugin_usage",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    pluginId: uuid("plugin_id")
+      .notNull()
+      .references(() => pluginTable.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").notNull(),
+    workflowId: uuid("workflow_id"),
+    runId: uuid("run_id"),
+    functionName: text("function_name").notNull(),
+    durationMs: integer("duration_ms").notNull(),
+    success: boolean().notNull(),
+    executedAt: timestamp("executed_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index("plugin_usage_plugin_id_idx").on(table.pluginId),
+    index("plugin_usage_org_id_idx").on(table.organizationId),
+    index("plugin_usage_executed_at_idx").on(table.executedAt),
+  ],
+);
+
+export type PluginUsage = typeof pluginUsageTable.$inferSelect;
+export type NewPluginUsage = typeof pluginUsageTable.$inferInsert;

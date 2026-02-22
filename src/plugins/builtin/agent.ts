@@ -5,6 +5,7 @@
  */
 
 import { getMCPClient } from "../../mcp";
+import { stateStore } from "../../state/store";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
@@ -20,6 +21,9 @@ type AgentInput = {
   connectionId?: string;
   baseUrl?: string;
   systemPrompt?: string;
+  conversationId?: string;
+  memoryTtl?: number;
+  streamEvents?: boolean;
 };
 
 type OpenAIToolCall = {
@@ -41,6 +45,10 @@ type OpenAITool = {
     parameters: Record<string, unknown>;
   };
 };
+
+const MEMORY_KEY = (orgId: string, convId: string) =>
+  `agent:memory:${orgId}:${convId}`;
+const MAX_MEMORY_MESSAGES = 20;
 
 const PROVIDER_BASE_URLS: Record<string, string> = {
   openai: "https://api.openai.com/v1",
@@ -115,6 +123,9 @@ const executeAgent = async (
       connectionId,
       baseUrl,
       systemPrompt,
+      conversationId,
+      memoryTtl,
+      streamEvents,
     } = input;
 
     if (!serverId) {
@@ -173,10 +184,22 @@ const executeAgent = async (
       },
     }));
 
+    // Load conversation history from Redis if conversationId is set
+    let conversationHistory: OpenAIMessage[] = [];
+    if (conversationId && context?.organizationId) {
+      const stored = await stateStore.getList(
+        context.organizationId,
+        MEMORY_KEY(context.organizationId, conversationId),
+      );
+      // Take the last MAX_MEMORY_MESSAGES messages to avoid context overflow
+      conversationHistory = stored.slice(-MAX_MEMORY_MESSAGES) as OpenAIMessage[];
+    }
+
     const messages: OpenAIMessage[] = [
       ...(systemPrompt
         ? [{ role: "system" as const, content: systemPrompt }]
         : []),
+      ...conversationHistory,
       { role: "user" as const, content: goal },
     ];
 
@@ -216,11 +239,15 @@ const executeAgent = async (
       }
 
       // Add assistant message with tool calls to conversation history
-      messages.push({
+      const assistantMessage: OpenAIMessage = {
         role: "assistant",
         content: message.content ?? null,
         tool_calls: message.tool_calls,
-      });
+      };
+      messages.push(assistantMessage);
+
+      const iterationSteps: Array<{ tool: string; args: unknown; result: unknown }> = [];
+      const toolResultMessages: OpenAIMessage[] = [];
 
       // Execute each tool call and feed results back
       for (const toolCall of message.tool_calls) {
@@ -246,22 +273,63 @@ const executeAgent = async (
               .join("\n") ?? "")
           : (toolResult.error ?? "Tool call failed");
 
-        steps.push({
+        const stepEntry = {
           tool: toolName,
           args: toolArgs,
           result: toolResultText,
-        });
+        };
+        steps.push(stepEntry);
+        iterationSteps.push(stepEntry);
 
-        messages.push({
+        const toolResultMessage: OpenAIMessage = {
           role: "tool",
           content: toolResultText,
           tool_call_id: toolCall.id,
+        };
+        messages.push(toolResultMessage);
+        toolResultMessages.push(toolResultMessage);
+      }
+
+      // Persist assistant message + tool results to Redis memory
+      if (conversationId && context?.organizationId) {
+        const messagesToAppend: OpenAIMessage[] = [assistantMessage, ...toolResultMessages];
+        for (const msg of messagesToAppend) {
+          await stateStore.append(
+            context.organizationId,
+            MEMORY_KEY(context.organizationId, conversationId),
+            msg,
+          );
+        }
+      }
+
+      // Emit iteration event for SSE streaming
+      if (streamEvents) {
+        await context?.emit?.("agent:iteration", {
+          iteration: i + 1,
+          steps: iterationSteps,
         });
       }
     }
 
     if (!finalResult && iterations >= maxIterations) {
       finalResult = "Max iterations reached without a final answer";
+    }
+
+    // Persist the final assistant message and apply TTL if configured
+    if (conversationId && context?.organizationId && finalResult) {
+      await stateStore.append(
+        context.organizationId,
+        MEMORY_KEY(context.organizationId, conversationId),
+        { role: "assistant" as const, content: finalResult },
+      );
+      if (memoryTtl) {
+        await stateStore.set(
+          context.organizationId,
+          `agent:memory:${conversationId}:ttl_marker`,
+          Date.now(),
+          memoryTtl,
+        );
+      }
     }
 
     return {

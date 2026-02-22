@@ -26,6 +26,7 @@ import {
   getPluginHost,
   isBuiltinPlugin,
 } from "../plugins";
+import { getPluginRegistry } from "../plugins/registry";
 import { stateStore } from "../state";
 
 import type { PluginCallResult } from "../plugins/types";
@@ -1174,6 +1175,17 @@ const executePlugin = async (
       pluginContext,
     );
   }
+
+  // Track usage immediately after execution (fire-and-forget, non-blocking)
+  getPluginRegistry().incrementUsage(
+    plugin.pluginId,
+    ctx.organizationId ?? "",
+    ctx.workflowId,
+    ctx.runId,
+    plugin.function,
+    callResult.durationMs,
+    callResult.success,
+  );
 
   if (!callResult.success) {
     throw new PluginError("Plugin execution failed", {
@@ -4300,6 +4312,22 @@ async function executeAgent(
 ): Promise<unknown> {
   const { agent } = step;
 
+  const pluginCtx = {
+    ...buildPluginContext(step, ctx),
+    organizationId: ctx.organizationId,
+    ...(agent.streamEvents && ctx.runId && ctx.organizationId
+      ? {
+          emit: async (type: string, data: unknown) => {
+            await stateStore.publish(
+              ctx.organizationId!,
+              `run:${ctx.runId}:events`,
+              { type, data, timestamp: new Date().toISOString() },
+            );
+          },
+        }
+      : {}),
+  };
+
   const result = await executeBuiltinAction(
     "builtin:agent",
     "execute",
@@ -4309,8 +4337,11 @@ async function executeAgent(
       goal: agent.goal,
       tools: agent.tools,
       maxIterations: agent.maxIterations,
+      conversationId: agent.conversationId,
+      memoryTtl: agent.memoryTtl,
+      streamEvents: agent.streamEvents,
     },
-    buildPluginContext(step, ctx),
+    pluginCtx,
   );
 
   if (result.success && agent.outputVariable && result.output) {

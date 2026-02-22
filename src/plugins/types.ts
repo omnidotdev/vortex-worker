@@ -142,6 +142,8 @@ export interface PluginContext {
   secrets: Record<string, unknown>;
   /** External service connections available to the plugin */
   connections?: Record<string, Record<string, unknown>>;
+  /** Emit an event during execution (for SSE streaming) */
+  emit?: (type: string, data: unknown) => Promise<void>;
 }
 
 /** Plugin registry entry */

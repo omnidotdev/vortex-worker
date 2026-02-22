@@ -113,6 +113,8 @@ export const TriggerType = z.enum([
   "s3",
   "cdc",
   "graphql_subscription",
+  "websocket",
+  "mqtt",
 ]);
 export type TriggerType = z.infer<typeof TriggerType>;
 
@@ -978,6 +980,9 @@ export const AgentStep = BaseStep.extend({
     tools: z.array(z.string()).optional(),
     maxIterations: z.number().default(10),
     outputVariable: z.string().optional(),
+    conversationId: z.string().optional(),
+    memoryTtl: z.number().optional(),
+    streamEvents: z.boolean().default(false),
   }),
 });
 export type AgentStep = z.infer<typeof AgentStep>;
