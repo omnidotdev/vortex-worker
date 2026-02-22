@@ -388,3 +388,42 @@ export const eventSchemaTable = pgTable("event_schema", {
 });
 
 export type EventSchema = typeof eventSchemaTable.$inferSelect;
+
+/**
+ * Approval request table - stores gate-step approval/signal/manual requests.
+ * Mirrored from vortex-api for gate plugin reads/writes in the worker.
+ */
+export const approvalRequestTable = pgTable(
+  "approval_request",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organizationId: text("organization_id").notNull(),
+    workflowId: uuid("workflow_id")
+      .notNull()
+      .references(() => workflowTable.id, { onDelete: "cascade" }),
+    runId: text("run_id").notNull(),
+    stepId: text("step_id").notNull(),
+    gateType: text("gate_type").notNull(),
+    title: text(),
+    approvers: jsonb().$type<string[]>(),
+    status: text().default("pending").notNull(),
+    decidedBy: text("decided_by"),
+    reason: text(),
+    signalName: text("signal_name"),
+    signalData: jsonb("signal_data"),
+    timeoutMs: text("timeout_ms"),
+    timeoutAction: text("timeout_action").default("reject"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("approval_request_org_idx").on(table.organizationId),
+    index("approval_request_run_step_idx").on(table.runId, table.stepId),
+    index("approval_request_status_idx").on(table.status),
+  ],
+);
+
+export type ApprovalRequest = typeof approvalRequestTable.$inferSelect;
+export type NewApprovalRequest = typeof approvalRequestTable.$inferInsert;
