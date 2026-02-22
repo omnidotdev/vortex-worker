@@ -10,9 +10,12 @@
 import { readdirSync, statSync } from "node:fs";
 import { join, parse } from "node:path";
 
+import { AmqpAdapter } from "adapters/amqp.adapter";
 import { CdcAdapter } from "adapters/cdc.adapter";
+import { GrpcStreamAdapter } from "adapters/grpc.adapter";
 import { KafkaAdapter } from "adapters/kafka.adapter";
 import { MqttAdapter } from "adapters/mqtt.adapter";
+import { NatsAdapter } from "adapters/nats.adapter";
 import { PollingAdapter } from "adapters/polling.adapter";
 import { RedisAdapter } from "adapters/redis.adapter";
 import { S3Adapter } from "adapters/s3.adapter";
@@ -60,6 +63,15 @@ const BUILTIN_ADAPTERS: Record<
     config: Record<string, unknown>,
   ) => EventAdapter,
   redis: RedisAdapter as unknown as new (
+    config: Record<string, unknown>,
+  ) => EventAdapter,
+  nats: NatsAdapter as unknown as new (
+    config: Record<string, unknown>,
+  ) => EventAdapter,
+  amqp: AmqpAdapter as unknown as new (
+    config: Record<string, unknown>,
+  ) => EventAdapter,
+  grpc_stream: GrpcStreamAdapter as unknown as new (
     config: Record<string, unknown>,
   ) => EventAdapter,
 };

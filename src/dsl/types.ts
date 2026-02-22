@@ -115,6 +115,9 @@ export const TriggerType = z.enum([
   "graphql_subscription",
   "websocket",
   "mqtt",
+  "nats",
+  "amqp",
+  "grpc_stream",
 ]);
 export type TriggerType = z.infer<typeof TriggerType>;
 
