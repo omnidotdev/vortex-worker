@@ -121,6 +121,20 @@ export const TriggerType = z.enum([
 ]);
 export type TriggerType = z.infer<typeof TriggerType>;
 
+export const TriggerScheduleWindow = z.object({
+  days: z.array(z.number().min(0).max(6)),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/),
+});
+export type TriggerScheduleWindow = z.infer<typeof TriggerScheduleWindow>;
+
+export const TriggerSchedule = z.object({
+  timezone: z.string(),
+  windows: z.array(TriggerScheduleWindow),
+  behavior: z.enum(["drop", "queue"]),
+});
+export type TriggerScheduleZod = z.infer<typeof TriggerSchedule>;
+
 export const Position = z.object({
   x: z.number(),
   y: z.number(),
@@ -151,6 +165,7 @@ export const TriggerStep = BaseStep.extend({
   trigger: z.object({
     type: TriggerType,
     config: z.record(z.string(), z.unknown()),
+    schedule: TriggerSchedule.optional(),
   }),
 });
 export type TriggerStep = z.infer<typeof TriggerStep>;

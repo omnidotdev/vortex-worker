@@ -13,6 +13,7 @@ import { workflowRunTable, workflowTable } from "db/schema";
 import { eq } from "drizzle-orm";
 
 import logger from "lib/logger";
+import { applyScheduleFilter, extractSchedule } from "./schedule-filter";
 
 import type { Workflow } from "db/schema";
 
@@ -134,8 +135,16 @@ async function startRedisConsumer(workflow: {
   redisConfig: RedisTriggerConfig;
 }): Promise<void> {
   const adapter = new RedisAdapter(workflow.redisConfig);
+  const schedule = extractSchedule(workflow.definition);
 
   adapter.onEvent(async (event) => {
+    const shouldDispatch = await applyScheduleFilter(
+      schedule,
+      workflow.id,
+      JSON.stringify(event.data),
+    );
+    if (!shouldDispatch) return;
+
     await dispatchFromRedis(
       workflow.id,
       workflow.organizationId,

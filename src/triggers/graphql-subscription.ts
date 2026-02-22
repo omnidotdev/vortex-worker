@@ -13,6 +13,7 @@ import { eq } from "drizzle-orm";
 import { createClient } from "graphql-ws";
 
 import logger from "lib/logger";
+import { applyScheduleFilter, extractSchedule } from "./schedule-filter";
 
 import type { Workflow } from "db/schema";
 
@@ -143,6 +144,7 @@ function startGraphQLSubscription(workflow: {
   gqlConfig: GraphQLSubscriptionTriggerConfig;
 }): () => void {
   const wsUrl = normalizeWsUrl(workflow.gqlConfig.endpoint);
+  const schedule = extractSchedule(workflow.definition);
 
   const client = createClient({
     url: wsUrl,
@@ -159,17 +161,26 @@ function startGraphQLSubscription(workflow: {
     },
     {
       next: (data) => {
-        dispatchFromGraphQLSubscription(
+        applyScheduleFilter(
+          schedule,
           workflow.id,
-          workflow.organizationId,
-          workflow.definition,
-          data.data,
-        ).catch((err) => {
-          logger.error("Error dispatching graphql subscription event", {
-            workflowId: workflow.id,
-            error: err instanceof Error ? err.message : String(err),
+          JSON.stringify(data.data),
+        )
+          .then((shouldDispatch) => {
+            if (!shouldDispatch) return;
+            return dispatchFromGraphQLSubscription(
+              workflow.id,
+              workflow.organizationId,
+              workflow.definition,
+              data.data,
+            );
+          })
+          .catch((err) => {
+            logger.error("Error dispatching graphql subscription event", {
+              workflowId: workflow.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
           });
-        });
       },
       error: (err) => {
         logger.error("GraphQL subscription error", {

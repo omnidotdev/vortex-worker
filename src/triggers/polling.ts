@@ -13,6 +13,7 @@ import { workflowRunTable, workflowTable } from "db/schema";
 import { eq } from "drizzle-orm";
 
 import logger from "lib/logger";
+import { applyScheduleFilter, extractSchedule } from "./schedule-filter";
 
 import type { Workflow } from "db/schema";
 
@@ -129,8 +130,16 @@ async function startPollingConsumer(workflow: {
   pollingConfig: PollingTriggerConfig;
 }): Promise<void> {
   const adapter = new PollingAdapter(workflow.pollingConfig);
+  const schedule = extractSchedule(workflow.definition);
 
   adapter.onEvent(async (event) => {
+    const shouldDispatch = await applyScheduleFilter(
+      schedule,
+      workflow.id,
+      JSON.stringify(event.data),
+    );
+    if (!shouldDispatch) return;
+
     await dispatchFromPolling(
       workflow.id,
       workflow.organizationId,

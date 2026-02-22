@@ -20,6 +20,7 @@ import routeEvent from "./events/router";
 import { initializeMCPServers } from "./mcp";
 import { getPluginRegistry } from "./plugins/registry";
 import { startAmqpTriggerRunner, stopAmqpTriggerRunner } from "./triggers/amqp";
+import { startScheduleQueueFlusher, stopScheduleQueueFlusher } from "./triggers/schedule-flusher";
 import { startCdcTriggerRunner, stopCdcTriggerRunner } from "./triggers/cdc";
 import {
   startGraphQLSubscriptionTriggerRunner,
@@ -162,6 +163,9 @@ async function main() {
   // Start gRPC stream trigger runner
   startGrpcTriggerRunner();
 
+  // Start schedule queue flusher (delivers queued events when windows open)
+  startScheduleQueueFlusher();
+
   // Start events consumer if streaming layer is configured
   let eventsConsumer: EventsConsumer | null = null;
 
@@ -181,6 +185,7 @@ async function main() {
     temporalWorker?.shutdown();
     eventsConsumer?.stop();
     closePublisher();
+    stopScheduleQueueFlusher();
     await Promise.all([
       stopAmqpTriggerRunner(),
       stopKafkaTriggerRunner(),

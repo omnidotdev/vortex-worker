@@ -13,6 +13,7 @@ import { workflowRunTable, workflowTable } from "db/schema";
 import { eq } from "drizzle-orm";
 
 import logger from "lib/logger";
+import { applyScheduleFilter, extractSchedule } from "./schedule-filter";
 
 // Scan interval for detecting new/removed kafka-triggered workflows (60s)
 const SCAN_INTERVAL_MS = 60 * 1_000;
@@ -136,8 +137,16 @@ async function startKafkaConsumer(workflow: {
   kafkaConfig: KafkaTriggerConfig;
 }): Promise<void> {
   const adapter = new KafkaAdapter(workflow.kafkaConfig);
+  const schedule = extractSchedule(workflow.definition);
 
   adapter.onEvent(async (event) => {
+    const shouldDispatch = await applyScheduleFilter(
+      schedule,
+      workflow.id,
+      JSON.stringify(event.data),
+    );
+    if (!shouldDispatch) return;
+
     await dispatchFromKafka(
       workflow.id,
       workflow.organizationId,

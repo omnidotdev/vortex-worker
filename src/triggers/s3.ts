@@ -13,6 +13,7 @@ import { workflowRunTable, workflowTable } from "db/schema";
 import { eq } from "drizzle-orm";
 
 import logger from "lib/logger";
+import { applyScheduleFilter, extractSchedule } from "./schedule-filter";
 
 // Scan interval for detecting new/removed s3-triggered workflows (60s)
 const SCAN_INTERVAL_MS = 60 * 1_000;
@@ -139,8 +140,16 @@ async function startS3Poller(workflow: {
   s3Config: S3TriggerConfig;
 }): Promise<void> {
   const adapter = new S3Adapter(workflow.s3Config);
+  const schedule = extractSchedule(workflow.definition);
 
   adapter.onEvent(async (event) => {
+    const shouldDispatch = await applyScheduleFilter(
+      schedule,
+      workflow.id,
+      JSON.stringify(event.data),
+    );
+    if (!shouldDispatch) return;
+
     await dispatchFromS3(
       workflow.id,
       workflow.organizationId,
