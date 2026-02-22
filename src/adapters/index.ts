@@ -1,5 +1,6 @@
 export { AmqpAdapter } from "./amqp.adapter";
 export { CdcAdapter } from "./cdc.adapter";
+export { GrpcStreamAdapter } from "./grpc.adapter";
 export { KafkaAdapter } from "./kafka.adapter";
 export { MqttAdapter } from "./mqtt.adapter";
 export { NatsAdapter } from "./nats.adapter";

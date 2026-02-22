@@ -643,6 +643,8 @@
     "@azure/storage-blob": "^12.30.0",
     "@extism/extism": "^2.0.0-rc13",
     "@google-cloud/storage": "^7.18.0",
+    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/proto-loader": "^0.8.0",
     "@hatchet-dev/typescript-sdk": "^1.10.5",
     "@iggy.rs/sdk": "^1.0.6",
     "@modelcontextprotocol/sdk": "^1.25.2",

@@ -25,6 +25,7 @@ import {
   startGraphQLSubscriptionTriggerRunner,
   stopGraphQLSubscriptionTriggerRunner,
 } from "./triggers/graphql-subscription";
+import { startGrpcTriggerRunner, stopGrpcTriggerRunner } from "./triggers/grpc";
 import {
   startKafkaTriggerRunner,
   stopKafkaTriggerRunner,
@@ -158,6 +159,9 @@ async function main() {
   // Start Redis pub/sub trigger runner
   startRedisTriggerRunner();
 
+  // Start gRPC stream trigger runner
+  startGrpcTriggerRunner();
+
   // Start events consumer if streaming layer is configured
   let eventsConsumer: EventsConsumer | null = null;
 
@@ -189,6 +193,7 @@ async function main() {
       stopS3TriggerRunner(),
       stopCdcTriggerRunner(),
       stopRedisTriggerRunner(),
+      stopGrpcTriggerRunner(),
     ]);
     await closeCache();
     process.exit(0);
