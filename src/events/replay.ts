@@ -15,6 +15,7 @@ import type { EventsConfig, OmniEvent } from "./types";
 
 const STREAM_ID = 1;
 const REPLAY_CONSUMER_GROUP = "vortex-replay";
+const REPLAY_CONSUMER_ID = 100;
 const DEFAULT_MAX_RATE = 100;
 const POLL_BATCH_SIZE = 50;
 const PROGRESS_LOG_INTERVAL = 100;
@@ -183,19 +184,16 @@ async function replayEvents(
     let replayedInWindow = 0;
     let windowStart = Date.now();
     let endOfTopic = false;
+    let currentOffset = 0;
 
     while (!endOfTopic) {
-      // TODO: Iggy SDK — use an offset-based polling strategy to read
-      // from the beginning of the topic without committing offsets.
-      // The current approach uses consumer group polling (kind 2) which
-      // will advance the group offset. Consider using kind 1 (consumer)
-      // with explicit offset tracking for idempotent replays.
+      // Use offset-based polling (kind 1) to read without committing offsets
       const response = await client.message.poll({
         streamId: STREAM_ID,
         topicId: topic,
-        consumer: { kind: 2, id: REPLAY_CONSUMER_GROUP },
+        consumer: { kind: 1, id: REPLAY_CONSUMER_ID },
         partitionId: 0,
-        pollingStrategy: { kind: 5, value: 0n },
+        pollingStrategy: { kind: 1, value: BigInt(currentOffset) },
         count: POLL_BATCH_SIZE,
         autocommit: false,
       });
@@ -278,6 +276,8 @@ async function replayEvents(
           });
         }
       }
+
+      currentOffset += response.messages.length;
     }
 
     result.durationMs = Date.now() - startTime;

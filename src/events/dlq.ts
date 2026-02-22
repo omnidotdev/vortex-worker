@@ -117,6 +117,7 @@ async function writeToDlq(
 
 const STREAM_ID = 1;
 const DLQ_CONSUMER_GROUP = "vortex-dlq-reader";
+const DLQ_CONSUMER_ID = 200;
 
 type DlqQuery = {
   organizationId?: string;
@@ -190,17 +191,14 @@ async function listDlqEvents(
     client = await connectIggy(config);
     await ensureConsumerGroup(client, dlqTopic);
 
-    // TODO: Iggy SDK — poll messages from the DLQ topic
-    // The consumer group approach (kind 2) advances the offset, which is
-    // not ideal for listing. Use an absolute offset strategy (kind 1)
-    // to read without side effects.
+    // Use offset-based polling (kind 1) to read without advancing offsets
     const response = await client.message.poll({
       streamId: STREAM_ID,
       topicId: dlqTopic,
-      consumer: { kind: 2, id: DLQ_CONSUMER_GROUP },
+      consumer: { kind: 1, id: DLQ_CONSUMER_ID },
       partitionId: 0,
-      pollingStrategy: { kind: 5, value: 0n },
-      count: limit + offset,
+      pollingStrategy: { kind: 1, value: BigInt(offset) },
+      count: limit,
       autocommit: false,
     });
 
@@ -233,8 +231,7 @@ async function listDlqEvents(
       }
     }
 
-    // Apply pagination after filtering
-    return events.slice(offset, offset + limit);
+    return events;
   } catch (err) {
     logger.error("Failed to list DLQ events", {
       topic: dlqTopic,
@@ -269,10 +266,10 @@ async function getDlqStats(
       topicId: dlqTopic,
     });
 
-    // TODO: Iggy SDK — extract message count from topic metadata
-    // The shape depends on the SDK version; adapt as needed
-    const totalMessages =
-      ((topicInfo as Record<string, unknown>).messagesCount as number) ?? 0;
+    // Extract message count from topic partitions metadata
+    const totalMessages = Number(
+      topicInfo.partitions.reduce((sum, p) => sum + p.messagesCount, 0n),
+    );
 
     // Read first and last messages to get timestamp boundaries
     let oldestMessage: string | undefined;
@@ -409,28 +406,26 @@ async function discardDlqEvent(
     client = await connectIggy(config);
     await ensureConsumerGroup(client, dlqTopic);
 
-    // Poll messages until we find the target event, auto-committing
-    // offsets to advance past it
-    // TODO: Iggy SDK — seek to the specific offset containing `eventId`
-    // and commit that offset. For now, poll in batches until found.
+    // Scan messages using offset-based polling to find the target event
     const batchSize = 50;
     let found = false;
+    let currentOffset = 0;
 
     // Safety limit to avoid infinite loops
-    const maxAttempts = 100;
-    let attempts = 0;
+    const maxBatches = 100;
+    let batches = 0;
 
-    while (!found && attempts < maxAttempts) {
-      attempts++;
+    while (!found && batches < maxBatches) {
+      batches++;
 
       const response = await client.message.poll({
         streamId: STREAM_ID,
         topicId: dlqTopic,
-        consumer: { kind: 2, id: DLQ_CONSUMER_GROUP },
+        consumer: { kind: 1, id: DLQ_CONSUMER_ID },
         partitionId: 0,
-        pollingStrategy: { kind: 5, value: 0n },
+        pollingStrategy: { kind: 1, value: BigInt(currentOffset) },
         count: batchSize,
-        autocommit: true,
+        autocommit: false,
       });
 
       if (response.messages.length === 0) break;
@@ -441,9 +436,23 @@ async function discardDlqEvent(
 
           if (dlqEvent.originalEvent.id === eventId) {
             found = true;
+
+            // Commit the offset to the consumer group so the event
+            // is not returned by future group-based reads
+            await client.offset.store({
+              streamId: STREAM_ID,
+              topicId: dlqTopic,
+              consumer: { kind: 2, id: DLQ_CONSUMER_GROUP },
+              partitionId: 0,
+              offset: BigInt(currentOffset + 1),
+            });
+
             break;
           }
+
+          currentOffset++;
         } catch {
+          currentOffset++;
           // Skip malformed messages
         }
       }
