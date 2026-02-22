@@ -118,9 +118,40 @@ export const workflowTable = pgTable("workflow", {
   name: text().notNull(),
   definition: jsonb().notNull(),
   isActive: boolean("is_active").default(true).notNull(),
+  version: integer().default(1).notNull(),
 });
 
 export type Workflow = typeof workflowTable.$inferSelect;
+
+/**
+ * Workflow version history table - stores definition snapshots per version.
+ * Mirrored from vortex-api for version lookup in the worker.
+ */
+export const workflowVersionTable = pgTable(
+  "workflow_version",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workflowId: uuid("workflow_id")
+      .notNull()
+      .references(() => workflowTable.id, { onDelete: "cascade" }),
+    version: integer().notNull(),
+    definition: jsonb().notNull(),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    changeNote: text("change_note"),
+  },
+  (table) => [
+    index("workflow_version_workflow_id_idx").on(table.workflowId),
+    index("workflow_version_workflow_version_idx").on(
+      table.workflowId,
+      table.version,
+    ),
+  ],
+);
+
+export type WorkflowVersion = typeof workflowVersionTable.$inferSelect;
 
 /**
  * Event routing rule table - maps incoming events to workflows.
