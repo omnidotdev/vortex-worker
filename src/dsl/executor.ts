@@ -112,6 +112,7 @@ import type {
   WaitStep,
   WebhookResponseStep,
   WebhookVerifyStep,
+  WindowStep,
   WorkflowDefinition,
   ZipStep,
 } from "./types";
@@ -445,9 +446,7 @@ export async function executeStep(
       .with({ type: "retry" }, (s) => executeRetry(s, ctx))
       .with({ type: "timeout" }, (s) => executeTimeout(s, ctx))
       .with({ type: "email" }, (s) => executeEmail(s, ctx))
-      .with({ type: "webhookResponse" }, (s) =>
-        executeWebhookResponse(s, ctx),
-      )
+      .with({ type: "webhookResponse" }, (s) => executeWebhookResponse(s, ctx))
       .with({ type: "file" }, (s) => executeFile(s, ctx))
       .with({ type: "queue" }, (s) => executeQueue(s, ctx))
       .with({ type: "embedding" }, (s) => executeEmbedding(s, ctx))
@@ -511,12 +510,25 @@ export async function executeStep(
       .with({ type: "noop" }, () => ({ skipped: true, type: "noop" }))
       .with({ type: "debounce" }, (s) => executeDebounce(s, ctx))
       .with({ type: "diff" }, (s) => executeDiff(s, ctx))
-      .with({ type: "change_detector" }, (s) =>
-        executeChangeDetector(s, ctx),
-      )
+      .with({ type: "change_detector" }, (s) => executeChangeDetector(s, ctx))
       .with({ type: "time_window" }, (s) => executeTimeWindow(s, ctx))
       .with({ type: "ai_transform" }, (s) => executeAiTransform(s, ctx))
       .with({ type: "ai_guardrails" }, (s) => executeAiGuardrails(s, ctx))
+      // Event batching/windowing
+      .with({ type: "window" }, async (windowStep) => {
+        const events = ctx.variables.events ?? [];
+        let filtered = Array.isArray(events) ? events : [events];
+
+        if (windowStep.window.maxSize) {
+          filtered = filtered.slice(0, windowStep.window.maxSize);
+        }
+
+        return {
+          windowType: windowStep.window.windowType,
+          events: filtered,
+          duration: windowStep.window.duration,
+        };
+      })
       .exhaustive();
 
     ctx.stepResults[step.id] = result;
@@ -998,6 +1010,21 @@ async function executeStepInternal(
     .with({ type: "time_window" }, (s) => executeTimeWindow(s, ctx))
     .with({ type: "ai_transform" }, (s) => executeAiTransform(s, ctx))
     .with({ type: "ai_guardrails" }, (s) => executeAiGuardrails(s, ctx))
+    // Event batching/windowing
+    .with({ type: "window" }, async (windowStep) => {
+      const events = ctx.variables.events ?? [];
+      let filtered = Array.isArray(events) ? events : [events];
+
+      if (windowStep.window.maxSize) {
+        filtered = filtered.slice(0, windowStep.window.maxSize);
+      }
+
+      return {
+        windowType: windowStep.window.windowType,
+        events: filtered,
+        duration: windowStep.window.duration,
+      };
+    })
     .exhaustive();
 
   // Store result

@@ -27,10 +27,12 @@ import {
 
 import { cacheClient } from "lib/cache/client";
 import logger from "lib/logger";
+import BatchAccumulator from "./batch-accumulator";
 import { evaluateCel } from "./cel-evaluator";
 import { withRetry, writeToDlq } from "./dlq";
 import { validateEventData } from "./schema-validator";
 
+import type { BatchConfig } from "./batch-accumulator";
 import type Redis from "ioredis";
 import type { Enforcement } from "./schema-validator";
 import type { OmniEvent } from "./types";
@@ -118,6 +120,9 @@ export const applyTransform = async (
 
 /** Deduplication window for correlationId-based idempotency (24 hours). */
 const DEDUP_TTL_SECONDS = 86_400;
+
+/** Per-rule batch accumulator cache (keyed by rule ID) */
+const accumulators = new Map<string, BatchAccumulator>();
 
 let _hatchet: ReturnType<typeof Hatchet.init> | null = null;
 
@@ -332,6 +337,73 @@ async function routeEvent(event: OmniEvent): Promise<void> {
         });
 
         if (!workflow) continue;
+
+        // Route through batch accumulator when rule has batch config
+        if (rule.batch) {
+          const batchConfig = rule.batch as BatchConfig;
+          let acc = accumulators.get(rule.id);
+
+          if (!acc) {
+            acc = new BatchAccumulator(
+              rule.id,
+              batchConfig,
+              async (events, meta) => {
+                try {
+                  await withRetry(async () => {
+                    const engineWorkflowId = `event-${workflow.id}-${Date.now()}`;
+                    const engineRunId = `run-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+                    const [inserted] = await db
+                      .insert(workflowRunTable)
+                      .values({
+                        workflowId: workflow.id,
+                        engineWorkflowId,
+                        engineRunId,
+                        status: "pending",
+                        input: {
+                          events,
+                          batchMetadata: meta,
+                        },
+                      })
+                      .returning();
+
+                    const traceCtx = injectTraceContext();
+
+                    await hatchet.event.push("workflow:execute", {
+                      workflowId: engineWorkflowId,
+                      runId: inserted.id,
+                      organizationId: event.organizationId,
+                      traceContext: traceCtx,
+                      triggerData: {
+                        events,
+                        batchMetadata: meta,
+                      },
+                      definition: workflow.definition,
+                    });
+
+                    await db
+                      .update(workflowRunTable)
+                      .set({ status: "running" })
+                      .where(eq(workflowRunTable.id, inserted.id));
+                  });
+                } catch (err) {
+                  logger.error("Failed to dispatch batch after retries", {
+                    ruleId: rule.id,
+                    workflowId: workflow.id,
+                    batchSize: meta.size,
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+
+                  await writeToDlq(event, rule.id, err, "DISPATCH_ERROR", 3);
+                }
+              },
+            );
+            accumulators.set(rule.id, acc);
+          }
+
+          await acc.add({ ...event, data: transformedData });
+          continue;
+        }
 
         try {
           const run = await withRetry(async () => {

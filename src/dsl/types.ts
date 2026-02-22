@@ -98,6 +98,8 @@ export const StepType = z.enum([
   "time_window",
   "ai_transform",
   "ai_guardrails",
+  // Event batching/windowing
+  "window",
 ]);
 export type StepType = z.infer<typeof StepType>;
 
@@ -1454,6 +1456,28 @@ export const AiGuardrailsStep = BaseStep.extend({
 });
 export type AiGuardrailsStep = z.infer<typeof AiGuardrailsStep>;
 
+/** In-workflow event windowing for batch collection */
+export const WindowStep = BaseStep.extend({
+  type: z.literal("window"),
+  window: z.object({
+    /** Window strategy */
+    windowType: z.enum(["tumbling", "sliding", "session"]),
+    /** Window duration in milliseconds */
+    duration: z.number().positive(),
+    /** Slide interval in milliseconds (sliding windows only) */
+    slideDuration: z.number().positive().optional(),
+    /** Session inactivity gap in milliseconds (session windows only) */
+    sessionGap: z.number().positive().optional(),
+    /** Field name to group events by */
+    groupBy: z.string().optional(),
+    /** Maximum number of events to collect per window */
+    maxSize: z.number().positive().optional(),
+    /** When to emit results */
+    emit: z.enum(["onClose", "onEach"]),
+  }),
+});
+export type WindowStep = z.infer<typeof WindowStep>;
+
 export const Step = z.discriminatedUnion("type", [
   TriggerStep,
   ActionStep,
@@ -1550,6 +1574,8 @@ export const Step = z.discriminatedUnion("type", [
   TimeWindowStep,
   AiTransformStep,
   AiGuardrailsStep,
+  // Event batching/windowing
+  WindowStep,
 ]);
 export type Step = z.infer<typeof Step>;
 
