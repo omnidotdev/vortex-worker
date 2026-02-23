@@ -14,6 +14,7 @@
     "catalog:generate": "bun run scripts/generateCatalog.ts",
     "postinstall": "bun catalog:generate",
     "test": "bun test",
+    "test:integration": "bun test src/__tests__/integration/",
     "test:watch": "bun test --watch",
     "prepare": "husky"
   },
