@@ -52,6 +52,7 @@ export { rateLimitPlugin } from "./rateLimit";
 export { reducePlugin } from "./reduce";
 export { regexPlugin } from "./regex";
 export { retryPlugin } from "./retry";
+export { rivetPlugin } from "./rivet";
 export { signPlugin } from "./sign";
 export { sleepPlugin } from "./sleep";
 export { sortPlugin } from "./sort";
@@ -121,6 +122,7 @@ import { rateLimitPlugin } from "./rateLimit";
 import { reducePlugin } from "./reduce";
 import { regexPlugin } from "./regex";
 import { retryPlugin } from "./retry";
+import { rivetPlugin } from "./rivet";
 import { signPlugin } from "./sign";
 import { sleepPlugin } from "./sleep";
 import { sortPlugin } from "./sort";
@@ -216,6 +218,7 @@ const builtinPlugins: Map<string, BuiltinPlugin> = new Map([
   [expressionPlugin.id, expressionPlugin],
   [generatorPlugin.id, generatorPlugin],
   [regexPlugin.id, regexPlugin],
+  [rivetPlugin.id, rivetPlugin],
 ]);
 
 /**
