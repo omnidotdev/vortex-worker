@@ -18,8 +18,8 @@ export {
 } from "./builtin";
 // Extism WASM host
 export { ExtismPluginHost, getPluginHost, resetPluginHost } from "./host";
-export { default as PluginPool } from "./pool";
 export * from "./interface";
+export { default as PluginPool } from "./pool";
 export * from "./types";
 
 export type { BuiltinAction, BuiltinHandler, BuiltinPlugin } from "./builtin";

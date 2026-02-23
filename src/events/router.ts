@@ -18,13 +18,13 @@ import {
 import { and, desc, eq } from "drizzle-orm";
 import jsonata from "jsonata";
 import { JSONPath } from "jsonpath-plus";
-import { z } from "zod";
 import {
   endSpan,
   extractTraceContext,
   injectTraceContext,
   startRouterSpan,
 } from "tracing/propagation";
+import { z } from "zod";
 
 import { cacheClient } from "lib/cache/client";
 import logger from "lib/logger";
@@ -140,9 +140,7 @@ const accumulators = new Map<string, BatchAccumulator>();
 
 /** Flush all active batch accumulators (call during graceful shutdown) */
 export async function shutdownAccumulators(): Promise<void> {
-  await Promise.all(
-    [...accumulators.values()].map((acc) => acc.shutdown()),
-  );
+  await Promise.all([...accumulators.values()].map((acc) => acc.shutdown()));
   accumulators.clear();
 }
 

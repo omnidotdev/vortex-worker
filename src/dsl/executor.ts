@@ -1212,11 +1212,9 @@ async function executeGate(
   };
 
   // Check the request status (handles timeout auto-decisions)
-  const checkResult = await executeBuiltinAction(
-    "builtin:gate",
-    "check",
-    { requestId: output.requestId },
-  );
+  const checkResult = await executeBuiltinAction("builtin:gate", "check", {
+    requestId: output.requestId,
+  });
 
   if (!checkResult.success) {
     throw new Error(`Gate check failed: ${checkResult.error}`);

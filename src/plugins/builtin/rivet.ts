@@ -7,7 +7,6 @@
  */
 
 import type { LooseDataValue } from "@ironclad/rivet-core";
-
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 

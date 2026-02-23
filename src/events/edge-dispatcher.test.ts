@@ -84,7 +84,9 @@ describe("EdgeDispatcher", () => {
   });
 
   it("returns error on timeout", async () => {
-    fetchMock.mockRejectedValueOnce(new DOMException("signal timed out", "TimeoutError"));
+    fetchMock.mockRejectedValueOnce(
+      new DOMException("signal timed out", "TimeoutError"),
+    );
 
     const dispatcher = new EdgeDispatcher({ ...config, timeoutMs: 100 });
     const result = await dispatcher.dispatch("slow-plugin", {});

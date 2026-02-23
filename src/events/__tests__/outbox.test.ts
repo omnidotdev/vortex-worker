@@ -70,14 +70,24 @@ describe("OutboxSweeper", () => {
         {
           id: "row-1",
           topic: "org-abc",
-          payload: { type: "user.created", source: "test", organizationId: "org-abc", data: {} },
+          payload: {
+            type: "user.created",
+            source: "test",
+            organizationId: "org-abc",
+            data: {},
+          },
           createdAt: new Date(),
           publishedAt: null,
         },
         {
           id: "row-2",
           topic: "org-abc",
-          payload: { type: "user.updated", source: "test", organizationId: "org-abc", data: {} },
+          payload: {
+            type: "user.updated",
+            source: "test",
+            organizationId: "org-abc",
+            data: {},
+          },
           createdAt: new Date(),
           publishedAt: null,
         },
@@ -119,14 +129,21 @@ describe("OutboxSweeper", () => {
         {
           id: "row-fail",
           topic: "org-xyz",
-          payload: { type: "order.placed", source: "test", organizationId: "org-xyz", data: {} },
+          payload: {
+            type: "order.placed",
+            source: "test",
+            organizationId: "org-xyz",
+            data: {},
+          },
           createdAt: new Date(),
           publishedAt: null,
         },
       ];
 
       // Make publish throw for this test
-      mockPublish.mockImplementation(() => Promise.reject(new Error("Iggy unavailable")));
+      mockPublish.mockImplementation(() =>
+        Promise.reject(new Error("Iggy unavailable")),
+      );
 
       const sweeper = new OutboxSweeper();
       const count = await sweeper.sweep();
@@ -147,14 +164,24 @@ describe("OutboxSweeper", () => {
         {
           id: "row-a",
           topic: "org-1",
-          payload: { type: "a", source: "test", organizationId: "org-1", data: {} },
+          payload: {
+            type: "a",
+            source: "test",
+            organizationId: "org-1",
+            data: {},
+          },
           createdAt: new Date(),
           publishedAt: null,
         },
         {
           id: "row-b",
           topic: "org-1",
-          payload: { type: "b", source: "test", organizationId: "org-1", data: {} },
+          payload: {
+            type: "b",
+            source: "test",
+            organizationId: "org-1",
+            data: {},
+          },
           createdAt: new Date(),
           publishedAt: null,
         },

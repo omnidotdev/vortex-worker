@@ -7,12 +7,11 @@
  * completion and Iggy publish.
  */
 
-import { eq, isNull } from "drizzle-orm";
 import { getDb } from "db";
 import { outboxTable } from "db/schema";
+import { eq, isNull } from "drizzle-orm";
 
 import logger from "lib/logger";
-
 import { publish } from "./publisher";
 
 import type { EventInput } from "./types";
@@ -63,7 +62,10 @@ class OutboxSweeper {
     }
 
     if (published > 0) {
-      logger.debug("Outbox sweep completed", { published, total: pending.length });
+      logger.debug("Outbox sweep completed", {
+        published,
+        total: pending.length,
+      });
     }
 
     return published;
