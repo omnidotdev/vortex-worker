@@ -269,7 +269,7 @@ class WindowStateManager {
     const emitted: WindowFrame[] = [];
     const gap = this.#config.sessionGap ?? this.#config.duration;
 
-    let frame = state.frames[0];
+    let frame: WindowFrame | undefined = state.frames[0];
 
     // Close active session if inactivity gap is exceeded
     if (frame && frame.events.length > 0) {
@@ -277,7 +277,7 @@ class WindowStateManager {
         frame.closedAt = state.lastEventAt;
         emitted.push(frame);
 
-        frame = undefined as unknown as WindowFrame;
+        frame = undefined;
         state.frames = [];
       }
     }

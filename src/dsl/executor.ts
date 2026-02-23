@@ -86,9 +86,9 @@ import type {
   RaceStep,
   RagStep,
   RateLimitStep,
-  RivetStep,
   ReduceStep,
   RetryStep,
+  RivetStep,
   SetStep,
   SignStep,
   SleepStep,
@@ -1175,21 +1175,59 @@ async function executeParallel(
 
 async function executeGate(
   step: GateStep,
-  _ctx: ExecutionContext,
+  ctx: ExecutionContext,
 ): Promise<{ passed: boolean; gateType: string }> {
   const { gate } = step;
 
-  // For now, auto-approve gates
-  // In the future, this would wait for external signals or approvals
-  if (gate.type === "approval") {
-    return { passed: true, gateType: "approval" };
+  // Create approval request via the gate builtin plugin
+  const result = await executeBuiltinAction(
+    "builtin:gate",
+    "execute",
+    {
+      gateType: gate.type,
+      title: gate.title,
+      approvers: gate.approvers,
+      signalName: gate.signalName,
+      timeout: gate.timeout,
+      timeoutAction: gate.timeoutAction,
+    },
+    {
+      workflowId: ctx.workflowId,
+      runId: ctx.runId,
+      stepId: step.id,
+      organizationId: ctx.organizationId,
+      config: {},
+      secrets: {},
+    },
+  );
+
+  if (!result.success) {
+    throw new Error(`Gate execution failed: ${result.error}`);
   }
 
-  if (gate.type === "signal") {
-    return { passed: true, gateType: "signal" };
+  const output = result.output as {
+    requestId: string;
+    status: string;
+    gateType: string;
+  };
+
+  // Check the request status (handles timeout auto-decisions)
+  const checkResult = await executeBuiltinAction(
+    "builtin:gate",
+    "check",
+    { requestId: output.requestId },
+  );
+
+  if (!checkResult.success) {
+    throw new Error(`Gate check failed: ${checkResult.error}`);
   }
 
-  return { passed: true, gateType: gate.type };
+  const checkOutput = checkResult.output as {
+    status: string;
+    passed: boolean;
+  };
+
+  return { passed: checkOutput.passed, gateType: gate.type };
 }
 
 const executePlugin = async (
@@ -1304,15 +1342,12 @@ const executeRivet = async (
   } else if (rivet.graphInline) {
     graphJson = rivet.graphInline;
   } else {
-    throw new ConfigError(
-      "Rivet step requires either graphId or graphInline",
-      { stepId: step.id },
-    );
+    throw new ConfigError("Rivet step requires either graphId or graphInline", {
+      stepId: step.id,
+    });
   }
 
-  const resolvedInputs = rivet.inputs
-    ? resolveInputs(rivet.inputs, ctx)
-    : {};
+  const resolvedInputs = rivet.inputs ? resolveInputs(rivet.inputs, ctx) : {};
 
   const pluginInputs: Record<string, unknown> = {
     graph:

@@ -249,7 +249,8 @@ export type ParallelStep = z.infer<typeof ParallelStep>;
 export const GateStep = BaseStep.extend({
   type: z.literal("gate"),
   gate: z.object({
-    type: z.enum(["approval", "signal"]),
+    type: z.enum(["approval", "signal", "manual"]),
+    title: z.string().optional(),
     approvers: z.array(z.string()).optional(),
     signalName: z.string().optional(),
     timeout: z.string().optional(),
