@@ -27,6 +27,7 @@ import {
   isBuiltinPlugin,
 } from "../plugins";
 import { getPluginRegistry } from "../plugins/registry";
+import { runSandboxedCode } from "../sandbox/runner";
 import { stateStore } from "../state";
 import { endSpan, startStepSpan } from "../tracing/propagation";
 import WindowStateManager from "./window-state";
@@ -1581,15 +1582,62 @@ const executeLLM = async (
 };
 
 /**
- * Execute a Code step - runs JavaScript in a sandboxed MCP server
+ * Execute a Code step via either an isolated Bun Worker or an MCP sandbox server.
  *
- * Uses node-code-sandbox-mcp to execute JavaScript code in a Docker container.
+ * When `sandbox` is `"worker"`, user code runs locally in a Bun Worker with
+ * configurable timeout and memory limits. When `"mcp"` (the default), code is
+ * sent to an external MCP code-sandbox server (e.g. node-code-sandbox-mcp).
  */
 const executeCode = async (
   step: CodeStep,
   ctx: ExecutionContext,
 ): Promise<unknown> => {
   const { code } = step;
+  const sandbox = code.sandbox ?? "mcp";
+
+  // Resolve input mappings (shared by both paths)
+  const inputData: Record<string, unknown> = {};
+  if (code.inputs) {
+    for (const [varName, expression] of Object.entries(code.inputs)) {
+      inputData[varName] = resolveValue(expression, ctx);
+    }
+  }
+
+  // --- Worker sandbox path ---
+  if (sandbox === "worker") {
+    const timeoutMs = code.timeout ?? 30_000;
+    const memoryMb = code.memoryMb ?? 128;
+
+    const { output, durationMs } = await runSandboxedCode({
+      source: code.source,
+      inputs: inputData,
+      limits: { memoryMb, timeoutMs },
+    });
+
+    // Map outputs to context variables
+    if (code.outputs) {
+      for (const [outputKey, variableName] of Object.entries(code.outputs)) {
+        ctx.variables[String(variableName)] = output[outputKey];
+      }
+    }
+
+    return {
+      sandbox: "worker",
+      executedAt: new Date().toISOString(),
+      durationMs,
+      inputs: inputData,
+      output,
+    };
+  }
+
+  // --- MCP sandbox path (default) ---
+  if (!code.serverId) {
+    throw new ConfigError(
+      'Code step with sandbox "mcp" requires a serverId',
+      {},
+    );
+  }
+
   const mcpClient = getMCPClient();
 
   // Try to connect if not already connected
@@ -1599,14 +1647,6 @@ const executeCode = async (
       throw new MCPError("Code sandbox MCP server not available", {
         serverId: code.serverId,
       });
-    }
-  }
-
-  // Resolve input mappings
-  const inputData: Record<string, unknown> = {};
-  if (code.inputs) {
-    for (const [varName, expression] of Object.entries(code.inputs)) {
-      inputData[varName] = resolveValue(expression, ctx);
     }
   }
 

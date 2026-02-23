@@ -335,11 +335,13 @@ export type LLMStep = z.infer<typeof LLMStep>;
 export const CodeStep = BaseStep.extend({
   type: z.literal("code"),
   code: z.object({
-    /** MCP server ID for the code sandbox */
-    serverId: z.string(),
+    /** Execution sandbox: "mcp" (default) routes to MCP server, "worker" runs in an isolated Bun Worker */
+    sandbox: z.enum(["mcp", "worker"]).default("mcp").optional(),
+    /** MCP server ID for the code sandbox (required when sandbox is "mcp") */
+    serverId: z.string().optional(),
     /** JavaScript code to execute */
     source: z.string(),
-    /** npm dependencies to install before execution */
+    /** npm dependencies to install before execution (MCP sandbox only) */
     dependencies: z.array(z.string()).optional(),
     /** Map workflow variables to code inputs */
     inputs: z.record(z.string(), z.string()).optional(),
@@ -347,6 +349,8 @@ export const CodeStep = BaseStep.extend({
     outputs: z.record(z.string(), z.string()).optional(),
     /** Timeout in milliseconds */
     timeout: z.number().optional(),
+    /** Maximum memory in megabytes (worker sandbox only, default: 128) */
+    memoryMb: z.number().optional(),
   }),
 });
 export type CodeStep = z.infer<typeof CodeStep>;

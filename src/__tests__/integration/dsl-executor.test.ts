@@ -664,4 +664,154 @@ describe("DSL executor integration", () => {
       expect(ctx.stepNameToId).toEqual({ "My Step": "step-id-1" });
     });
   });
+
+  describe("worker sandbox code step", () => {
+    it("should execute code in worker sandbox and return output", async () => {
+      const def: WorkflowDefinition = {
+        version: "1.0",
+        steps: [
+          {
+            id: "trigger-1",
+            type: "trigger",
+            name: "Trigger",
+            position: pos,
+            trigger: { type: "webhook", config: {} },
+          },
+          {
+            id: "code-1",
+            type: "code",
+            name: "Compute Sum",
+            position: pos,
+            code: {
+              sandbox: "worker",
+              source: "return { sum: input.a + input.b };",
+              inputs: { a: "{{trigger.x}}", b: "{{trigger.y}}" },
+              outputs: { sum: "computedSum" },
+              timeout: 5_000,
+            },
+          },
+          {
+            id: "stop-1",
+            type: "stop",
+            name: "End",
+            position: pos,
+            stop: { status: "success" },
+          },
+        ],
+        edges: [
+          { id: "e1", source: "trigger-1", target: "code-1" },
+          { id: "e2", source: "code-1", target: "stop-1" },
+        ],
+      };
+
+      const { ctx, results } = await runWorkflow(def, { x: 10, y: 32 });
+
+      // Verify execution returned output
+      const codeResult = results.find((r) => r.stepId === "code-1");
+      expect(codeResult).toBeDefined();
+
+      const output = codeResult?.result as {
+        sandbox: string;
+        output: Record<string, unknown>;
+        durationMs: number;
+      };
+      expect(output.sandbox).toBe("worker");
+      expect(output.output).toEqual({ sum: 42 });
+      expect(output.durationMs).toBeGreaterThan(0);
+
+      // Verify output mapping wrote to context variables
+      expect(ctx.variables.computedSum).toBe(42);
+    });
+
+    it("should handle worker sandbox with no inputs or outputs", async () => {
+      const def: WorkflowDefinition = {
+        version: "1.0",
+        steps: [
+          {
+            id: "trigger-1",
+            type: "trigger",
+            name: "Trigger",
+            position: pos,
+            trigger: { type: "manual", config: {} },
+          },
+          {
+            id: "code-1",
+            type: "code",
+            name: "Static Code",
+            position: pos,
+            code: {
+              sandbox: "worker",
+              source: "return { message: 'hello' };",
+              timeout: 5_000,
+            },
+          },
+          {
+            id: "stop-1",
+            type: "stop",
+            name: "End",
+            position: pos,
+            stop: { status: "success" },
+          },
+        ],
+        edges: [
+          { id: "e1", source: "trigger-1", target: "code-1" },
+          { id: "e2", source: "code-1", target: "stop-1" },
+        ],
+      };
+
+      const { results } = await runWorkflow(def, {});
+
+      const codeResult = results.find((r) => r.stepId === "code-1");
+      const output = codeResult?.result as {
+        sandbox: string;
+        output: Record<string, unknown>;
+      };
+      expect(output.sandbox).toBe("worker");
+      expect(output.output).toEqual({ message: "hello" });
+    });
+
+    it("should default to mcp sandbox when sandbox field is omitted", async () => {
+      // Verify the schema defaults work: omitting `sandbox` should mean "mcp"
+      const ctx = createExecutionContext("wf-test", "run-test", {});
+
+      // Manually execute a code step with no sandbox field to verify it
+      // attempts MCP (which will throw since no MCP server is configured)
+      try {
+        await executeStep(
+          {
+            version: "1.0",
+            steps: [
+              {
+                id: "code-1",
+                type: "code",
+                name: "MCP Code",
+                position: pos,
+                code: {
+                  serverId: "nonexistent-server",
+                  source: "return {};",
+                },
+              },
+            ],
+            edges: [],
+          },
+          {
+            id: "code-1",
+            type: "code",
+            name: "MCP Code",
+            position: pos,
+            code: {
+              serverId: "nonexistent-server",
+              source: "return {};",
+            },
+          },
+          ctx,
+        );
+        // Should not succeed since the MCP server doesn't exist
+        expect(true).toBe(false);
+      } catch (err) {
+        // Expect an MCP-related error, confirming it took the MCP path
+        expect((err as Error).message).toMatch(/MCP|not available|serverId/i);
+      }
+    });
+  });
 });
