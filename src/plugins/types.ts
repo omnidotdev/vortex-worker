@@ -110,6 +110,12 @@ export interface PluginManifest {
 
   /** Tags for categorization */
   tags?: string[];
+
+  /**
+   * Whether this plugin is stateless enough for edge deployment.
+   * Edge-capable plugins cannot use state store or DB host functions
+   */
+  edgeCapable?: boolean;
 }
 
 /** Result of a plugin function call */

@@ -316,6 +316,7 @@ export const pluginTable = pgTable(
     wasmHash: text("wasm_hash").notNull(),
     isEnabled: boolean("is_enabled").default(true).notNull(),
     isVerified: boolean("is_verified").default(false).notNull(),
+    edgeCapable: boolean("edge_capable").default(false),
     config: jsonb().default({}),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
