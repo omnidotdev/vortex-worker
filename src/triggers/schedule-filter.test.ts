@@ -16,11 +16,11 @@ mock.module("lib/logger", () => ({
 
 // Stub lib/cache with a mock Valkey client
 const mockZadd = mock((_key: string, _score: number, _member: string) =>
-	Promise.resolve(1),
+  Promise.resolve(1),
 );
 const mockZrangebyscore = mock(
-	(_key: string, _min: number | string, _max: number | string) =>
-		Promise.resolve([] as string[]),
+  (_key: string, _min: number | string, _max: number | string) =>
+    Promise.resolve([] as string[]),
 );
 const mockDel = mock((_key: string) => Promise.resolve(1));
 
