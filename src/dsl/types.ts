@@ -100,6 +100,8 @@ export const StepType = z.enum([
   "ai_guardrails",
   // Event batching/windowing
   "window",
+  // Rivet AI agent graphs
+  "rivet",
 ]);
 export type StepType = z.infer<typeof StepType>;
 
@@ -1478,6 +1480,22 @@ export const WindowStep = BaseStep.extend({
 });
 export type WindowStep = z.infer<typeof WindowStep>;
 
+/** Execute a Rivet AI agent graph */
+export const RivetStep = BaseStep.extend({
+  type: z.literal("rivet"),
+  rivet: z.object({
+    /** Stored graph ID (from rivet_graph table) */
+    graphId: z.string().optional(),
+    /** Inline graph project JSON */
+    graphInline: z.unknown().optional(),
+    /** Input values for the graph */
+    inputs: z.record(z.string(), z.unknown()).optional(),
+    /** Provider configuration (LLM keys, endpoints) */
+    providerConfig: z.record(z.string(), z.unknown()).optional(),
+  }),
+});
+export type RivetStep = z.infer<typeof RivetStep>;
+
 export const Step = z.discriminatedUnion("type", [
   TriggerStep,
   ActionStep,
@@ -1576,6 +1594,8 @@ export const Step = z.discriminatedUnion("type", [
   AiGuardrailsStep,
   // Event batching/windowing
   WindowStep,
+  // Rivet AI agent graphs
+  RivetStep,
 ]);
 export type Step = z.infer<typeof Step>;
 

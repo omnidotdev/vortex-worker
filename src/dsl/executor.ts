@@ -17,7 +17,7 @@ import logger from "lib/logger";
 import { executeConnectorAction } from "../connectors/executor";
 import { getDb } from "../db";
 import { createWorkflowRun } from "../db/runLogger";
-import { workflowRunTable, workflowTable } from "../db/schema";
+import { rivetGraphTable, workflowRunTable, workflowTable } from "../db/schema";
 import { isInitialized, publish } from "../events/publisher";
 import { getIntegrationCredentials } from "../integrations/credentials";
 import { connectMCPServer, getMCPClient } from "../mcp";
@@ -86,6 +86,7 @@ import type {
   RaceStep,
   RagStep,
   RateLimitStep,
+  RivetStep,
   ReduceStep,
   RetryStep,
   SetStep,
@@ -535,6 +536,8 @@ export async function executeStep(
           groupBy: windowStep.window.groupBy,
         };
       })
+      // Rivet AI agent graphs
+      .with({ type: "rivet" }, (s) => executeRivet(s, ctx))
       .exhaustive();
 
     ctx.stepResults[step.id] = result;
@@ -1036,6 +1039,8 @@ async function executeStepInternal(
         groupBy: windowStep.window.groupBy,
       };
     })
+    // Rivet AI agent graphs
+    .with({ type: "rivet" }, (s) => executeRivet(s, ctx))
     .exhaustive();
 
   // Store result
@@ -1265,6 +1270,85 @@ const executePlugin = async (
   }
 
   return result;
+};
+
+/**
+ * Execute a Rivet AI agent graph step.
+ * Loads the graph from the database (by graphId) or uses inline JSON,
+ * then delegates to the builtin rivet plugin's execute action.
+ */
+const executeRivet = async (
+  step: RivetStep,
+  ctx: ExecutionContext,
+): Promise<unknown> => {
+  const { rivet } = step;
+
+  let graphJson: unknown;
+
+  if (rivet.graphId) {
+    // Load graph from rivet_graph table
+    const db = getDb();
+    const rows = await db
+      .select()
+      .from(rivetGraphTable)
+      .where(eq(rivetGraphTable.id, rivet.graphId))
+      .limit(1);
+
+    if (rows.length === 0) {
+      throw new NotFoundError("Rivet graph not found", {
+        graphId: rivet.graphId,
+      });
+    }
+
+    graphJson = rows[0].graphJson;
+  } else if (rivet.graphInline) {
+    graphJson = rivet.graphInline;
+  } else {
+    throw new ConfigError(
+      "Rivet step requires either graphId or graphInline",
+      { stepId: step.id },
+    );
+  }
+
+  const resolvedInputs = rivet.inputs
+    ? resolveInputs(rivet.inputs, ctx)
+    : {};
+
+  const pluginInputs: Record<string, unknown> = {
+    graph:
+      typeof graphJson === "string" ? graphJson : JSON.stringify(graphJson),
+    inputs: resolvedInputs,
+    ...(rivet.providerConfig && { providerConfig: rivet.providerConfig }),
+  };
+
+  const pluginContext = {
+    workflowId: ctx.workflowId,
+    runId: ctx.runId,
+    stepId: step.id,
+    config: {},
+    secrets: {},
+  };
+
+  const callResult = await executeBuiltinAction(
+    "builtin:rivet",
+    "execute",
+    pluginInputs,
+    pluginContext,
+  );
+
+  if (!callResult.success) {
+    throw new PluginError("Rivet graph execution failed", {
+      pluginId: "builtin:rivet",
+      operation: "execute",
+      error: callResult.error,
+    });
+  }
+
+  return {
+    graphId: rivet.graphId,
+    output: callResult.output,
+    durationMs: callResult.durationMs,
+  };
 };
 
 /**

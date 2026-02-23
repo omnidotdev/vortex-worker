@@ -459,3 +459,30 @@ export const approvalRequestTable = pgTable(
 
 export type ApprovalRequest = typeof approvalRequestTable.$inferSelect;
 export type NewApprovalRequest = typeof approvalRequestTable.$inferInsert;
+
+/**
+ * Rivet Graph table - stores Rivet AI agent graph definitions.
+ * Mirrored from vortex-api for graph lookup in the executor.
+ */
+export const rivetGraphTable = pgTable(
+  "rivet_graph",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organizationId: text("organization_id").notNull(),
+    name: text().notNull(),
+    description: text(),
+    graphJson: jsonb("graph_json").notNull(),
+    version: integer().default(1).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("rivet_graph_organization_id_idx").on(table.organizationId),
+  ],
+);
+
+export type RivetGraph = typeof rivetGraphTable.$inferSelect;
