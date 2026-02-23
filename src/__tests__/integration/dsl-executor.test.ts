@@ -8,8 +8,7 @@ import {
   findTriggerStep,
 } from "../../dsl/executor";
 
-import type { WorkflowDefinition } from "../../dsl/types";
-import type { ExecutionContext } from "../../dsl/types";
+import type { ExecutionContext, WorkflowDefinition } from "../../dsl/types";
 
 /**
  * Build a minimal workflow definition.
@@ -120,7 +119,10 @@ describe("DSL executor integration", () => {
 
       // Step results should be recorded in context
       expect(ctx.stepResults["trigger-1"]).toEqual({ message: "hello" });
-      expect(ctx.stepResults["noop-1"]).toEqual({ skipped: true, type: "noop" });
+      expect(ctx.stepResults["noop-1"]).toEqual({
+        skipped: true,
+        type: "noop",
+      });
     });
 
     it("should execute trigger -> comment -> noop (comment is skipped)", async () => {
@@ -302,9 +304,7 @@ describe("DSL executor integration", () => {
     });
 
     it("should evaluate equality expressions", async () => {
-      const def = buildConditionWorkflow(
-        '{{triggerData.status}} === "active"',
-      );
+      const def = buildConditionWorkflow('{{triggerData.status}} === "active"');
       const { results } = await runWorkflow(def, { status: "active" });
 
       expect(results).toHaveLength(3);
@@ -313,9 +313,7 @@ describe("DSL executor integration", () => {
     });
 
     it("should evaluate inequality expressions", async () => {
-      const def = buildConditionWorkflow(
-        '{{triggerData.status}} !== "active"',
-      );
+      const def = buildConditionWorkflow('{{triggerData.status}} !== "active"');
       const { results } = await runWorkflow(def, { status: "inactive" });
 
       expect(results).toHaveLength(3);
@@ -422,9 +420,7 @@ describe("DSL executor integration", () => {
             position: pos,
             switch: {
               expression: "{{triggerData.type}}",
-              cases: [
-                { value: "email", label: "Email", next: "noop-email" },
-              ],
+              cases: [{ value: "email", label: "Email", next: "noop-email" }],
               default: "noop-default",
             },
           },
@@ -512,8 +508,14 @@ describe("DSL executor integration", () => {
 
       expect(Object.keys(ctx.stepResults)).toHaveLength(4);
       expect(ctx.stepResults["trigger-1"]).toEqual({ key: "value" });
-      expect(ctx.stepResults["noop-1"]).toEqual({ skipped: true, type: "noop" });
-      expect(ctx.stepResults["noop-2"]).toEqual({ skipped: true, type: "noop" });
+      expect(ctx.stepResults["noop-1"]).toEqual({
+        skipped: true,
+        type: "noop",
+      });
+      expect(ctx.stepResults["noop-2"]).toEqual({
+        skipped: true,
+        type: "noop",
+      });
       expect(ctx.stepResults["stop-1"]).toMatchObject({ stopped: true });
     });
   });

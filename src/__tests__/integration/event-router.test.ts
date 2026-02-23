@@ -187,7 +187,9 @@ describe("event routing pipeline", () => {
 
     it("should use built-in matches helper for regex", () => {
       const event = makeEvent({ type: "order.created.v2" });
-      expect(evaluateCel('matches(event.type, "order\\..*\\.v\\d+")', event)).toBe(true);
+      expect(
+        evaluateCel('matches(event.type, "order\\..*\\.v\\d+")', event),
+      ).toBe(true);
     });
 
     it("should handle boolean logic (and/or)", () => {
@@ -416,10 +418,9 @@ describe("event routing pipeline", () => {
       const firstIsDup = await isDuplicate(mockCache, "org-1", "corr-xyz");
       expect(firstIsDup).toBe(false);
 
-      const transformed = await applyTransform(
-        "{ 'processed': true }",
-        { raw: "data" },
-      );
+      const transformed = await applyTransform("{ 'processed': true }", {
+        raw: "data",
+      });
       expect(transformed).toEqual({ processed: true });
 
       // Second delivery: duplicate, transform would be skipped
@@ -483,7 +484,9 @@ describe("event routing pipeline", () => {
     });
 
     it("should handle null-ish values in data", () => {
-      const event = makeEvent({ data: { value: null as unknown } as Record<string, unknown> });
+      const event = makeEvent({
+        data: { value: null as unknown } as Record<string, unknown>,
+      });
       expect(evaluateCel("event.data.value == null", event)).toBe(true);
     });
 
@@ -525,9 +528,9 @@ describe("event routing pipeline", () => {
       });
 
       expect(evaluateCel('event.type == "order.created"', event)).toBe(true);
-      expect(
-        evaluateCel('event.organizationId == "org-test"', event),
-      ).toBe(true);
+      expect(evaluateCel('event.organizationId == "org-test"', event)).toBe(
+        true,
+      );
     });
   });
 });
