@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { applyTransform, evaluateCondition, isDuplicate } from "../router";
+import { applyTransform, evaluateCondition, isDuplicate, normalizeToCloudEvent } from "../router";
 
 import type Redis from "ioredis";
 
@@ -99,5 +99,73 @@ describe("applyTransform", () => {
   it("returns original data on invalid expression (safe fallback)", async () => {
     const data = { count: 5 };
     expect(await applyTransform("!!!invalid$$$", data)).toEqual(data);
+  });
+});
+
+describe("normalizeToCloudEvent", () => {
+  it("adds specversion if missing", () => {
+    const event = {
+      id: "e1",
+      type: "task.created",
+      source: "omni.runa",
+      data: {},
+      timestamp: "2026-01-01T00:00:00Z",
+      organizationId: "org1",
+    };
+    const normalized = normalizeToCloudEvent(event);
+    expect(normalized.specversion).toBe("1.0");
+  });
+
+  it("preserves existing specversion", () => {
+    const event = {
+      id: "e1",
+      type: "task.created",
+      source: "omni.runa",
+      data: {},
+      timestamp: "2026-01-01T00:00:00Z",
+      organizationId: "org1",
+      specversion: "1.0",
+    };
+    const normalized = normalizeToCloudEvent(event);
+    expect(normalized.specversion).toBe("1.0");
+  });
+
+  it("sets time from timestamp if not present", () => {
+    const event = {
+      id: "e1",
+      type: "task.created",
+      source: "omni.runa",
+      data: {},
+      timestamp: "2026-01-01T00:00:00Z",
+      organizationId: "org1",
+    };
+    const normalized = normalizeToCloudEvent(event);
+    expect(normalized.time).toBe("2026-01-01T00:00:00Z");
+  });
+
+  it("sets omniorgid from organizationId", () => {
+    const event = {
+      id: "e1",
+      type: "task.created",
+      source: "omni.runa",
+      data: {},
+      timestamp: "2026-01-01T00:00:00Z",
+      organizationId: "org1",
+    };
+    const normalized = normalizeToCloudEvent(event);
+    expect(normalized.omniorgid).toBe("org1");
+  });
+
+  it("defaults datacontenttype to application/json", () => {
+    const event = {
+      id: "e1",
+      type: "task.created",
+      source: "omni.runa",
+      data: {},
+      timestamp: "2026-01-01T00:00:00Z",
+      organizationId: "org1",
+    };
+    const normalized = normalizeToCloudEvent(event);
+    expect(normalized.datacontenttype).toBe("application/json");
   });
 });

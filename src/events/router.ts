@@ -191,13 +191,33 @@ export const isDuplicate = async (
 };
 
 /**
+ * Normalize an incoming event to CloudEvents v1.0 format.
+ *
+ * Adds missing CloudEvents fields while preserving existing ones.
+ * This is backward-compatible — events without CloudEvents fields
+ * get them added automatically.
+ */
+export function normalizeToCloudEvent(event: OmniEvent): OmniEvent {
+  return {
+    ...event,
+    specversion: event.specversion ?? "1.0",
+    time: event.time ?? event.timestamp,
+    datacontenttype: event.datacontenttype ?? "application/json",
+    omniorgid: event.omniorgid ?? event.organizationId,
+    omniworkspaceid: event.omniworkspaceid,
+    omnischemaversion: event.omnischemaversion,
+  };
+}
+
+/**
  * Route an incoming event to matching workflows.
  *
  * Queries enabled routing rules for the event's organization, filters
  * by type/source glob patterns, then creates a workflow run and pushes
  * a `workflow:execute` event to Hatchet for each match.
  */
-async function routeEvent(event: OmniEvent): Promise<void> {
+async function routeEvent(rawEvent: OmniEvent): Promise<void> {
+  const event = normalizeToCloudEvent(rawEvent);
   const parentCtx = extractTraceContext(event.traceContext);
   const routerSpan = startRouterSpan(event.type, event.source, parentCtx);
 
@@ -217,6 +237,8 @@ async function routeEvent(event: OmniEvent): Promise<void> {
           correlationId: event.correlationId,
           schemaId: event.schemaId,
           timestamp: event.timestamp,
+          specversion: event.specversion,
+          dataschema: event.dataschema,
         })
         .catch((err) => {
           logger.warn("Failed to write event to event_log", {
