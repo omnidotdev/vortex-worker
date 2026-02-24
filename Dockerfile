@@ -16,6 +16,7 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/build ./build
+COPY --from=builder /app/src/sandbox/wasm/evaluator.wasm ./build/wasm/evaluator.wasm
 COPY --from=builder /app/package.json ./
 
 CMD ["bun", "run", "start"]

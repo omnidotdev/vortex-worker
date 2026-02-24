@@ -8,12 +8,10 @@
  *
  * ## Design
  *
- * Extism (the WASM runtime already used in this codebase) requires
- * pre-compiled `.wasm` modules and cannot execute arbitrary JS source at
- * runtime. To support inline JavaScript code steps in the DSL executor we
- * use Bun Workers as the isolation boundary. When a QuickJS-to-WASM
- * code-runner module becomes available, the `runSandboxedCode` function
- * can be swapped to delegate to Extism instead.
+ * For WASM-level isolation, see `sandbox/extism.ts` which runs user code
+ * in a QuickJS-ng evaluator compiled to WASM via Extism. This Worker
+ * sandbox is retained for code that needs Web APIs (fetch, setTimeout)
+ * or ES2023+ features not supported by QuickJS-ng.
  *
  * ## Security
  *

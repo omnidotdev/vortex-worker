@@ -16,6 +16,7 @@
     "test": "bun test",
     "test:integration": "bun test src/__tests__/integration/",
     "test:watch": "bun test --watch",
+    "build:evaluator": "extism-js src/sandbox/wasm/evaluator.js -i src/sandbox/wasm/evaluator.d.ts -o src/sandbox/wasm/evaluator.wasm",
     "prepare": "husky"
   },
   "trustedDependencies": [

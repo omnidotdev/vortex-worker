@@ -16,6 +16,8 @@ const knipConfig: KnipConfig = {
     "scripts/**",
     // Instrumentation loaded via --import flag at runtime
     "src/instrumentation.ts",
+    // WASM evaluator source (compiled via extism-js, not imported by TS)
+    "src/sandbox/wasm/**",
     // Test files are run via bun test
     "src/__tests__/**",
     // Temporal workflows and activities (WIP - alternative to Hatchet)
@@ -68,6 +70,10 @@ const knipConfig: KnipConfig = {
     "src/triggers/redis.ts",
     // Error classes (consumed by circuit-breaker, rate-limit)
     "src/lib/errors.ts",
+  ],
+  ignoreBinaries: [
+    // Installed globally; compiles evaluator.js → evaluator.wasm
+    "extism-js",
   ],
   ignoreDependencies: [
     // All @activepieces/* packages are dynamically loaded at runtime based on integration type

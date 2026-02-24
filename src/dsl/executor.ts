@@ -27,6 +27,7 @@ import {
   isBuiltinPlugin,
 } from "../plugins";
 import { getPluginRegistry } from "../plugins/registry";
+import { runExtismSandbox } from "../sandbox/extism";
 import { runSandboxedCode } from "../sandbox/runner";
 import { stateStore } from "../state";
 import { endSpan, startStepSpan } from "../tracing/propagation";
@@ -1623,6 +1624,33 @@ const executeCode = async (
 
     return {
       sandbox: "worker",
+      executedAt: new Date().toISOString(),
+      durationMs,
+      inputs: inputData,
+      output,
+    };
+  }
+
+  // --- WASM sandbox path ---
+  if (sandbox === "wasm") {
+    const timeoutMs = code.timeout ?? 30_000;
+    const memoryMb = code.memoryMb ?? 128;
+
+    const { output, durationMs } = await runExtismSandbox({
+      source: code.source,
+      inputs: inputData,
+      limits: { memoryMb, timeoutMs },
+    });
+
+    // Map outputs to context variables
+    if (code.outputs) {
+      for (const [outputKey, variableName] of Object.entries(code.outputs)) {
+        ctx.variables[String(variableName)] = output[outputKey];
+      }
+    }
+
+    return {
+      sandbox: "wasm",
       executedAt: new Date().toISOString(),
       durationMs,
       inputs: inputData,
