@@ -118,7 +118,10 @@ describe("SpinKubeExecutor", () => {
 
       // Verify the request
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [
+        string,
+        RequestInit,
+      ];
       expect(url).toContain("/apis/core.spinoperator.dev/v1alpha1");
       expect(url).toContain("namespaces/vortex-functions/spinapps");
       expect(init?.method).toBe("POST");
@@ -169,7 +172,10 @@ describe("SpinKubeExecutor", () => {
 
       expect(result).toEqual({ result: "ok" });
 
-      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [
+        string,
+        RequestInit,
+      ];
       expect(url).toBe("http://echo-fn.vortex-functions.svc.cluster.local");
       expect(init?.method).toBe("POST");
       expect(init?.headers).toEqual(
@@ -201,7 +207,10 @@ describe("SpinKubeExecutor", () => {
       await executor.undeploy("echo-fn");
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [
+        string,
+        RequestInit,
+      ];
       expect(url).toContain("/spinapps/echo-fn");
       expect(init?.method).toBe("DELETE");
       expect(init?.headers).toEqual(

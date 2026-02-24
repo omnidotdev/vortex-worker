@@ -197,7 +197,9 @@ async function handleGate(
 
   if (gate.type === "approval") {
     // Wait for approval signal
-    const approved = await condition(() => approvals.has(step.id), timeoutMs);
+    const approved = timeoutMs
+      ? await condition(() => approvals.has(step.id), timeoutMs)
+      : await condition(() => approvals.has(step.id));
 
     if (!approved) {
       // Timeout occurred
@@ -212,7 +214,9 @@ async function handleGate(
     const signalName = gate.signalName || step.id;
 
     // Wait for custom signal
-    const received = await condition(() => signals.has(signalName), timeoutMs);
+    const received = timeoutMs
+      ? await condition(() => signals.has(signalName), timeoutMs)
+      : await condition(() => signals.has(signalName));
 
     if (!received) {
       // Timeout - check timeout action
