@@ -1,6 +1,11 @@
 import { describe, expect, it } from "bun:test";
 
-import { applyTransform, evaluateCondition, isDuplicate, normalizeToCloudEvent } from "../router";
+import {
+  applyTransform,
+  evaluateCondition,
+  isDuplicate,
+  normalizeToCloudEvent,
+} from "../router";
 
 import type Redis from "ioredis";
 
