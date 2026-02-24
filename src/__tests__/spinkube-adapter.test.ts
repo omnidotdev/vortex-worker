@@ -105,7 +105,7 @@ describe("SpinKubeExecutor", () => {
             headers: { "Content-Type": "application/json" },
           }),
       );
-      globalThis.fetch = fetchMock as typeof fetch;
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
 
       const executor = new SpinKubeExecutor(TEST_CONFIG);
       const result = await executor.deploy({
@@ -118,7 +118,7 @@ describe("SpinKubeExecutor", () => {
 
       // Verify the request
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchMock.mock.calls[0];
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toContain("/apis/core.spinoperator.dev/v1alpha1");
       expect(url).toContain("namespaces/vortex-functions/spinapps");
       expect(init?.method).toBe("POST");
@@ -138,7 +138,7 @@ describe("SpinKubeExecutor", () => {
     it("should throw on non-OK response", async () => {
       globalThis.fetch = mock(
         async () => new Response("conflict", { status: 409 }),
-      ) as typeof fetch;
+      ) as unknown as typeof fetch;
 
       const executor = new SpinKubeExecutor(TEST_CONFIG);
 
@@ -160,7 +160,7 @@ describe("SpinKubeExecutor", () => {
             headers: { "Content-Type": "application/json" },
           }),
       );
-      globalThis.fetch = fetchMock as typeof fetch;
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
 
       const executor = new SpinKubeExecutor(TEST_CONFIG);
       const result = await executor.invoke("echo-fn", {
@@ -169,7 +169,7 @@ describe("SpinKubeExecutor", () => {
 
       expect(result).toEqual({ result: "ok" });
 
-      const [url, init] = fetchMock.mock.calls[0];
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toBe("http://echo-fn.vortex-functions.svc.cluster.local");
       expect(init?.method).toBe("POST");
       expect(init?.headers).toEqual(
@@ -182,7 +182,7 @@ describe("SpinKubeExecutor", () => {
     it("should throw on non-OK response", async () => {
       globalThis.fetch = mock(
         async () => new Response("internal error", { status: 500 }),
-      ) as typeof fetch;
+      ) as unknown as typeof fetch;
 
       const executor = new SpinKubeExecutor(TEST_CONFIG);
 
@@ -195,13 +195,13 @@ describe("SpinKubeExecutor", () => {
   describe("undeploy", () => {
     it("should DELETE the SpinApp CRD", async () => {
       const fetchMock = mock(async () => new Response(null, { status: 200 }));
-      globalThis.fetch = fetchMock as typeof fetch;
+      globalThis.fetch = fetchMock as unknown as typeof fetch;
 
       const executor = new SpinKubeExecutor(TEST_CONFIG);
       await executor.undeploy("echo-fn");
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      const [url, init] = fetchMock.mock.calls[0];
+      const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
       expect(url).toContain("/spinapps/echo-fn");
       expect(init?.method).toBe("DELETE");
       expect(init?.headers).toEqual(
@@ -214,7 +214,7 @@ describe("SpinKubeExecutor", () => {
     it("should silently succeed if resource is already gone (404)", async () => {
       globalThis.fetch = mock(
         async () => new Response("not found", { status: 404 }),
-      ) as typeof fetch;
+      ) as unknown as typeof fetch;
 
       const executor = new SpinKubeExecutor(TEST_CONFIG);
 
@@ -225,7 +225,7 @@ describe("SpinKubeExecutor", () => {
     it("should throw on unexpected errors", async () => {
       globalThis.fetch = mock(
         async () => new Response("forbidden", { status: 403 }),
-      ) as typeof fetch;
+      ) as unknown as typeof fetch;
 
       const executor = new SpinKubeExecutor(TEST_CONFIG);
 
@@ -240,7 +240,7 @@ describe("SpinKubeExecutor", () => {
       globalThis.fetch = mock(
         async () =>
           new Response(JSON.stringify({ items: [] }), { status: 200 }),
-      ) as typeof fetch;
+      ) as unknown as typeof fetch;
 
       const executor = new SpinKubeExecutor(TEST_CONFIG);
       const healthy = await executor.healthCheck();
@@ -251,7 +251,7 @@ describe("SpinKubeExecutor", () => {
     it("should return false when SpinApp API is unavailable", async () => {
       globalThis.fetch = mock(
         async () => new Response("not found", { status: 404 }),
-      ) as typeof fetch;
+      ) as unknown as typeof fetch;
 
       const executor = new SpinKubeExecutor(TEST_CONFIG);
       const healthy = await executor.healthCheck();
@@ -262,7 +262,7 @@ describe("SpinKubeExecutor", () => {
     it("should return false when fetch throws", async () => {
       globalThis.fetch = mock(async () => {
         throw new Error("network error");
-      }) as typeof fetch;
+      }) as unknown as typeof fetch;
 
       const executor = new SpinKubeExecutor(TEST_CONFIG);
       const healthy = await executor.healthCheck();
