@@ -172,6 +172,13 @@ class SpinKubeExecutor {
 
   /**
    * Invoke a deployed SpinApp via cluster-internal HTTP.
+   *
+   * TODO: `svc.cluster.local` DNS is only reachable from inside the
+   * Kubernetes cluster. While vortex-worker runs on Railway this method
+   * will fail at runtime. Deferred until Omni infra migrates from
+   * Railway to k8s (Fractal), at which point the worker pod will have
+   * native cluster DNS access.
+   *
    * @param functionId - The function ID (maps to a k8s service name)
    * @param input - Payload to POST to the Spin app
    * @returns Response body from the Spin app

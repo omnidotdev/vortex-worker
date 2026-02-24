@@ -83,6 +83,11 @@ export const fnInvokeWorkflow: Workflow = {
         // Route WASM functions to the Kubernetes SpinApp CRD when the
         // caller specifies executor="spinkube". First invocation triggers
         // a deploy; subsequent calls go directly to the running service.
+        //
+        // TODO: SpinKube invoke relies on cluster-internal DNS
+        // (`svc.cluster.local`) which is unreachable from Railway.
+        // This path is wired but non-functional until vortex-worker
+        // runs inside k8s (Fractal migration).
         if (executor === "spinkube") {
           if (!wasmModuleUrl) {
             throw new Error(
