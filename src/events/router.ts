@@ -31,6 +31,8 @@ import logger from "lib/logger";
 import BatchAccumulator from "./batch-accumulator";
 import { evaluateCel } from "./cel-evaluator";
 import { withRetry, writeToDlq } from "./dlq";
+// TODO: wire `resolveSchemaVersion` for version migration during dispatch
+// import { resolveSchemaVersion } from "./schema-version-resolver";
 import { validateEventData } from "./schema-validator";
 
 import type Redis from "ioredis";
@@ -310,22 +312,34 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
       }
 
       // Validate event data against registered schema (if any)
-      if (event.schemaId) {
-        const schema = await db.query.eventSchemaTable.findFirst({
-          where: eq(eventSchemaTable.name, event.schemaId),
+      const eventSchemaName = event.schemaId ?? event.dataschema;
+      const eventVersion = event.omnischemaversion;
+
+      if (eventSchemaName) {
+        // Fetch all versions of this schema for migration chain
+        const allVersions = await db.query.eventSchemaTable.findMany({
+          where: eq(eventSchemaTable.name, eventSchemaName),
         });
 
-        if (schema?.payloadSchema) {
+        // Find the version matching the event (or latest if unversioned)
+        const targetSchema = eventVersion
+          ? allVersions.find((s) => s.version === eventVersion)
+          : allVersions.sort((a, b) => b.version - a.version)[0];
+
+        if (targetSchema?.payloadSchema) {
           const result = validateEventData(event.data, {
-            name: schema.name,
-            enforcement: (schema.enforcement ?? "warn") as Enforcement,
-            payloadSchema: schema.payloadSchema as Record<string, unknown>,
+            name: targetSchema.name,
+            enforcement: (targetSchema.enforcement ?? "warn") as Enforcement,
+            payloadSchema: targetSchema.payloadSchema as Record<
+              string,
+              unknown
+            >,
           });
 
           if (!result.valid) {
             logger.warn("Event failed schema validation", {
               eventId: event.id,
-              schemaId: event.schemaId,
+              schemaId: eventSchemaName,
               errors: result.errors,
             });
 

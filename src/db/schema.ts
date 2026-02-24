@@ -272,6 +272,10 @@ export const eventLogTable = pgTable("event_log", {
   correlationId: text("correlation_id"),
   schemaId: text("schema_id"),
   timestamp: text().notNull(),
+  /** CloudEvents spec version */
+  specversion: text().default("1.0"),
+  /** URI to the event's JSON Schema definition in the registry */
+  dataschema: text(),
   recordedAt: timestamp("recorded_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
@@ -403,7 +407,7 @@ export type DeadLetterEvent = typeof deadLetterEventTable.$inferSelect;
 export const eventSchemaTable = pgTable("event_schema", {
   id: uuid().primaryKey().defaultRandom(),
   /** Dot-separated event name, e.g. "synapse.provider.health_changed" */
-  name: text().notNull().unique(),
+  name: text().notNull(),
   /** Service that emits this event, e.g. "synapse-api" */
   source: text().notNull(),
   description: text(),
@@ -411,6 +415,14 @@ export const eventSchemaTable = pgTable("event_schema", {
   payloadSchema: jsonb(),
   /** Enforcement level: strict (reject invalid), warn (log), none (skip) */
   enforcement: text().notNull().default("warn"),
+  /** Monotonic version number */
+  version: integer().notNull().default(1),
+  /** Schema evolution mode: backward, forward, full, none */
+  compatibilityMode: text("compatibility_mode").notNull().default("backward"),
+  /** FK to previous version of this schema (self-referential) */
+  previousVersionId: uuid("previous_version_id"),
+  /** JSONata expression for migrating data between versions */
+  migrationTransform: text("migration_transform"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),
