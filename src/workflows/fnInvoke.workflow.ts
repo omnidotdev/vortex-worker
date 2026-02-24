@@ -57,7 +57,7 @@ export const fnInvokeWorkflow: Workflow = {
       name: "execute-function",
       timeout: "120s",
       retries: 0,
-      run: async (ctx) => {
+      run: async (ctx): Promise<JsonObject | undefined> => {
         const payload = ctx.workflowInput() as FnInvokeInput;
         const {
           fnId,
