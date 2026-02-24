@@ -1,25 +1,43 @@
 /**
- * Event envelope for all Omni platform events.
+ * CloudEvents v1.0 envelope for all Omni platform events.
  *
  * Every event flowing through the streaming layer conforms to this shape,
  * providing consistent metadata for routing, tracing, and replay.
  *
+ * @see https://cloudevents.io/
  */
 export type OmniEvent = {
+  /** CloudEvents spec version */
+  specversion?: string;
   id: string;
   type: string;
   subject?: string;
   source: string;
+  /** MIME type of `data` */
+  datacontenttype?: string;
+  /** URI to the event's JSON Schema definition in the registry */
+  dataschema?: string;
   data: Record<string, unknown>;
+  /** ISO 8601 timestamp */
+  time?: string;
+  /** @deprecated Use `time` instead (CloudEvents naming) */
   timestamp: string;
   organizationId: string;
   correlationId?: string;
+  /** @deprecated Use `dataschema` instead */
   schemaId?: string;
   /** W3C Trace Context for distributed tracing */
   traceContext?: {
     traceparent?: string;
     tracestate?: string;
   };
+  // -- Omni CloudEvents extension attributes --
+  /** Organization ID (Omni extension) */
+  omniorgid?: string;
+  /** Workspace ID (Omni extension) */
+  omniworkspaceid?: string;
+  /** Event schema version (Omni extension) */
+  omnischemaversion?: number;
 };
 
 /**
@@ -35,7 +53,7 @@ export type EventsConfig = {
 /**
  * Partial event input, omitting fields generated automatically.
  */
-export type EventInput = Omit<OmniEvent, "id" | "timestamp">;
+export type EventInput = Omit<OmniEvent, "id" | "timestamp" | "time">;
 
 /**
  * Dead-letter queue envelope wrapping a failed event with error metadata.
