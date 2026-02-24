@@ -3,12 +3,14 @@
  *
  * Handles execution of registered functions (FaaS) dispatched by the
  * vortex-api via Hatchet `function:invoke` events. Routes to the
- * appropriate runtime:
+ * appropriate runtime and executor:
  *
- * - **JS** -- executes inline source in the sandboxed Bun Worker
- * - **WASM** -- loads a WASM module via ExtismPluginHost and calls "run"
+ * - **local / JS** -- executes inline source in the sandboxed Bun Worker
+ * - **local / WASM** -- loads a WASM module via ExtismPluginHost and calls "run"
+ * - **spinkube / WASM** -- deploys + invokes via SpinApp CRD on Kubernetes
  */
 
+import { SpinKubeExecutor } from "../executor/adapters/spinkube";
 import { getPluginHost } from "../plugins/host";
 import { runSandboxedCode } from "../sandbox/runner";
 
@@ -32,8 +34,8 @@ interface FnInvokeInput {
   source?: string;
   /** URL of the WASM module (required when runtime is "wasm") */
   wasmModuleUrl?: string;
-  /** Who or what triggered the invocation */
-  executor?: string;
+  /** Execution target: "local" (default) or "spinkube" (Kubernetes) */
+  executor?: "local" | "spinkube";
   /** Resource limits override */
   limits?: {
     memoryMb?: number;
@@ -74,8 +76,64 @@ export const fnInvokeWorkflow: Workflow = {
         };
 
         ctx.log(
-          `Invoking function ${fnId} (runtime=${runtime}, executor=${executor ?? "unknown"})`,
+          `Invoking function ${fnId} (runtime=${runtime}, executor=${executor ?? "local"})`,
         );
+
+        // -- SpinKube executor -----------------------------------------
+        // Route WASM functions to the Kubernetes SpinApp CRD when the
+        // caller specifies executor="spinkube". First invocation triggers
+        // a deploy; subsequent calls go directly to the running service.
+        if (executor === "spinkube") {
+          if (!wasmModuleUrl) {
+            throw new Error(
+              `SpinKube executor requires "wasmModuleUrl" but none was provided for function ${fnId}`,
+            );
+          }
+
+          const spinkube = new SpinKubeExecutor({
+            namespace: process.env.SPINKUBE_NAMESPACE ?? "vortex-functions",
+            runtimeClass:
+              process.env.SPINKUBE_RUNTIME_CLASS ?? "wasmtime-spin-v2",
+          });
+
+          const start = performance.now();
+
+          let output: Record<string, unknown>;
+
+          try {
+            output = await spinkube.invoke(fnId, input);
+          } catch {
+            // Invoke failed -- likely the SpinApp is not deployed yet.
+            // Deploy and retry once.
+            ctx.log(
+              `SpinApp not reachable for ${fnId}, deploying and retrying`,
+            );
+
+            await spinkube.deploy({
+              functionId: fnId,
+              wasmModuleUrl,
+            });
+
+            // Brief wait for the scheduler to create the pod
+            await new Promise((resolve) => setTimeout(resolve, 2_000));
+
+            output = await spinkube.invoke(fnId, input);
+          }
+
+          const durationMs = performance.now() - start;
+
+          ctx.log(
+            `Function ${fnId} completed via SpinKube in ${durationMs.toFixed(1)}ms`,
+          );
+
+          return {
+            fnId,
+            runtime,
+            executor: "spinkube",
+            output: output as JsonObject,
+            durationMs,
+          };
+        }
 
         // -- JS runtime ------------------------------------------------
         if (runtime === "js") {
