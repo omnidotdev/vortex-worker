@@ -55,6 +55,7 @@ import { authzSyncWorkflow } from "./workflows/authz.workflow";
 import { authzReconcileWorkflow } from "./workflows/authzReconcile.workflow";
 import { chronicleAuditWorkflow } from "./workflows/chronicle.workflow";
 import { dslWorkflow } from "./workflows/dsl.workflow";
+import { fnInvokeWorkflow } from "./workflows/fnInvoke.workflow";
 import { searchBootstrapWorkflow } from "./workflows/searchBootstrap.workflow";
 import { tokenRefreshWorkflow } from "./workflows/tokenRefresh.workflow";
 
@@ -97,6 +98,7 @@ async function main() {
       authzSyncWorkflow,
       chronicleAuditWorkflow,
       dslWorkflow,
+      fnInvokeWorkflow,
       searchBootstrapWorkflow,
       tokenRefreshWorkflow,
     ],
