@@ -206,8 +206,6 @@ export function normalizeToCloudEvent(event: OmniEvent): OmniEvent {
     time: event.time ?? event.timestamp,
     datacontenttype: event.datacontenttype ?? "application/json",
     omniorgid: event.omniorgid ?? event.organizationId,
-    omniworkspaceid: event.omniworkspaceid,
-    omnischemaversion: event.omnischemaversion,
   };
 }
 
@@ -399,6 +397,51 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
                 fromVersion: eventVersion,
                 toVersion: latestVersion,
               });
+
+              // Re-validate migrated data against the target schema
+              const latestSchema = allVersions.find(
+                (s) => s.version === latestVersion,
+              );
+
+              if (latestSchema?.payloadSchema) {
+                const postMigrationResult = validateEventData(
+                  migrationResult.data,
+                  {
+                    name: latestSchema.name,
+                    enforcement: (latestSchema.enforcement ?? "warn") as Enforcement,
+                    payloadSchema: latestSchema.payloadSchema as Record<
+                      string,
+                      unknown
+                    >,
+                  },
+                );
+
+                if (!postMigrationResult.valid) {
+                  logger.warn(
+                    "Migrated event data failed target schema validation",
+                    {
+                      eventId: event.id,
+                      schemaId: eventSchemaName,
+                      fromVersion: eventVersion,
+                      toVersion: latestVersion,
+                      errors: postMigrationResult.errors,
+                    },
+                  );
+
+                  for (const rule of matchingRules) {
+                    await writeToDlq(
+                      event,
+                      rule.id,
+                      new Error(
+                        `Post-migration validation failed: ${postMigrationResult.errors.join(", ")}`,
+                      ),
+                      "SCHEMA_VERSION_MISMATCH",
+                      1,
+                    );
+                  }
+                  return;
+                }
+              }
             }
 
             eventData = migrationResult.data;

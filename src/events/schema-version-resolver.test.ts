@@ -96,6 +96,11 @@ describe("buildMigrationChain", () => {
     const chain = buildMigrationChain([v1Schema], 1, 5);
     expect(chain).toBeNull();
   });
+
+  it("returns null for downgrade (fromVersion > toVersion)", () => {
+    const chain = buildMigrationChain([v1Schema, v2Schema, v3Schema], 3, 1);
+    expect(chain).toBeNull();
+  });
 });
 
 describe("resolveSchemaVersion", () => {
