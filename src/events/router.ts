@@ -31,12 +31,12 @@ import logger from "lib/logger";
 import BatchAccumulator from "./batch-accumulator";
 import { evaluateCel } from "./cel-evaluator";
 import { withRetry, writeToDlq } from "./dlq";
-// TODO: wire `resolveSchemaVersion` for version migration during dispatch
-// import { resolveSchemaVersion } from "./schema-version-resolver";
 import { validateEventData } from "./schema-validator";
+import { resolveSchemaVersion } from "./schema-version-resolver";
 
 import type Redis from "ioredis";
 import type { Enforcement } from "./schema-validator";
+import type { VersionedSchema } from "./schema-version-resolver";
 import type { OmniEvent } from "./types";
 
 /**
@@ -311,26 +311,27 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
         return;
       }
 
-      // Validate event data against registered schema (if any)
+      // Validate event data against registered schema and migrate versions
       const eventSchemaName = event.schemaId ?? event.dataschema;
       const eventVersion = event.omnischemaversion;
+      let eventData = event.data;
 
       if (eventSchemaName) {
-        // Fetch all versions of this schema for migration chain
+        // Fetch all versions of this schema for validation and migration
         const allVersions = await db.query.eventSchemaTable.findMany({
           where: eq(eventSchemaTable.name, eventSchemaName),
         });
 
         // Find the version matching the event (or latest if unversioned)
-        const targetSchema = eventVersion
+        const matchedSchema = eventVersion
           ? allVersions.find((s) => s.version === eventVersion)
           : allVersions.sort((a, b) => b.version - a.version)[0];
 
-        if (targetSchema?.payloadSchema) {
+        if (matchedSchema?.payloadSchema) {
           const result = validateEventData(event.data, {
-            name: targetSchema.name,
-            enforcement: (targetSchema.enforcement ?? "warn") as Enforcement,
-            payloadSchema: targetSchema.payloadSchema as Record<
+            name: matchedSchema.name,
+            enforcement: (matchedSchema.enforcement ?? "warn") as Enforcement,
+            payloadSchema: matchedSchema.payloadSchema as Record<
               string,
               unknown
             >,
@@ -357,10 +358,56 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
             return;
           }
         }
+
+        // Migrate event data to the latest schema version if needed
+        if (eventVersion && allVersions.length > 0) {
+          const latestVersion = Math.max(...allVersions.map((s) => s.version));
+
+          if (eventVersion < latestVersion) {
+            const migrationResult = await resolveSchemaVersion(
+              event.data,
+              eventVersion,
+              latestVersion,
+              allVersions as VersionedSchema[],
+            );
+
+            if (migrationResult.error) {
+              logger.warn("Schema version migration failed", {
+                eventId: event.id,
+                schemaId: eventSchemaName,
+                fromVersion: eventVersion,
+                toVersion: latestVersion,
+                error: migrationResult.error,
+              });
+
+              for (const rule of matchingRules) {
+                await writeToDlq(
+                  event,
+                  rule.id,
+                  new Error(migrationResult.error),
+                  "SCHEMA_VERSION_MISMATCH",
+                  1,
+                );
+              }
+              return;
+            }
+
+            if (migrationResult.migrated) {
+              logger.info("Migrated event data to latest schema version", {
+                eventId: event.id,
+                schemaId: eventSchemaName,
+                fromVersion: eventVersion,
+                toVersion: latestVersion,
+              });
+            }
+
+            eventData = migrationResult.data;
+          }
+        }
       }
 
       for (const rule of matchingRules) {
-        const rawTransformed = await applyTransform(rule.transform, event.data);
+        const rawTransformed = await applyTransform(rule.transform, eventData);
 
         let transformedData: Record<string, unknown>;
         if (
@@ -370,7 +417,7 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
         ) {
           transformedData = rawTransformed as Record<string, unknown>;
         } else {
-          if (rawTransformed !== event.data) {
+          if (rawTransformed !== eventData) {
             logger.warn(
               "Transform returned non-object result, using original event data",
               {
@@ -382,7 +429,7 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
               },
             );
           }
-          transformedData = event.data;
+          transformedData = eventData;
         }
 
         const workflow = await db.query.workflowTable.findFirst({
