@@ -408,7 +408,8 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
                   migrationResult.data,
                   {
                     name: latestSchema.name,
-                    enforcement: (latestSchema.enforcement ?? "warn") as Enforcement,
+                    enforcement: (latestSchema.enforcement ??
+                      "warn") as Enforcement,
                     payloadSchema: latestSchema.payloadSchema as Record<
                       string,
                       unknown
