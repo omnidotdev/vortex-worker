@@ -100,8 +100,12 @@ export const StepType = z.enum([
   "ai_guardrails",
   // Event batching/windowing
   "window",
+  // Cross-service event collection
+  "collect",
   // Rivet AI agent graphs
   "rivet",
+  // Distributed transactions
+  "saga",
 ]);
 export type StepType = z.infer<typeof StepType>;
 
@@ -122,8 +126,47 @@ export const TriggerType = z.enum([
   "nats",
   "amqp",
   "grpc_stream",
+  "email",
 ]);
 export type TriggerType = z.infer<typeof TriggerType>;
+
+export const EmailTriggerConfig = z.object({
+  /** Email address to receive on (e.g., workflows@omni.dev) */
+  address: z.string().email(),
+  /** Email provider for inbound processing */
+  provider: z.enum(["resend"]).default("resend"),
+  /** Optional filters to narrow which emails trigger the workflow */
+  filters: z
+    .object({
+      /** Glob pattern for sender address (e.g., "*@stripe.com") */
+      from: z.string().optional(),
+      /** Glob pattern for subject line (e.g., "Invoice*") */
+      subject: z.string().optional(),
+    })
+    .optional(),
+});
+export type EmailTriggerConfig = z.infer<typeof EmailTriggerConfig>;
+
+export const EmailTriggerPayload = z.object({
+  from: z.string(),
+  to: z.string(),
+  subject: z.string(),
+  textBody: z.string(),
+  htmlBody: z.string(),
+  attachments: z.array(
+    z.object({
+      filename: z.string(),
+      contentType: z.string(),
+      size: z.number(),
+      /** Base64-encoded content for small attachments */
+      content: z.string().optional(),
+    }),
+  ),
+  headers: z.record(z.string(), z.string()),
+  messageId: z.string(),
+  inReplyTo: z.string().optional(),
+});
+export type EmailTriggerPayload = z.infer<typeof EmailTriggerPayload>;
 
 export const TriggerScheduleWindow = z.object({
   days: z.array(z.number().min(0).max(6)),
@@ -1485,6 +1528,35 @@ export const WindowStep = BaseStep.extend({
 });
 export type WindowStep = z.infer<typeof WindowStep>;
 
+/** Matcher for a single expected event in a collect step */
+export const CollectEventMatcher = z.object({
+  /** Name for this expected event (used as key in collected results) */
+  name: z.string(),
+  /** Glob pattern for event source (e.g., "omni.aether") */
+  sourcePattern: z.string(),
+  /** Glob pattern for event type (e.g., "subscription.created") */
+  typePattern: z.string(),
+});
+export type CollectEventMatcher = z.infer<typeof CollectEventMatcher>;
+
+/** Pause workflow and resume when matching cross-service events arrive */
+export const CollectStep = BaseStep.extend({
+  type: z.literal("collect"),
+  collect: z.object({
+    /** Events to wait for */
+    events: z.array(CollectEventMatcher).min(1),
+    /** Field in event data used to correlate events to this workflow run */
+    correlationKey: z.string(),
+    /** How long to wait before timing out */
+    timeout: z.string().default("5m"),
+    /** Completion mode */
+    mode: z.enum(["all", "any", "n_of_m"]).default("all"),
+    /** For n_of_m mode: minimum events needed */
+    minRequired: z.number().optional(),
+  }),
+});
+export type CollectStep = z.infer<typeof CollectStep>;
+
 /** Execute a Rivet AI agent graph */
 export const RivetStep = BaseStep.extend({
   type: z.literal("rivet"),
@@ -1500,6 +1572,45 @@ export const RivetStep = BaseStep.extend({
   }),
 });
 export type RivetStep = z.infer<typeof RivetStep>;
+
+/** Action definition for a saga step (execute or compensate phase) */
+export const SagaStepAction = z.object({
+  type: z.enum(["http", "emit", "action"]),
+  // HTTP action fields
+  url: z.string().optional(),
+  method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]).optional(),
+  headers: z.record(z.string()).optional(),
+  body: z.unknown().optional(),
+  // Emit action fields
+  event: z.string().optional(),
+  data: z.record(z.unknown()).optional(),
+  // Integration action fields
+  integrationId: z.string().optional(),
+  operation: z.string().optional(),
+  config: z.record(z.unknown()).optional(),
+});
+export type SagaStepAction = z.infer<typeof SagaStepAction>;
+
+/** A single step within a saga, pairing an execute action with a compensate action */
+export const SagaStepDefinition = z.object({
+  name: z.string(),
+  execute: SagaStepAction,
+  compensate: SagaStepAction,
+  timeout: z.string().default("30s"),
+  retries: z.number().default(3),
+});
+export type SagaStepDefinition = z.infer<typeof SagaStepDefinition>;
+
+/** Saga step for distributed transactions with execute/compensate pairs */
+export const SagaStep = BaseStep.extend({
+  type: z.literal("saga"),
+  saga: z.object({
+    steps: z.array(SagaStepDefinition),
+    /** Run saga steps in parallel instead of sequentially */
+    parallel: z.boolean().default(false),
+  }),
+});
+export type SagaStep = z.infer<typeof SagaStep>;
 
 export const Step = z.discriminatedUnion("type", [
   TriggerStep,
@@ -1599,8 +1710,12 @@ export const Step = z.discriminatedUnion("type", [
   AiGuardrailsStep,
   // Event batching/windowing
   WindowStep,
+  // Cross-service event collection
+  CollectStep,
   // Rivet AI agent graphs
   RivetStep,
+  // Distributed transactions
+  SagaStep,
 ]);
 export type Step = z.infer<typeof Step>;
 

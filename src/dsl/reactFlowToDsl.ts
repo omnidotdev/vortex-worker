@@ -12,6 +12,7 @@ import type {
   AggregateStep,
   CacheStep,
   CodeStep,
+  CollectStep,
   ConditionStep,
   DatabaseStep,
   DelayStep,
@@ -68,6 +69,7 @@ const nodeTypeToStepType: Record<string, string> = {
   eventNode: "event",
   aggregateNode: "aggregate",
   cacheNode: "cache",
+  collectNode: "collect",
 };
 
 function triggerNodeToStep(node: ReactFlowNode): TriggerStep {
@@ -455,6 +457,29 @@ function cacheNodeToStep(node: ReactFlowNode): CacheStep {
   };
 }
 
+function collectNodeToStep(node: ReactFlowNode): CollectStep {
+  const data = node.data;
+  return {
+    id: node.id,
+    type: "collect",
+    name: (data.label as string) || "Collect Events",
+    description: data.description as string | undefined,
+    position: node.position,
+    collect: {
+      events:
+        (data.events as Array<{
+          name: string;
+          sourcePattern: string;
+          typePattern: string;
+        }>) || [],
+      correlationKey: (data.correlationKey as string) || "",
+      timeout: (data.timeout as string) || "5m",
+      mode: (data.mode as "all" | "any" | "n_of_m") || "all",
+      minRequired: data.minRequired as number | undefined,
+    },
+  };
+}
+
 function nodeToStep(node: ReactFlowNode, edges: ReactFlowEdge[]): Step | null {
   const stepType = nodeTypeToStepType[node.type || ""] || node.type;
 
@@ -495,6 +520,8 @@ function nodeToStep(node: ReactFlowNode, edges: ReactFlowEdge[]): Step | null {
       return aggregateNodeToStep(node);
     case "cache":
       return cacheNodeToStep(node);
+    case "collect":
+      return collectNodeToStep(node);
     default:
       logger.warn("Unknown node type", { nodeType: node.type });
       return null;

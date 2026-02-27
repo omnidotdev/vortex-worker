@@ -28,6 +28,7 @@ import { z } from "zod";
 
 import { cacheClient } from "lib/cache/client";
 import logger from "lib/logger";
+import { matchEvent as matchCollectEvent } from "../dsl/collect-state";
 import BatchAccumulator from "./batch-accumulator";
 import { evaluateCel } from "./cel-evaluator";
 import { withRetry, writeToDlq } from "./dlq";
@@ -666,6 +667,65 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
 
           await writeToDlq(event, rule.id, err, "DISPATCH_ERROR", 3);
         }
+      }
+
+      // Check if this event completes or times out any pending collect steps
+      try {
+        const { completed: completedCollects, timedOut: timedOutCollects } =
+          await matchCollectEvent(event);
+
+        for (const completed of completedCollects) {
+          logger.info("Collect step completed, resuming workflow", {
+            eventId: event.id,
+            workflowRunId: completed.workflowRunId,
+            stepId: completed.stepId,
+            correlationValue: completed.correlationValue,
+            receivedEvents: Object.keys(completed.receivedEvents),
+          });
+
+          const traceCtx = injectTraceContext();
+
+          await hatchet.event.push("workflow:execute", {
+            workflowId: `collect-resume-${completed.workflowRunId}`,
+            runId: completed.workflowRunId,
+            organizationId: event.organizationId,
+            traceContext: traceCtx,
+            triggerData: {
+              _collectResume: true,
+              stepId: completed.stepId,
+              collectedEvents: completed.receivedEvents,
+              correlationValue: completed.correlationValue,
+            },
+          });
+        }
+
+        // Notify timed-out workflows so they don't dangle
+        for (const timedOut of timedOutCollects) {
+          logger.warn("Collect step timed out, notifying workflow", {
+            eventId: event.id,
+            workflowRunId: timedOut.workflowRunId,
+            stepId: timedOut.stepId,
+          });
+
+          const traceCtx = injectTraceContext();
+
+          await hatchet.event.push("workflow:execute", {
+            workflowId: `collect-timeout-${timedOut.workflowRunId}`,
+            runId: timedOut.workflowRunId,
+            organizationId: event.organizationId,
+            traceContext: traceCtx,
+            triggerData: {
+              _collectTimeout: true,
+              stepId: timedOut.stepId,
+              correlationValue: timedOut.correlationValue,
+            },
+          });
+        }
+      } catch (err) {
+        logger.warn("Failed to check collect step matches", {
+          eventId: event.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
     });
 

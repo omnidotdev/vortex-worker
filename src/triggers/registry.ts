@@ -12,6 +12,7 @@ import { join, parse } from "node:path";
 
 import { AmqpAdapter } from "adapters/amqp.adapter";
 import { CdcAdapter } from "adapters/cdc.adapter";
+import { EmailAdapter } from "adapters/email.adapter";
 import { GrpcStreamAdapter } from "adapters/grpc.adapter";
 import { KafkaAdapter } from "adapters/kafka.adapter";
 import { MqttAdapter } from "adapters/mqtt.adapter";
@@ -41,6 +42,9 @@ const BUILTIN_ADAPTERS: Record<
     config: Record<string, unknown>,
   ) => EventAdapter
 > = {
+  email: EmailAdapter as unknown as new (
+    config: Record<string, unknown>,
+  ) => EventAdapter,
   mqtt: MqttAdapter as unknown as new (
     config: Record<string, unknown>,
   ) => EventAdapter,

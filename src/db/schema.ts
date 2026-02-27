@@ -498,3 +498,72 @@ export const rivetGraphTable = pgTable(
 );
 
 export type RivetGraph = typeof rivetGraphTable.$inferSelect;
+
+/**
+ * Saga run table - tracks distributed transaction executions.
+ * Mirrored from vortex-api for saga executor writes in the worker.
+ */
+export const sagaRunTable = pgTable(
+  "saga_run",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    workflowRunId: uuid("workflow_run_id")
+      .notNull()
+      .references(() => workflowRunTable.id, { onDelete: "cascade" }),
+    organizationId: text("organization_id").notNull(),
+    status: text().notNull().default("running"),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    error: text(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("saga_run_workflow_run_id_idx").on(table.workflowRunId),
+    index("saga_run_organization_id_idx").on(table.organizationId),
+    index("saga_run_status_idx").on(table.status),
+  ],
+);
+
+export type SagaRun = typeof sagaRunTable.$inferSelect;
+export type NewSagaRun = typeof sagaRunTable.$inferInsert;
+
+/**
+ * Saga step log table - tracks individual execute/compensate step pairs.
+ * Mirrored from vortex-api for saga executor writes in the worker.
+ */
+export const sagaStepLogTable = pgTable(
+  "saga_step_log",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    sagaRunId: uuid("saga_run_id")
+      .notNull()
+      .references(() => sagaRunTable.id, { onDelete: "cascade" }),
+    stepName: text("step_name").notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    executeStatus: text("execute_status").notNull().default("pending"),
+    compensateStatus: text("compensate_status").notNull().default("pending"),
+    executeInput: jsonb("execute_input").default({}),
+    executeOutput: jsonb("execute_output"),
+    compensateInput: jsonb("compensate_input"),
+    compensateOutput: jsonb("compensate_output"),
+    error: text(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("saga_step_log_saga_run_id_idx").on(table.sagaRunId),
+    index("saga_step_log_idempotency_key_idx").on(table.idempotencyKey),
+    index("saga_step_log_execute_status_idx").on(table.executeStatus),
+  ],
+);
+
+export type SagaStepLog = typeof sagaStepLogTable.$inferSelect;
+export type NewSagaStepLog = typeof sagaStepLogTable.$inferInsert;

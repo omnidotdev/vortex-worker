@@ -32,6 +32,8 @@ import { runSandboxedCode } from "../sandbox/runner";
 import { stateStore } from "../state";
 import { endSpan, startStepSpan } from "../tracing/propagation";
 import WindowStateManager from "./window-state";
+import { registerCollect } from "./collect-state";
+import executeSaga from "./saga-executor";
 
 import type { PluginCallResult } from "../plugins/types";
 import type {
@@ -49,6 +51,7 @@ import type {
   ChunkStep,
   ClassifyStep,
   CodeStep,
+  CollectStep,
   ConditionStep,
   DatabaseStep,
   DebounceStep,
@@ -91,6 +94,7 @@ import type {
   ReduceStep,
   RetryStep,
   RivetStep,
+  SagaStep,
   SetStep,
   SignStep,
   SleepStep,
@@ -540,6 +544,10 @@ export async function executeStep(
       })
       // Rivet AI agent graphs
       .with({ type: "rivet" }, (s) => executeRivet(s, ctx))
+      // Distributed transactions
+      .with({ type: "saga" }, (s) => executeSaga(s, ctx))
+      // Cross-service event collection
+      .with({ type: "collect" }, (s) => executeCollect(s, ctx))
       .exhaustive();
 
     ctx.stepResults[step.id] = result;
@@ -1043,6 +1051,10 @@ async function executeStepInternal(
     })
     // Rivet AI agent graphs
     .with({ type: "rivet" }, (s) => executeRivet(s, ctx))
+    // Distributed transactions
+    .with({ type: "saga" }, (s) => executeSaga(s, ctx))
+    // Cross-service event collection
+    .with({ type: "collect" }, (s) => executeCollect(s, ctx))
     .exhaustive();
 
   // Store result
@@ -4982,4 +4994,64 @@ async function executeStateWait(
     condition: stateWait.condition,
     timeoutMs,
   });
+}
+
+/**
+ * Execute a Collect step - pause workflow until matching external events arrive.
+ *
+ * Registers expected events in Valkey and returns a "waiting" status.
+ * The event router resumes the workflow when all conditions are met.
+ */
+async function executeCollect(
+  step: CollectStep,
+  ctx: ExecutionContext,
+): Promise<unknown> {
+  const { collect } = step;
+
+  // Parse timeout string into absolute deadline
+  const timeoutMs = parseDelay(collect.timeout);
+  const deadline = Date.now() + timeoutMs;
+
+  // Extract the correlation value from trigger data or workflow variables
+  const correlationValue =
+    resolveValue(`{{trigger.data.${collect.correlationKey}}}`, ctx) ??
+    resolveValue(`{{${collect.correlationKey}}}`, ctx);
+
+  if (
+    correlationValue === undefined ||
+    correlationValue === null ||
+    correlationValue === ""
+  ) {
+    throw new ValidationError(
+      `Collect step requires a correlation value for key "${collect.correlationKey}"`,
+    );
+  }
+
+  await registerCollect({
+    workflowRunId: ctx.runId,
+    stepId: step.id,
+    events: collect.events.map((e) => ({
+      name: e.name,
+      sourcePattern: e.sourcePattern,
+      typePattern: e.typePattern,
+    })),
+    mode: collect.mode,
+    minRequired: collect.minRequired,
+    correlationKey: collect.correlationKey,
+    correlationValue: String(correlationValue),
+    receivedEvents: {},
+    timeout: deadline,
+  });
+
+  // Return waiting status; actual suspension is handled by the runtime
+  // (same pattern as the wait step with resumeOn: "event")
+  return {
+    status: "waiting",
+    resumeOn: "collect",
+    correlationKey: collect.correlationKey,
+    correlationValue: String(correlationValue),
+    expectedEvents: collect.events.map((e) => e.name),
+    mode: collect.mode,
+    timeoutAt: new Date(deadline).toISOString(),
+  };
 }
