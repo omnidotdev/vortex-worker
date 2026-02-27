@@ -89,6 +89,12 @@ export const fnInvokeWorkflow: Workflow = {
         // This path is wired but non-functional until vortex-worker
         // runs inside k8s (Fractal migration).
         if (executor === "spinkube") {
+          if (process.env.ENABLE_SPINKUBE !== "true") {
+            throw new Error(
+              "SpinKube executor is not enabled. Set ENABLE_SPINKUBE=true to enable Kubernetes-based function execution",
+            );
+          }
+
           if (!wasmModuleUrl) {
             throw new Error(
               `SpinKube executor requires "wasmModuleUrl" but none was provided for function ${fnId}`,

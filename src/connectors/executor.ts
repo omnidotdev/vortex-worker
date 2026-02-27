@@ -199,12 +199,17 @@ function buildActionContext(connectorContext: ConnectorContext): any {
     files: {
       write: async ({
         fileName,
-        data: _data,
+        data,
       }: {
         fileName: string;
         data: Buffer;
       }) => {
-        // TODO: Implement file storage
+        if (cacheClient) {
+          const cacheKey = `wk:files:${connectorContext.runId}:${fileName}`;
+          await cacheClient.set(cacheKey, data.toString("base64"), "EX", 3600);
+          return `cache://${cacheKey}`;
+        }
+
         return `file://${fileName}`;
       },
     },

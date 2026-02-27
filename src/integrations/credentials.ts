@@ -52,6 +52,43 @@ function getDb() {
   return db;
 }
 
+/** OAuth provider token endpoints */
+const TOKEN_URLS: Record<string, string> = {
+  github: "https://github.com/login/oauth/access_token",
+  discord: "https://discord.com/api/oauth2/token",
+  slack: "https://slack.com/api/oauth.v2.access",
+  google: "https://oauth2.googleapis.com/token",
+};
+
+/** Get OAuth credentials for a provider */
+function getProviderCredentials(
+  provider: string,
+): { clientId: string; clientSecret: string } | null {
+  const envMap: Record<string, { id?: string; secret?: string }> = {
+    github: {
+      id: process.env.GITHUB_OAUTH_CLIENT_ID,
+      secret: process.env.GITHUB_OAUTH_CLIENT_SECRET,
+    },
+    discord: {
+      id: process.env.DISCORD_OAUTH_CLIENT_ID,
+      secret: process.env.DISCORD_OAUTH_CLIENT_SECRET,
+    },
+    slack: {
+      id: process.env.SLACK_OAUTH_CLIENT_ID,
+      secret: process.env.SLACK_OAUTH_CLIENT_SECRET,
+    },
+    google: {
+      id: process.env.GOOGLE_OAUTH_CLIENT_ID,
+      secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+    },
+  };
+
+  const creds = envMap[provider];
+  if (!creds?.id || !creds?.secret) return null;
+
+  return { clientId: creds.id, clientSecret: creds.secret };
+}
+
 /**
  * Fetch integration credentials for a given organization and integration type.
  *
@@ -108,11 +145,95 @@ export async function getIntegrationCredentials(
 
     const token = tokens[0];
 
-    // Check if token is expired
+    // Check if token is expired and attempt refresh
     if (token.expiresAt && new Date(token.expiresAt) < new Date()) {
-      logger.debug("OAuth token expired", { integrationId: integration.id });
-      // TODO: Trigger token refresh
-      return undefined;
+      logger.debug("OAuth token expired, attempting refresh", {
+        integrationId: integration.id,
+      });
+
+      if (!token.refreshToken) {
+        logger.warn("No refresh token available for expired OAuth token", {
+          integrationId: integration.id,
+        });
+        return undefined;
+      }
+
+      // Look up provider credentials and token URL
+      const providerCredentials = getProviderCredentials(token.provider);
+      const tokenUrl = TOKEN_URLS[token.provider];
+
+      if (!providerCredentials || !tokenUrl) {
+        logger.warn("Cannot refresh token: missing provider config", {
+          integrationId: integration.id,
+          provider: token.provider,
+        });
+        return undefined;
+      }
+
+      try {
+        const response = await fetch(tokenUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json",
+          },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: token.refreshToken,
+            client_id: providerCredentials.clientId,
+            client_secret: providerCredentials.clientSecret,
+          }).toString(),
+        });
+
+        if (!response.ok) {
+          logger.error("OAuth token refresh failed", {
+            integrationId: integration.id,
+            provider: token.provider,
+            status: response.status,
+          });
+          return undefined;
+        }
+
+        const data = (await response.json()) as {
+          access_token: string;
+          refresh_token?: string;
+          expires_in?: number;
+        };
+
+        // Calculate new expiration
+        const expiresAt = data.expires_in
+          ? new Date(Date.now() + data.expires_in * 1000).toISOString()
+          : null;
+
+        // Update token in database
+        await database.execute(sql`
+          UPDATE oauth_token
+          SET access_token = ${data.access_token},
+              refresh_token = COALESCE(${data.refresh_token ?? null}, refresh_token),
+              expires_at = ${expiresAt},
+              updated_at = NOW()
+          WHERE id = ${token.id}
+        `);
+
+        logger.info("OAuth token refreshed", {
+          integrationId: integration.id,
+          provider: token.provider,
+        });
+
+        return {
+          type: "oauth2",
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token || token.refreshToken || undefined,
+          tokenType: token.tokenType || "Bearer",
+          scope: token.scope || undefined,
+        };
+      } catch (err) {
+        logger.error("OAuth token refresh error", {
+          integrationId: integration.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        return undefined;
+      }
     }
 
     return {

@@ -83,6 +83,7 @@ export function validateEnv(): void {
   }
 
   assertProdEnv("RESEND_API_KEY", RESEND_API_KEY);
+  assertProdEnv("IGGY_PASSWORD", process.env.IGGY_PASSWORD);
 }
 
 // Export validated variables
