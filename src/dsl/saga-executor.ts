@@ -364,9 +364,7 @@ async function executeSaga(
           const err =
             (results[i] as PromiseRejectedResult).reason instanceof Error
               ? (results[i] as PromiseRejectedResult).reason
-              : new Error(
-                  String((results[i] as PromiseRejectedResult).reason),
-                );
+              : new Error(String((results[i] as PromiseRejectedResult).reason));
           await updateStepLogPhase(stepLogIds[i], "execute", "failed", {
             error: err.message,
           });
@@ -403,8 +401,7 @@ async function executeSaga(
           // Make step output available for subsequent steps via context
           ctx.variables[`saga.${sagaStepDef.name}`] = result;
         } catch (error) {
-          const err =
-            error instanceof Error ? error : new Error(String(error));
+          const err = error instanceof Error ? error : new Error(String(error));
 
           await updateStepLogPhase(stepLogId, "execute", "failed", {
             error: err.message,
@@ -474,13 +471,9 @@ async function executeSaga(
         });
       } catch (compError) {
         const compErr =
-          compError instanceof Error
-            ? compError
-            : new Error(String(compError));
+          compError instanceof Error ? compError : new Error(String(compError));
 
-        compensationErrors.push(
-          `${sagaStepDef.name}: ${compErr.message}`,
-        );
+        compensationErrors.push(`${sagaStepDef.name}: ${compErr.message}`);
 
         await updateStepLogPhase(stepLogId, "compensate", "failed", {
           error: compErr.message,

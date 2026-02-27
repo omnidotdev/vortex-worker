@@ -31,9 +31,9 @@ import { runExtismSandbox } from "../sandbox/extism";
 import { runSandboxedCode } from "../sandbox/runner";
 import { stateStore } from "../state";
 import { endSpan, startStepSpan } from "../tracing/propagation";
-import WindowStateManager from "./window-state";
 import { registerCollect } from "./collect-state";
 import executeSaga from "./saga-executor";
+import WindowStateManager from "./window-state";
 
 import type { PluginCallResult } from "../plugins/types";
 import type {
@@ -94,7 +94,6 @@ import type {
   ReduceStep,
   RetryStep,
   RivetStep,
-  SagaStep,
   SetStep,
   SignStep,
   SleepStep,

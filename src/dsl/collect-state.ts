@@ -11,7 +11,6 @@
  */
 
 import { cacheClient } from "lib/cache/client";
-import matchGlob from "lib/glob";
 import logger from "lib/logger";
 
 import type { OmniEvent } from "../events/types";
@@ -68,10 +67,7 @@ function collectKey(correlationValue: string): string {
 /**
  * Extract a nested value from an object by dot-separated path
  */
-function getByPath(
-  obj: Record<string, unknown>,
-  path: string,
-): unknown {
+function getByPath(obj: Record<string, unknown>, path: string): unknown {
   const parts = path.split(".");
   let current: unknown = obj;
 
@@ -90,9 +86,7 @@ function getByPath(
  * Adds the correlation key path to the active keys index so
  * `matchEvent` can do direct lookups instead of scanning.
  */
-export async function registerCollect(
-  pending: PendingCollect,
-): Promise<void> {
+export async function registerCollect(pending: PendingCollect): Promise<void> {
   if (!cacheClient) {
     logger.warn("Cache not available, collect step cannot register");
     return;
@@ -281,9 +275,7 @@ type MatchEventResult = {
  * instead of scanning all keys. Each match is processed atomically
  * via a Lua script to prevent race conditions.
  */
-export async function matchEvent(
-  event: OmniEvent,
-): Promise<MatchEventResult> {
+export async function matchEvent(event: OmniEvent): Promise<MatchEventResult> {
   if (!cacheClient) return { completed: [], timedOut: [] };
 
   const allCompleted: CompletedCollect[] = [];
