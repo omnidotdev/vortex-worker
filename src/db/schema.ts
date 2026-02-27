@@ -567,3 +567,86 @@ export const sagaStepLogTable = pgTable(
 
 export type SagaStepLog = typeof sagaStepLogTable.$inferSelect;
 export type NewSagaStepLog = typeof sagaStepLogTable.$inferInsert;
+
+/**
+ * Event subscription table - webhook delivery subscriptions.
+ * Mirrored from vortex-api for subscription matching in the router.
+ */
+export const eventSubscriptionTable = pgTable(
+  "event_subscription",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    organizationId: text("organization_id").notNull(),
+    name: text().notNull(),
+    description: text(),
+    sourcePattern: text("source_pattern"),
+    typePattern: text("type_pattern").notNull(),
+    targetUrl: text("target_url").notNull(),
+    hmacSecret: text("hmac_secret").notNull(),
+    signatureHeader: text("signature_header").notNull().default("x-vortex-signature"),
+    transform: text(),
+    payloadMode: text("payload_mode").notNull().default("data"),
+    maxRetries: integer("max_retries").notNull().default(5),
+    initialBackoffMs: integer("initial_backoff_ms").notNull().default(1000),
+    backoffMultiplier: integer("backoff_multiplier").notNull().default(2),
+    enabled: boolean().notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("event_subscription_org_idx").on(table.organizationId),
+    index("event_subscription_org_enabled_idx").on(
+      table.organizationId,
+      table.enabled,
+    ),
+  ],
+);
+
+export type EventSubscription = typeof eventSubscriptionTable.$inferSelect;
+
+/**
+ * Subscription delivery table - tracks webhook delivery attempts.
+ * Mirrored from vortex-api for delivery engine writes in the worker.
+ */
+export const subscriptionDeliveryTable = pgTable(
+  "subscription_delivery",
+  {
+    id: uuid().primaryKey().defaultRandom(),
+    subscriptionId: uuid("subscription_id")
+      .notNull()
+      .references(() => eventSubscriptionTable.id, { onDelete: "cascade" }),
+    eventId: text("event_id").notNull(),
+    eventType: text("event_type").notNull(),
+    organizationId: text("organization_id").notNull(),
+    status: text().notNull().default("pending"),
+    attempts: integer().notNull().default(0),
+    httpStatus: integer("http_status"),
+    error: text(),
+    nextRetryAt: timestamp("next_retry_at", {
+      withTimezone: true,
+      mode: "string",
+    }),
+    completedAt: timestamp("completed_at", {
+      withTimezone: true,
+      mode: "string",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("subscription_delivery_sub_idx").on(table.subscriptionId),
+    index("subscription_delivery_status_retry_idx").on(
+      table.status,
+      table.nextRetryAt,
+    ),
+    index("subscription_delivery_org_idx").on(table.organizationId),
+  ],
+);
+
+export type SubscriptionDelivery = typeof subscriptionDeliveryTable.$inferSelect;
+export type NewSubscriptionDelivery = typeof subscriptionDeliveryTable.$inferInsert;

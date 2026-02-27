@@ -12,6 +12,7 @@ import {
   eventLogTable,
   eventRoutingRuleTable,
   eventSchemaTable,
+  eventSubscriptionTable,
   workflowRunTable,
   workflowTable,
 } from "db/schema";
@@ -34,6 +35,7 @@ import { evaluateCel } from "./cel-evaluator";
 import { withRetry, writeToDlq } from "./dlq";
 import { validateEventData } from "./schema-validator";
 import { resolveSchemaVersion } from "./schema-version-resolver";
+import { deliverToSubscriptions } from "./subscription-delivery";
 
 import type Redis from "ioredis";
 import type { Enforcement } from "./schema-validator";
@@ -667,6 +669,40 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
 
           await writeToDlq(event, rule.id, err, "DISPATCH_ERROR", 3);
         }
+      }
+
+      // Match subscriptions for webhook delivery
+      try {
+        const subscriptions = await db
+          .select()
+          .from(eventSubscriptionTable)
+          .where(
+            and(
+              eq(eventSubscriptionTable.organizationId, event.organizationId),
+              eq(eventSubscriptionTable.enabled, true),
+            ),
+          );
+
+        const matchingSubs = subscriptions.filter((sub) => {
+          if (!matchGlobPattern(sub.typePattern, event.type)) return false;
+          if (sub.sourcePattern && !matchGlobPattern(sub.sourcePattern, event.source)) return false;
+          return true;
+        });
+
+        if (matchingSubs.length > 0) {
+          // Fire-and-forget — delivery has its own retry/DLQ
+          deliverToSubscriptions(event, matchingSubs).catch((err) => {
+            logger.error("Subscription delivery failed", {
+              eventId: event.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+        }
+      } catch (err) {
+        logger.warn("Failed to match event subscriptions", {
+          eventId: event.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
 
       // Check if this event completes or times out any pending collect steps

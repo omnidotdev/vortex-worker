@@ -17,6 +17,7 @@ import logger from "lib/logger";
 import EventsConsumer from "./events/consumer";
 import { closePublisher, initPublisher } from "./events/publisher";
 import routeEvent, { shutdownAccumulators } from "./events/router";
+import { startRetryPoller } from "./events/subscription-delivery";
 import { initializeMCPServers } from "./mcp";
 import { getPluginRegistry } from "./plugins/registry";
 import { startAmqpTriggerRunner, stopAmqpTriggerRunner } from "./triggers/amqp";
@@ -171,6 +172,9 @@ async function main() {
   // Start schedule queue flusher (delivers queued events when windows open)
   startScheduleQueueFlusher();
 
+  // Start subscription delivery retry poller
+  const retryPollerInterval = startRetryPoller();
+
   // Start events consumer if streaming layer is configured
   let eventsConsumer: EventsConsumer | null = null;
 
@@ -190,6 +194,7 @@ async function main() {
     temporalWorker?.shutdown();
     eventsConsumer?.stop();
     closePublisher();
+    clearInterval(retryPollerInterval);
     stopScheduleQueueFlusher();
     await shutdownAccumulators();
     await Promise.all([
