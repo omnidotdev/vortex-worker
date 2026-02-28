@@ -11,6 +11,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -583,7 +584,9 @@ export const eventSubscriptionTable = pgTable(
     typePattern: text("type_pattern").notNull(),
     targetUrl: text("target_url").notNull(),
     hmacSecret: text("hmac_secret").notNull(),
-    signatureHeader: text("signature_header").notNull().default("x-vortex-signature"),
+    signatureHeader: text("signature_header")
+      .notNull()
+      .default("x-vortex-signature"),
     transform: text(),
     payloadMode: text("payload_mode").notNull().default("data"),
     maxRetries: integer("max_retries").notNull().default(5),
@@ -602,6 +605,10 @@ export const eventSubscriptionTable = pgTable(
     index("event_subscription_org_enabled_idx").on(
       table.organizationId,
       table.enabled,
+    ),
+    uniqueIndex("event_subscription_org_name_uniq").on(
+      table.organizationId,
+      table.name,
     ),
   ],
 );
@@ -622,6 +629,8 @@ export const subscriptionDeliveryTable = pgTable(
     eventId: text("event_id").notNull(),
     eventType: text("event_type").notNull(),
     organizationId: text("organization_id").notNull(),
+    /** Stored delivery payload for retry attempts */
+    payload: jsonb("payload"),
     status: text().notNull().default("pending"),
     attempts: integer().notNull().default(0),
     httpStatus: integer("http_status"),
@@ -648,5 +657,7 @@ export const subscriptionDeliveryTable = pgTable(
   ],
 );
 
-export type SubscriptionDelivery = typeof subscriptionDeliveryTable.$inferSelect;
-export type NewSubscriptionDelivery = typeof subscriptionDeliveryTable.$inferInsert;
+export type SubscriptionDelivery =
+  typeof subscriptionDeliveryTable.$inferSelect;
+export type NewSubscriptionDelivery =
+  typeof subscriptionDeliveryTable.$inferInsert;

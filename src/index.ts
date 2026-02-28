@@ -15,6 +15,7 @@ import Hatchet from "@hatchet-dev/typescript-sdk";
 import { closeCache, initCache } from "lib/cache";
 import logger from "lib/logger";
 import EventsConsumer from "./events/consumer";
+import OutboxSweeper from "./events/outbox";
 import { closePublisher, initPublisher } from "./events/publisher";
 import routeEvent, { shutdownAccumulators } from "./events/router";
 import { startRetryPoller } from "./events/subscription-delivery";
@@ -177,6 +178,7 @@ async function main() {
 
   // Start events consumer if streaming layer is configured
   let eventsConsumer: EventsConsumer | null = null;
+  let outboxSweeper: OutboxSweeper | null = null;
 
   const eventsUrl = process.env.EVENTS_URL;
   if (eventsUrl) {
@@ -184,6 +186,10 @@ async function main() {
     eventsConsumer = new EventsConsumer(config, routeEvent);
     await eventsConsumer.start();
     await initPublisher(config);
+
+    // Start outbox sweeper after publisher is initialized
+    outboxSweeper = new OutboxSweeper();
+    outboxSweeper.start();
   } else {
     logger.warn("EVENTS_URL not set, event routing from Iggy is disabled");
   }
@@ -193,6 +199,7 @@ async function main() {
     logger.info("Shutting down worker");
     temporalWorker?.shutdown();
     eventsConsumer?.stop();
+    outboxSweeper?.stop();
     closePublisher();
     clearInterval(retryPollerInterval);
     stopScheduleQueueFlusher();

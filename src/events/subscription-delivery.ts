@@ -5,14 +5,11 @@
  * Handles retries with exponential backoff and moves to DLQ on exhaustion.
  */
 
+import { getDb } from "db";
+import { eventSubscriptionTable, subscriptionDeliveryTable } from "db/schema";
 import { and, eq, lte } from "drizzle-orm";
 import jsonata from "jsonata";
 
-import { getDb } from "db";
-import {
-  eventSubscriptionTable,
-  subscriptionDeliveryTable,
-} from "db/schema";
 import logger from "lib/logger";
 
 import type { EventSubscription } from "db/schema";
@@ -99,9 +96,22 @@ const deliverToSubscription = async (
   const db = getDb();
   const deliveryId = crypto.randomUUID();
 
+  // Build payload before delivery attempt so it's available for storage on failure
+  let deliveryPayload: unknown;
+  let payloadStr: string | undefined;
   try {
-    const payload = await buildPayload(event, subscription);
-    const payloadStr = JSON.stringify(payload);
+    deliveryPayload = await buildPayload(event, subscription);
+    payloadStr = JSON.stringify(deliveryPayload);
+  } catch (buildErr) {
+    logger.warn("Failed to build delivery payload", {
+      subscriptionId: subscription.id,
+      eventType: event.type,
+      error: buildErr instanceof Error ? buildErr.message : String(buildErr),
+    });
+  }
+
+  try {
+    if (!payloadStr) throw new Error("Failed to build delivery payload");
     const hex = await signPayload(subscription.hmacSecret, payloadStr);
 
     const response = await fetch(subscription.targetUrl, {
@@ -122,6 +132,7 @@ const deliverToSubscription = async (
         eventId: event.id,
         eventType: event.type,
         organizationId: event.organizationId,
+        payload: deliveryPayload,
         status: "delivered",
         attempts: 1,
         httpStatus: response.status,
@@ -141,10 +152,12 @@ const deliverToSubscription = async (
       );
     }
   } catch (err) {
-    const httpStatus = err instanceof DeliveryError ? err.httpStatus : undefined;
-    const errorMsg = err instanceof Error
-      ? err.message.slice(0, 500)
-      : String(err).slice(0, 500);
+    const httpStatus =
+      err instanceof DeliveryError ? err.httpStatus : undefined;
+    const errorMsg =
+      err instanceof Error
+        ? err.message.slice(0, 500)
+        : String(err).slice(0, 500);
 
     // First attempt failed — schedule retry or DLQ
     if (subscription.maxRetries > 0) {
@@ -153,6 +166,7 @@ const deliverToSubscription = async (
         eventId: event.id,
         eventType: event.type,
         organizationId: event.organizationId,
+        payload: deliveryPayload,
         status: "pending",
         attempts: 1,
         httpStatus,
@@ -169,6 +183,7 @@ const deliverToSubscription = async (
         eventId: event.id,
         eventType: event.type,
         organizationId: event.organizationId,
+        payload: deliveryPayload,
         status: "dlq",
         attempts: 1,
         httpStatus,
@@ -214,7 +229,10 @@ const startRetryPoller = (): ReturnType<typeof setInterval> => {
         .where(
           and(
             eq(subscriptionDeliveryTable.status, "pending"),
-            lte(subscriptionDeliveryTable.nextRetryAt, new Date().toISOString()),
+            lte(
+              subscriptionDeliveryTable.nextRetryAt,
+              new Date().toISOString(),
+            ),
           ),
         )
         .limit(50);
@@ -241,8 +259,10 @@ const startRetryPoller = (): ReturnType<typeof setInterval> => {
             continue;
           }
 
-          // Re-attempt delivery
-          const payloadStr = JSON.stringify({ eventId: delivery.eventId, eventType: delivery.eventType });
+          // Re-attempt delivery with stored payload (fallback for pre-migration rows)
+          const payloadStr = delivery.payload
+            ? JSON.stringify(delivery.payload)
+            : JSON.stringify({ eventId: delivery.eventId, eventType: delivery.eventType });
           const hex = await signPayload(subscription.hmacSecret, payloadStr);
 
           const response = await fetch(subscription.targetUrl, {
@@ -283,13 +303,18 @@ const startRetryPoller = (): ReturnType<typeof setInterval> => {
           }
         } catch (err) {
           const nextAttempt = delivery.attempts + 1;
-          const errorMsg = err instanceof Error
-            ? err.message.slice(0, 500)
-            : String(err).slice(0, 500);
+          const errorMsg =
+            err instanceof Error
+              ? err.message.slice(0, 500)
+              : String(err).slice(0, 500);
 
           // Look up max retries from subscription
           const [sub] = await db
-            .select({ maxRetries: eventSubscriptionTable.maxRetries, initialBackoffMs: eventSubscriptionTable.initialBackoffMs, backoffMultiplier: eventSubscriptionTable.backoffMultiplier })
+            .select({
+              maxRetries: eventSubscriptionTable.maxRetries,
+              initialBackoffMs: eventSubscriptionTable.initialBackoffMs,
+              backoffMultiplier: eventSubscriptionTable.backoffMultiplier,
+            })
             .from(eventSubscriptionTable)
             .where(eq(eventSubscriptionTable.id, delivery.subscriptionId))
             .limit(1);
@@ -327,7 +352,8 @@ const startRetryPoller = (): ReturnType<typeof setInterval> => {
               .set({
                 attempts: nextAttempt,
                 error: errorMsg,
-                httpStatus: err instanceof DeliveryError ? err.httpStatus : null,
+                httpStatus:
+                  err instanceof DeliveryError ? err.httpStatus : null,
                 nextRetryAt: backoff.toISOString(),
               })
               .where(eq(subscriptionDeliveryTable.id, delivery.id));

@@ -35,6 +35,7 @@ import { evaluateCel } from "./cel-evaluator";
 import { withRetry, writeToDlq } from "./dlq";
 import { validateEventData } from "./schema-validator";
 import { resolveSchemaVersion } from "./schema-version-resolver";
+import * as subscriptionCache from "./subscription-cache";
 import { deliverToSubscriptions } from "./subscription-delivery";
 
 import type Redis from "ioredis";
@@ -673,19 +674,29 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
 
       // Match subscriptions for webhook delivery
       try {
-        const subscriptions = await db
-          .select()
-          .from(eventSubscriptionTable)
-          .where(
-            and(
-              eq(eventSubscriptionTable.organizationId, event.organizationId),
-              eq(eventSubscriptionTable.enabled, true),
-            ),
-          );
+        const cacheKey = `subs:${event.organizationId}`;
+        let subscriptions = subscriptionCache.get<typeof eventSubscriptionTable.$inferSelect[]>(cacheKey);
+
+        if (!subscriptions) {
+          subscriptions = await db
+            .select()
+            .from(eventSubscriptionTable)
+            .where(
+              and(
+                eq(eventSubscriptionTable.organizationId, event.organizationId),
+                eq(eventSubscriptionTable.enabled, true),
+              ),
+            );
+          subscriptionCache.set(cacheKey, subscriptions);
+        }
 
         const matchingSubs = subscriptions.filter((sub) => {
           if (!matchGlobPattern(sub.typePattern, event.type)) return false;
-          if (sub.sourcePattern && !matchGlobPattern(sub.sourcePattern, event.source)) return false;
+          if (
+            sub.sourcePattern &&
+            !matchGlobPattern(sub.sourcePattern, event.source)
+          )
+            return false;
           return true;
         });
 
