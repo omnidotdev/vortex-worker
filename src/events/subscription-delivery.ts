@@ -262,7 +262,10 @@ const startRetryPoller = (): ReturnType<typeof setInterval> => {
           // Re-attempt delivery with stored payload (fallback for pre-migration rows)
           const payloadStr = delivery.payload
             ? JSON.stringify(delivery.payload)
-            : JSON.stringify({ eventId: delivery.eventId, eventType: delivery.eventType });
+            : JSON.stringify({
+                eventId: delivery.eventId,
+                eventType: delivery.eventType,
+              });
           const hex = await signPayload(subscription.hmacSecret, payloadStr);
 
           const response = await fetch(subscription.targetUrl, {

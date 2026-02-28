@@ -675,7 +675,10 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
       // Match subscriptions for webhook delivery
       try {
         const cacheKey = `subs:${event.organizationId}`;
-        let subscriptions = subscriptionCache.get<typeof eventSubscriptionTable.$inferSelect[]>(cacheKey);
+        let subscriptions =
+          subscriptionCache.get<(typeof eventSubscriptionTable.$inferSelect)[]>(
+            cacheKey,
+          );
 
         if (!subscriptions) {
           subscriptions = await db
