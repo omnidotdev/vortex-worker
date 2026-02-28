@@ -40,6 +40,8 @@ const GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID;
 const GOOGLE_OAUTH_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
 // Cache (optional, enables distributed caching)
 const CACHE_URL = process.env.CACHE_URL;
+// Internal API secret (shared with edge worker)
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
 // Logging
 const LOG_LEVEL_RAW = process.env.LOG_LEVEL;
 
@@ -112,4 +114,5 @@ export {
   GOOGLE_OAUTH_CLIENT_ID,
   GOOGLE_OAUTH_CLIENT_SECRET,
   CACHE_URL,
+  INTERNAL_API_SECRET,
 };

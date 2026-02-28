@@ -19,4 +19,6 @@ COPY --from=builder /app/build ./build
 COPY --from=builder /app/src/sandbox/wasm/evaluator.wasm ./build/wasm/evaluator.wasm
 COPY --from=builder /app/package.json ./
 
+EXPOSE 8080
+
 CMD ["bun", "run", "start"]

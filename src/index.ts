@@ -14,6 +14,7 @@ import Hatchet from "@hatchet-dev/typescript-sdk";
 
 import { closeCache, initCache } from "lib/cache";
 import logger from "lib/logger";
+import { executeStep } from "./dsl/executor";
 import EventsConsumer from "./events/consumer";
 import OutboxSweeper from "./events/outbox";
 import { closePublisher, initPublisher } from "./events/publisher";
@@ -61,6 +62,7 @@ import { fnInvokeWorkflow } from "./workflows/fnInvoke.workflow";
 import { searchBootstrapWorkflow } from "./workflows/searchBootstrap.workflow";
 import { tokenRefreshWorkflow } from "./workflows/tokenRefresh.workflow";
 
+import type { ExecutionContext, Step, WorkflowDefinition } from "./dsl/types";
 import type { EventsConfig } from "./events/types";
 
 /**
@@ -80,6 +82,21 @@ function parseEventsUrl(url: string): EventsConfig {
     username: process.env.IGGY_USERNAME ?? "iggy",
     password: process.env.IGGY_PASSWORD ?? "iggy",
   };
+}
+
+/** Dev-mode fallback for internal API secret */
+const DEV_SECRET = "dev-internal-secret";
+const resolvedSecret = process.env.INTERNAL_API_SECRET ?? DEV_SECRET;
+
+/** Timing-safe secret comparison */
+function secretsMatch(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) return false;
+
+  const { timingSafeEqual } = require("node:crypto");
+
+  return timingSafeEqual(bufA, bufB);
 }
 
 async function main() {
@@ -194,9 +211,54 @@ async function main() {
     logger.warn("EVENTS_URL not set, event routing from Iggy is disabled");
   }
 
+  // Start HTTP server for health checks and internal API
+  const HEALTH_PORT = Number(process.env.HEALTH_PORT ?? "8080");
+  const healthServer = Bun.serve({
+    port: HEALTH_PORT,
+    hostname: "0.0.0.0",
+    async fetch(req) {
+      const url = new URL(req.url);
+
+      if (url.pathname === "/health")
+        return Response.json({ status: "ok", timestamp: Date.now(), service: "vortex-worker" });
+
+      if (req.method === "POST" && url.pathname === "/execute-step") {
+        // Validate internal secret
+        const auth = req.headers.get("authorization");
+        if (!auth?.startsWith("Bearer ") || !secretsMatch(auth.slice(7), resolvedSecret)) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        try {
+          const body = await req.json() as { stepType: string; config: unknown; input: unknown; orgId: string };
+          const step = { id: "edge-step", type: body.stepType, name: "edge-step", config: body.config, position: { x: 0, y: 0 } } as unknown as Step;
+          const ctx: ExecutionContext = {
+            workflowId: "edge",
+            runId: crypto.randomUUID(),
+            organizationId: body.orgId,
+            triggerData: {},
+            variables: body.input as Record<string, unknown> ?? {},
+            stepResults: {},
+            stepNameToId: {},
+          };
+          const dummyDef = { name: "edge", version: "1.0", steps: [step], edges: [] } as unknown as WorkflowDefinition;
+          const { result } = await executeStep(dummyDef, step, ctx);
+          return Response.json({ result });
+        } catch (err) {
+          logger.error("execute-step failed", { error: err instanceof Error ? err.message : String(err) });
+          return Response.json({ error: err instanceof Error ? err.message : "Internal error" }, { status: 500 });
+        }
+      }
+
+      return new Response("Not found", { status: 404 });
+    },
+  });
+  logger.info("Worker health server running", { port: HEALTH_PORT });
+
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("Shutting down worker");
+    healthServer.stop();
     temporalWorker?.shutdown();
     eventsConsumer?.stop();
     outboxSweeper?.stop();
