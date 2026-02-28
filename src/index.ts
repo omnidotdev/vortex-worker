@@ -220,33 +220,61 @@ async function main() {
       const url = new URL(req.url);
 
       if (url.pathname === "/health")
-        return Response.json({ status: "ok", timestamp: Date.now(), service: "vortex-worker" });
+        return Response.json({
+          status: "ok",
+          timestamp: Date.now(),
+          service: "vortex-worker",
+        });
 
       if (req.method === "POST" && url.pathname === "/execute-step") {
         // Validate internal secret
         const auth = req.headers.get("authorization");
-        if (!auth?.startsWith("Bearer ") || !secretsMatch(auth.slice(7), resolvedSecret)) {
+        if (
+          !auth?.startsWith("Bearer ") ||
+          !secretsMatch(auth.slice(7), resolvedSecret)
+        ) {
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
 
         try {
-          const body = await req.json() as { stepType: string; config: unknown; input: unknown; orgId: string };
-          const step = { id: "edge-step", type: body.stepType, name: "edge-step", config: body.config, position: { x: 0, y: 0 } } as unknown as Step;
+          const body = (await req.json()) as {
+            stepType: string;
+            config: unknown;
+            input: unknown;
+            orgId: string;
+          };
+          const step = {
+            id: "edge-step",
+            type: body.stepType,
+            name: "edge-step",
+            config: body.config,
+            position: { x: 0, y: 0 },
+          } as unknown as Step;
           const ctx: ExecutionContext = {
             workflowId: "edge",
             runId: crypto.randomUUID(),
             organizationId: body.orgId,
             triggerData: {},
-            variables: body.input as Record<string, unknown> ?? {},
+            variables: (body.input as Record<string, unknown>) ?? {},
             stepResults: {},
             stepNameToId: {},
           };
-          const dummyDef = { name: "edge", version: "1.0", steps: [step], edges: [] } as unknown as WorkflowDefinition;
+          const dummyDef = {
+            name: "edge",
+            version: "1.0",
+            steps: [step],
+            edges: [],
+          } as unknown as WorkflowDefinition;
           const { result } = await executeStep(dummyDef, step, ctx);
           return Response.json({ result });
         } catch (err) {
-          logger.error("execute-step failed", { error: err instanceof Error ? err.message : String(err) });
-          return Response.json({ error: err instanceof Error ? err.message : "Internal error" }, { status: 500 });
+          logger.error("execute-step failed", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return Response.json(
+            { error: err instanceof Error ? err.message : "Internal error" },
+            { status: 500 },
+          );
         }
       }
 
