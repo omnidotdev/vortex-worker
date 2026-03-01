@@ -44,8 +44,10 @@ const CACHE_URL = process.env.CACHE_URL;
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
 // Vortex service URLs
 const VORTEX_API_URL = process.env.VORTEX_API_URL ?? "http://localhost:3001";
-const VORTEX_PUBLIC_URL = process.env.VORTEX_PUBLIC_URL ?? "http://localhost:3001";
-const VORTEX_CALLBACK_BASE_URL = process.env.VORTEX_CALLBACK_BASE_URL ?? "http://localhost:3000";
+const VORTEX_PUBLIC_URL =
+  process.env.VORTEX_PUBLIC_URL ?? "http://localhost:3001";
+const VORTEX_CALLBACK_BASE_URL =
+  process.env.VORTEX_CALLBACK_BASE_URL ?? "http://localhost:3000";
 // Logging
 const LOG_LEVEL_RAW = process.env.LOG_LEVEL;
 
@@ -92,7 +94,10 @@ export function validateEnv(): void {
   assertProdEnv("IGGY_PASSWORD", process.env.IGGY_PASSWORD);
   assertProdEnv("VORTEX_API_URL", process.env.VORTEX_API_URL);
   assertProdEnv("VORTEX_PUBLIC_URL", process.env.VORTEX_PUBLIC_URL);
-  assertProdEnv("VORTEX_CALLBACK_BASE_URL", process.env.VORTEX_CALLBACK_BASE_URL);
+  assertProdEnv(
+    "VORTEX_CALLBACK_BASE_URL",
+    process.env.VORTEX_CALLBACK_BASE_URL,
+  );
 }
 
 // Export validated variables
