@@ -4,6 +4,8 @@
  * Pause workflow execution until a condition is met (webhook callback, event, or timeout).
  */
 
+import { VORTEX_CALLBACK_BASE_URL } from "lib/config/env.config";
+
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
@@ -24,8 +26,7 @@ const generateCallbackUrl = (
   context: PluginContext | undefined,
   webhookSuffix?: string,
 ): string => {
-  const baseUrl =
-    process.env.VORTEX_CALLBACK_BASE_URL || "http://localhost:3000";
+  const baseUrl = VORTEX_CALLBACK_BASE_URL;
   const workflowId = context?.workflowId || "unknown";
   const runId = context?.runId || "unknown";
   const suffix = webhookSuffix || "";

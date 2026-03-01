@@ -6,6 +6,7 @@
  */
 
 import { cacheClient } from "lib/cache";
+import { VORTEX_API_URL, VORTEX_PUBLIC_URL } from "lib/config/env.config";
 import logger from "lib/logger";
 import { withRetry } from "lib/retry";
 import { withCircuitBreaker } from "./circuit-breaker";
@@ -279,8 +280,8 @@ export async function executeConnectorAction(
         pluginContext?.runId ?? "unknown",
       ),
       server: {
-        apiUrl: process.env.VORTEX_API_URL ?? "http://localhost:3001",
-        publicUrl: process.env.VORTEX_PUBLIC_URL ?? "http://localhost:3001",
+        apiUrl: VORTEX_API_URL,
+        publicUrl: VORTEX_PUBLIC_URL,
       },
     };
 
@@ -368,8 +369,8 @@ export async function executeConnectorTrigger(
         pluginContext?.runId ?? "unknown",
       ),
       server: {
-        apiUrl: process.env.VORTEX_API_URL ?? "http://localhost:3001",
-        publicUrl: process.env.VORTEX_PUBLIC_URL ?? "http://localhost:3001",
+        apiUrl: VORTEX_API_URL,
+        publicUrl: VORTEX_PUBLIC_URL,
       },
     };
 
