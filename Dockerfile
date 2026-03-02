@@ -19,10 +19,8 @@ COPY --from=builder /app/build ./build
 COPY --from=builder /app/src/sandbox/wasm/evaluator.wasm ./build/wasm/evaluator.wasm
 COPY --from=builder /app/package.json ./
 
-RUN addgroup --system --gid 1001 app && \
-    adduser --system --uid 1001 --ingroup app app && \
-    chown -R app:app /app
-USER app
+RUN chown -R 1001:1001 /app
+USER 1001:1001
 
 EXPOSE 8080
 
