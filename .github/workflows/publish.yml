@@ -1,7 +1,9 @@
 name: Publish
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [master]
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
@@ -15,6 +17,7 @@ jobs:
     name: Build and push image
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -32,4 +35,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/omnidotdev/vortex-worker:latest
-            ghcr.io/omnidotdev/vortex-worker:${{ github.sha }}
+            ghcr.io/omnidotdev/vortex-worker:${{ github.event.workflow_run.head_sha }}
