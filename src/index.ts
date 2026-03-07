@@ -50,6 +50,7 @@ import {
   stopScheduleQueueFlusher,
 } from "./triggers/schedule-flusher";
 import { startSqsTriggerRunner, stopSqsTriggerRunner } from "./triggers/sqs";
+import { startSseTriggerRunner, stopSseTriggerRunner } from "./triggers/sse";
 import {
   startWebSocketTriggerRunner,
   stopWebSocketTriggerRunner,
@@ -187,6 +188,9 @@ async function main() {
   // Start gRPC stream trigger runner
   startGrpcTriggerRunner();
 
+  // Start SSE trigger runner
+  startSseTriggerRunner();
+
   // Start schedule queue flusher (delivers queued events when windows open)
   startScheduleQueueFlusher();
 
@@ -307,6 +311,7 @@ async function main() {
       stopCdcTriggerRunner(),
       stopRedisTriggerRunner(),
       stopGrpcTriggerRunner(),
+      stopSseTriggerRunner(),
     ]);
     await closeCache();
     process.exit(0);

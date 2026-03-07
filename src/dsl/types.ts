@@ -127,6 +127,8 @@ export const TriggerType = z.enum([
   "amqp",
   "grpc_stream",
   "email",
+  "redis",
+  "sse",
 ]);
 export type TriggerType = z.infer<typeof TriggerType>;
 

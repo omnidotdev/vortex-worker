@@ -21,6 +21,7 @@ import { PollingAdapter } from "adapters/polling.adapter";
 import { RedisAdapter } from "adapters/redis.adapter";
 import { S3Adapter } from "adapters/s3.adapter";
 import { SqsAdapter } from "adapters/sqs.adapter";
+import { SseAdapter } from "adapters/sse.adapter";
 import { WebSocketAdapter } from "adapters/websocket.adapter";
 
 import logger from "lib/logger";
@@ -61,6 +62,9 @@ const BUILTIN_ADAPTERS: Record<
     config: Record<string, unknown>,
   ) => EventAdapter,
   s3: S3Adapter as unknown as new (
+    config: Record<string, unknown>,
+  ) => EventAdapter,
+  sse: SseAdapter as unknown as new (
     config: Record<string, unknown>,
   ) => EventAdapter,
   cdc: CdcAdapter as unknown as new (
