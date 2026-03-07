@@ -1581,15 +1581,15 @@ export const SagaStepAction = z.object({
   // HTTP action fields
   url: z.string().optional(),
   method: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH"]).optional(),
-  headers: z.record(z.string()).optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   body: z.unknown().optional(),
   // Emit action fields
   event: z.string().optional(),
-  data: z.record(z.unknown()).optional(),
+  data: z.record(z.string(), z.unknown()).optional(),
   // Integration action fields
   integrationId: z.string().optional(),
   operation: z.string().optional(),
-  config: z.record(z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
 });
 export type SagaStepAction = z.infer<typeof SagaStepAction>;
 

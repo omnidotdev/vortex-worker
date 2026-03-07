@@ -221,7 +221,7 @@ async function updateSagaRunStatus(
   error?: string,
 ): Promise<void> {
   const db = getDb();
-  const now = new Date().toISOString();
+  const now = new Date();
 
   await db
     .update(sagaRunTable)
@@ -248,7 +248,7 @@ async function updateStepLogPhase(
   data?: { output?: unknown; error?: string },
 ): Promise<void> {
   const db = getDb();
-  const now = new Date().toISOString();
+  const now = new Date();
 
   const updates: Record<string, unknown> = {};
 
