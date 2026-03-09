@@ -5,7 +5,7 @@
  * In production, cache enables shared state across worker instances.
  */
 
-import Redis from "ioredis";
+import Redis from "iovalkey";
 
 import logger from "lib/logger";
 

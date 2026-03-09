@@ -253,7 +253,7 @@ interface ValkeyConfig {
  * otherwise create a per-operation connection.
  */
 async function getCacheForQueue(config: ValkeyConfig | undefined): Promise<{
-  // biome-ignore lint/suspicious/noExplicitAny: ioredis types vary
+  // biome-ignore lint/suspicious/noExplicitAny: iovalkey types vary
   client: any;
   needsCleanup: boolean;
 }> {
@@ -263,7 +263,7 @@ async function getCacheForQueue(config: ValkeyConfig | undefined): Promise<{
   }
 
   // Create per-operation connection for explicit config
-  const { Redis } = await import("ioredis");
+  const { Redis } = await import("iovalkey");
   const client = config?.url
     ? new Redis(config.url)
     : new Redis({

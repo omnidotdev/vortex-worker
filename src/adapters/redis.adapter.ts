@@ -1,4 +1,4 @@
-import Redis from "ioredis";
+import Redis from "iovalkey";
 
 import logger from "lib/logger";
 

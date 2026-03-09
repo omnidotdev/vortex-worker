@@ -4,7 +4,7 @@
  * Provides org-scoped key-value storage for sharing data between workflows
  */
 
-import Redis from "ioredis";
+import Redis from "iovalkey";
 
 const CACHE_URL = process.env.CACHE_URL;
 

@@ -19,7 +19,7 @@ import {
   isDuplicate,
 } from "../../events/router";
 
-import type Redis from "ioredis";
+import type { Redis } from "iovalkey";
 import type { OmniEvent } from "../../events/types";
 
 // ---------------------------------------------------------------------------

@@ -38,7 +38,7 @@ import { resolveSchemaVersion } from "./schema-version-resolver";
 import * as subscriptionCache from "./subscription-cache";
 import { deliverToSubscriptions } from "./subscription-delivery";
 
-import type Redis from "ioredis";
+import type { Redis } from "iovalkey";
 import type { Enforcement } from "./schema-validator";
 import type { VersionedSchema } from "./schema-version-resolver";
 import type { OmniEvent } from "./types";

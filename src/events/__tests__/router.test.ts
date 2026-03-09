@@ -7,7 +7,7 @@ import {
   normalizeToCloudEvent,
 } from "../router";
 
-import type Redis from "ioredis";
+import type { Redis } from "iovalkey";
 
 describe("evaluateCondition", () => {
   it("returns true when condition is null (no filter)", () => {
