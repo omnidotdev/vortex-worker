@@ -1,4 +1,7 @@
+import { eq } from "drizzle-orm";
+
 import logger from "lib/logger";
+import { getDb } from "../db";
 import {
   createWorkflowRun,
   logStepComplete,
@@ -7,6 +10,7 @@ import {
   markRunComplete,
   markRunFailed,
 } from "../db/runLogger";
+import { workflowTable } from "../db/schema";
 import {
   createExecutionContext,
   executeStep,
@@ -53,6 +57,22 @@ export const dslWorkflow: Workflow = {
         const { workflowId, organizationId, triggerData } = input;
         let { definition } = input;
         const runId = ctx.workflowRunId();
+
+        // Verify organization ownership before executing
+        if (organizationId) {
+          const db = getDb();
+          const [workflow] = await db
+            .select({ organizationId: workflowTable.organizationId })
+            .from(workflowTable)
+            .where(eq(workflowTable.id, workflowId))
+            .limit(1);
+
+          if (workflow && workflow.organizationId !== organizationId) {
+            throw new Error(
+              "Workflow does not belong to the specified organization",
+            );
+          }
+        }
 
         // Extract correlation ID from trigger data
         const _requestId = triggerData._requestId as string | undefined;
