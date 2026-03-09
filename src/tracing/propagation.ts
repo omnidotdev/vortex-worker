@@ -6,14 +6,14 @@
  */
 
 import {
-  type Context,
-  type Span,
   SpanKind,
   SpanStatusCode,
   context,
   propagation,
   trace,
 } from "@opentelemetry/api";
+
+import type { Context, Span } from "@opentelemetry/api";
 
 const tracer = trace.getTracer("vortex-worker");
 
