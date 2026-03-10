@@ -10,7 +10,7 @@ import {
   markRunComplete,
   markRunFailed,
 } from "../db/runLogger";
-import { workflowTable } from "../db/schema";
+import { workflowRunTable, workflowTable } from "../db/schema";
 import {
   createExecutionContext,
   executeStep,
@@ -56,7 +56,7 @@ export const dslWorkflow: Workflow = {
         const input = ctx.workflowInput() as DSLWorkflowInput;
         const { workflowId, organizationId, triggerData } = input;
         let { definition } = input;
-        const runId = ctx.workflowRunId();
+        const runId = input.runId || ctx.workflowRunId();
 
         // Verify organization ownership before executing
         if (organizationId) {
@@ -183,13 +183,24 @@ export const dslWorkflow: Workflow = {
 
         runLogger.info("Starting workflow execution");
 
-        // Create workflow run record for tracking
-        const dbRunId = await createWorkflowRun({
-          workflowId,
-          engineWorkflowId: "dsl-workflow",
-          engineRunId: runId,
-          input: { ...triggerData, _requestId },
-        });
+        // Use the API-created run record if available, otherwise create one
+        let dbRunId: string;
+        if (input.runId) {
+          // API already created the run — update it to "running"
+          const db = getDb();
+          await db
+            .update(workflowRunTable)
+            .set({ status: "running" as const, startedAt: new Date() })
+            .where(eq(workflowRunTable.id, input.runId));
+          dbRunId = input.runId;
+        } else {
+          dbRunId = await createWorkflowRun({
+            workflowId,
+            engineWorkflowId: "dsl-workflow",
+            engineRunId: runId,
+            input: { ...triggerData, _requestId },
+          });
+        }
 
         // Find trigger step
         const triggerStep = findTriggerStep(dslDef.steps);
