@@ -48,8 +48,6 @@ class MockMqttAdapter {
   name = "mqtt";
   source = "mqtt";
 
-  constructor(_config: { brokerUrl: string; topic: string }) {}
-
   onEvent(_handler: unknown) {}
   async start() {}
   async stop() {}

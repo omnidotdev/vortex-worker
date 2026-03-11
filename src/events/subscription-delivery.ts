@@ -77,10 +77,18 @@ const buildPayload = async (
     payload = event.data;
   }
 
-  // Apply JSONata transform if configured
+  // Apply JSONata transform if configured (with 5s timeout)
   if (subscription.transform) {
     const expression = jsonata(subscription.transform);
-    payload = await expression.evaluate(payload);
+    payload = await Promise.race([
+      expression.evaluate(payload),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("JSONata transform timed out")),
+          5000,
+        ),
+      ),
+    ]);
   }
 
   return payload;
@@ -113,6 +121,14 @@ const deliverToSubscription = async (
   try {
     if (!payloadStr) throw new Error("Failed to build delivery payload");
     const hex = await signPayload(subscription.hmacSecret, payloadStr);
+
+    // Defense-in-depth: validate URL scheme before delivery
+    const targetUrl = new URL(subscription.targetUrl);
+    if (targetUrl.protocol !== "https:" && targetUrl.protocol !== "http:") {
+      throw new Error(
+        `Blocked delivery to unsupported scheme: ${targetUrl.protocol}`,
+      );
+    }
 
     const response = await fetch(subscription.targetUrl, {
       method: "POST",
@@ -267,6 +283,14 @@ const startRetryPoller = (): ReturnType<typeof setInterval> => {
                 eventType: delivery.eventType,
               });
           const hex = await signPayload(subscription.hmacSecret, payloadStr);
+
+          // Defense-in-depth: validate URL scheme before retry delivery
+          const retryUrl = new URL(subscription.targetUrl);
+          if (retryUrl.protocol !== "https:" && retryUrl.protocol !== "http:") {
+            throw new Error(
+              `Blocked delivery to unsupported scheme: ${retryUrl.protocol}`,
+            );
+          }
 
           const response = await fetch(subscription.targetUrl, {
             method: "POST",

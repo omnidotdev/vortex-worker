@@ -48,8 +48,6 @@ class MockAmqpAdapter {
   name = "amqp";
   source = "amqp";
 
-  constructor(_config: { url: string; queue: string }) {}
-
   onEvent(_handler: unknown) {}
   async start() {}
   async stop() {}

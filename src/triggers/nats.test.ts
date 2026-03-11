@@ -48,8 +48,6 @@ class MockNatsAdapter {
   name = "nats";
   source = "nats";
 
-  constructor(_config: { servers: string; subject: string }) {}
-
   onEvent(_handler: unknown) {}
   async start() {}
   async stop() {}
