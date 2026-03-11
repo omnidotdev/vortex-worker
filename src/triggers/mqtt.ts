@@ -79,6 +79,8 @@ async function dispatchFromMqtt(
   const engineWorkflowId = `mqtt-${workflowId}-${Date.now()}`;
   const engineRunId = `run-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
+  let runId: string | undefined;
+
   try {
     const [run] = await db
       .insert(workflowRunTable)
@@ -94,6 +96,8 @@ async function dispatchFromMqtt(
         },
       })
       .returning();
+
+    runId = run.id;
 
     await getHatchet().event.push("workflow:execute", {
       workflowId: run.engineWorkflowId,
@@ -117,6 +121,14 @@ async function dispatchFromMqtt(
       workflowId,
       error: err instanceof Error ? err.message : String(err),
     });
+
+    if (runId) {
+      await db
+        .update(workflowRunTable)
+        .set({ status: "failed", completedAt: new Date() })
+        .where(eq(workflowRunTable.id, runId))
+        .catch(() => {});
+    }
   }
 }
 

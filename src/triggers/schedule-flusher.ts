@@ -65,6 +65,8 @@ async function flushScheduleQueues(): Promise<void> {
         const engineWorkflowId = `scheduled-${workflow.id}-${Date.now()}`;
         const engineRunId = `run-${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
+        let runId: string | undefined;
+
         try {
           let parsedData: unknown;
           try {
@@ -88,6 +90,8 @@ async function flushScheduleQueues(): Promise<void> {
             })
             .returning();
 
+          runId = run.id;
+
           await getHatchet().event.push("workflow:execute", {
             workflowId: run.engineWorkflowId,
             runId: run.id,
@@ -109,6 +113,14 @@ async function flushScheduleQueues(): Promise<void> {
             workflowId: workflow.id,
             error: err instanceof Error ? err.message : String(err),
           });
+
+          if (runId) {
+            await db
+              .update(workflowRunTable)
+              .set({ status: "failed", completedAt: new Date() })
+              .where(eq(workflowRunTable.id, runId))
+              .catch(() => {});
+          }
         }
       }
     }

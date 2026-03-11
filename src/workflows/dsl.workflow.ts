@@ -324,7 +324,11 @@ export const dslWorkflow: Workflow = {
                 dbRunId,
                 error: error instanceof Error ? error.message : String(error),
               },
-            }).catch(() => {});
+            }).catch((err) => {
+              runLogger.warn("Failed to publish workflow.failed event", {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            });
           }
 
           throw error;
