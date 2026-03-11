@@ -110,20 +110,43 @@ async function main() {
   // Initialize trigger adapter registry (built-in + external plugins)
   await initTriggerRegistry();
 
-  // Start Hatchet worker
-  const hatchet = Hatchet.init();
-  const worker = await hatchet.worker("vortex-dsl-worker", {
-    workflows: [
-      authzReconcileWorkflow,
-      authzSyncWorkflow,
-      chronicleAuditWorkflow,
-      dslWorkflow,
-      fnInvokeWorkflow,
-      searchBootstrapWorkflow,
-      tokenRefreshWorkflow,
-    ],
-  });
-  await worker.start();
+  // Start Hatchet worker with retry for transient gRPC failures
+  const MAX_HATCHET_RETRIES = 5;
+
+  let worker: Awaited<ReturnType<ReturnType<typeof Hatchet.init>["worker"]>>;
+
+  for (let attempt = 1; attempt <= MAX_HATCHET_RETRIES; attempt++) {
+    try {
+      const hatchet = Hatchet.init();
+      worker = await hatchet.worker("vortex-dsl-worker", {
+        workflows: [
+          authzReconcileWorkflow,
+          authzSyncWorkflow,
+          chronicleAuditWorkflow,
+          dslWorkflow,
+          fnInvokeWorkflow,
+          searchBootstrapWorkflow,
+          tokenRefreshWorkflow,
+        ],
+      });
+      await worker.start();
+      break;
+    } catch (err) {
+      logger.error(
+        `Hatchet worker init failed (attempt ${attempt}/${MAX_HATCHET_RETRIES})`,
+        { error: err instanceof Error ? err.message : String(err) },
+      );
+      if (attempt === MAX_HATCHET_RETRIES) {
+        throw new Error(
+          `Hatchet worker failed after ${MAX_HATCHET_RETRIES} attempts: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      // Exponential backoff: 2s, 4s, 8s, 16s
+      await new Promise((resolve) =>
+        setTimeout(resolve, 2000 * 2 ** (attempt - 1)),
+      );
+    }
+  }
 
   // Start Temporal worker if configured
   let temporalWorker: import("@temporalio/worker").Worker | null = null;
