@@ -20,6 +20,7 @@ import OutboxSweeper from "./events/outbox";
 import { closePublisher, initPublisher } from "./events/publisher";
 import routeEvent, { shutdownAccumulators } from "./events/router";
 import { startRetryPoller } from "./events/subscription-delivery";
+import { getDefaultExecutor } from "./executor";
 import { initializeMCPServers } from "./mcp";
 import { getPluginRegistry } from "./plugins/registry";
 import { startAmqpTriggerRunner, stopAmqpTriggerRunner } from "./triggers/amqp";
@@ -238,6 +239,9 @@ async function main() {
     logger.warn("EVENTS_URL not set, event routing from Iggy is disabled");
   }
 
+  // Create executor instance for health checks
+  const executor = await getDefaultExecutor();
+
   // Start HTTP server for health checks and internal API
   const HEALTH_PORT = Number(process.env.HEALTH_PORT ?? "8080");
   const healthServer = Bun.serve({
@@ -246,12 +250,27 @@ async function main() {
     async fetch(req) {
       const url = new URL(req.url);
 
-      if (url.pathname === "/health")
+      if (url.pathname === "/health") {
+        const executorHealthy = await executor.healthCheck();
+
+        if (!executorHealthy) {
+          return Response.json(
+            {
+              status: "unhealthy",
+              timestamp: Date.now(),
+              service: "vortex-worker",
+              reason: "executor backend unreachable",
+            },
+            { status: 503 },
+          );
+        }
+
         return Response.json({
           status: "ok",
           timestamp: Date.now(),
           service: "vortex-worker",
         });
+      }
 
       if (req.method === "POST" && url.pathname === "/execute-step") {
         // Validate internal secret
