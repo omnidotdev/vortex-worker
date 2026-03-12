@@ -1,7 +1,7 @@
 {
   "name": "@omnidotdev/vortex-worker",
   "private": true,
-  "license": "MIT",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
