@@ -324,6 +324,45 @@ async function main() {
         }
       }
 
+      // Push an event to Hatchet via the worker's live gRPC connection.
+      // Used by vortex-api when direct gRPC from API → Hatchet is unreliable.
+      if (req.method === "POST" && url.pathname === "/push-event") {
+        const auth = req.headers.get("authorization");
+        if (
+          !auth?.startsWith("Bearer ") ||
+          !secretsMatch(auth.slice(7), resolvedSecret)
+        ) {
+          return Response.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        try {
+          const body = (await req.json()) as {
+            key: string;
+            payload: Record<string, unknown>;
+          };
+
+          if (!body.key || !body.payload) {
+            return Response.json(
+              { error: "Missing key or payload" },
+              { status: 400 },
+            );
+          }
+
+          const hatchet = Hatchet.init();
+          await hatchet.event.push(body.key, body.payload);
+
+          return Response.json({ ok: true });
+        } catch (err) {
+          logger.error("push-event failed", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          return Response.json(
+            { error: err instanceof Error ? err.message : "Internal error" },
+            { status: 500 },
+          );
+        }
+      }
+
       return new Response("Not found", { status: 404 });
     },
   });
