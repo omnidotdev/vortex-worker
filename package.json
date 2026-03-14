@@ -643,6 +643,7 @@
     "@aws-sdk/client-sqs": "^3.1007.0",
     "@aws-sdk/s3-request-presigner": "^3.1007.0",
     "@azure/storage-blob": "^12.31.0",
+    "@electric-sql/pglite": "^0.3.16",
     "@extism/extism": "^2.0.0-rc13",
     "@google-cloud/storage": "^7.19.0",
     "@grpc/grpc-js": "^1.14.3",

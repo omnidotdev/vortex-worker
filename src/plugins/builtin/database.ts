@@ -2,17 +2,19 @@
  * Built-in Database Plugin
  *
  * SQL database operations for in-workflow data storage and queries.
- * Supports SQLite (embedded), PostgreSQL, and MySQL.
+ * Supports PGlite (embedded PostgreSQL), PostgreSQL, and MySQL.
  */
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
+import type { PGlite } from "@electric-sql/pglite";
+
 /** Database connection config */
 interface DbConfig {
   /** Database type */
-  type: "sqlite" | "postgres" | "mysql";
-  /** Connection string or file path */
+  type: "pglite" | "postgres" | "mysql";
+  /** Connection string or directory path (PGlite) */
   connection: string;
   /** Connection pool size */
   poolSize?: number;
@@ -22,8 +24,8 @@ interface DbConfig {
 interface QueryInput extends DbConfig {
   /** SQL query */
   sql: string;
-  /** Query parameters (positional or named) */
-  params?: unknown[] | Record<string, unknown>;
+  /** Query parameters (positional) */
+  params?: unknown[];
   /** Return first row only */
   single?: boolean;
 }
@@ -33,7 +35,7 @@ interface ExecuteInput extends DbConfig {
   /** SQL statement */
   sql: string;
   /** Statement parameters */
-  params?: unknown[] | Record<string, unknown>;
+  params?: unknown[];
 }
 
 /** Batch execute input */
@@ -41,7 +43,7 @@ interface BatchInput extends DbConfig {
   /** SQL statements to execute in transaction */
   statements: Array<{
     sql: string;
-    params?: unknown[] | Record<string, unknown>;
+    params?: unknown[];
   }>;
   /** Wrap in transaction */
   transaction?: boolean;
@@ -99,28 +101,30 @@ interface DeleteInput extends DbConfig {
 }
 
 /**
- * Build WHERE clause from conditions object.
+ * Build WHERE clause from conditions object using Postgres $N placeholders.
  */
 const buildWhere = (
   where: Record<string, unknown>,
-): { clause: string; params: unknown[] } => {
+  startIndex = 1,
+): { clause: string; params: unknown[]; nextIndex: number } => {
   const conditions: string[] = [];
   const params: unknown[] = [];
+  let idx = startIndex;
 
   for (const [key, value] of Object.entries(where)) {
     if (value === null) {
       conditions.push(`${key} IS NULL`);
     } else if (Array.isArray(value)) {
-      const placeholders = value.map(() => "?").join(", ");
+      const placeholders = value.map(() => `$${idx++}`).join(", ");
       conditions.push(`${key} IN (${placeholders})`);
       params.push(...value);
     } else if (typeof value === "object") {
       const op = value as { op?: string; value?: unknown };
       const opStr = op.op ?? "=";
-      conditions.push(`${key} ${opStr} ?`);
+      conditions.push(`${key} ${opStr} $${idx++}`);
       params.push(op.value);
     } else {
-      conditions.push(`${key} = ?`);
+      conditions.push(`${key} = $${idx++}`);
       params.push(value);
     }
   }
@@ -128,7 +132,16 @@ const buildWhere = (
   return {
     clause: conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "",
     params,
+    nextIndex: idx,
   };
+};
+
+/**
+ * Create a PGlite instance.
+ */
+const createPGlite = async (connection: string): Promise<PGlite> => {
+  const { PGlite } = await import("@electric-sql/pglite");
+  return new PGlite(connection);
 };
 
 /**
@@ -143,44 +156,29 @@ const query = async (
   try {
     const input = inputs as unknown as QueryInput;
 
-    if (input.type === "sqlite") {
-      const { Database } = await import("bun:sqlite");
-      const db = new Database(input.connection);
+    if (input.type === "pglite") {
+      const db = await createPGlite(input.connection);
 
       try {
-        const stmt = db.prepare(input.sql);
-        const params = (Array.isArray(input.params) ? input.params : []) as (
-          | string
-          | number
-          | boolean
-          | null
-          | Uint8Array
-        )[];
-
-        const rows = input.single ? stmt.get(...params) : stmt.all(...params);
+        const result = await db.query(input.sql, input.params);
+        const rows = input.single ? result.rows.slice(0, 1) : result.rows;
 
         return {
           success: true,
           output: {
-            rows: input.single ? (rows ? [rows] : []) : rows,
-            rowCount: input.single
-              ? rows
-                ? 1
-                : 0
-              : (rows as unknown[]).length,
+            rows,
+            rowCount: rows.length,
           },
           durationMs: performance.now() - startTime,
         };
       } finally {
-        db.close();
+        await db.close();
       }
     }
 
-    // For PostgreSQL/MySQL, use native fetch to a database proxy.
-    // In production, this would use pg/mysql2 libraries.
     return {
       success: false,
-      error: `Database type ${input.type} requires external connection. Use SQLite for embedded operations.`,
+      error: `Database type ${input.type} requires external connection. Use PGlite for embedded operations.`,
       durationMs: performance.now() - startTime,
     };
   } catch (error) {
@@ -204,31 +202,21 @@ const execute = async (
   try {
     const input = inputs as unknown as ExecuteInput;
 
-    if (input.type === "sqlite") {
-      const { Database } = await import("bun:sqlite");
-      const db = new Database(input.connection);
+    if (input.type === "pglite") {
+      const db = await createPGlite(input.connection);
 
       try {
-        const stmt = db.prepare(input.sql);
-        const params = (Array.isArray(input.params) ? input.params : []) as (
-          | string
-          | number
-          | boolean
-          | null
-          | Uint8Array
-        )[];
-        const result = stmt.run(...params);
+        const result = await db.query(input.sql, input.params);
 
         return {
           success: true,
           output: {
-            changes: result.changes,
-            lastInsertRowid: result.lastInsertRowid,
+            changes: result.affectedRows ?? 0,
           },
           durationMs: performance.now() - startTime,
         };
       } finally {
-        db.close();
+        await db.close();
       }
     }
 
@@ -258,40 +246,29 @@ const batch = async (
   try {
     const input = inputs as unknown as BatchInput;
 
-    if (input.type === "sqlite") {
-      const { Database } = await import("bun:sqlite");
-      const db = new Database(input.connection);
+    if (input.type === "pglite") {
+      const db = await createPGlite(input.connection);
 
       try {
         const results: Array<{ changes: number }> = [];
         const useTransaction = input.transaction !== false;
 
-        if (useTransaction) {
-          db.run("BEGIN TRANSACTION");
-        }
-
-        try {
+        const run = async () => {
           for (const stmt of input.statements) {
-            const prepared = db.prepare(stmt.sql);
-            const params = (Array.isArray(stmt.params) ? stmt.params : []) as (
-              | string
-              | number
-              | boolean
-              | null
-              | Uint8Array
-            )[];
-            const result = prepared.run(...params);
-            results.push({ changes: result.changes });
+            const result = await db.query(stmt.sql, stmt.params);
+            results.push({ changes: result.affectedRows ?? 0 });
           }
+        };
 
-          if (useTransaction) {
-            db.run("COMMIT");
-          }
-        } catch (error) {
-          if (useTransaction) {
-            db.run("ROLLBACK");
-          }
-          throw error;
+        if (useTransaction) {
+          await db.transaction(async (tx) => {
+            for (const stmt of input.statements) {
+              const result = await tx.query(stmt.sql, stmt.params);
+              results.push({ changes: result.affectedRows ?? 0 });
+            }
+          });
+        } else {
+          await run();
         }
 
         return {
@@ -304,7 +281,7 @@ const batch = async (
           durationMs: performance.now() - startTime,
         };
       } finally {
-        db.close();
+        await db.close();
       }
     }
 
@@ -338,9 +315,9 @@ const createTable = async (
       text: "TEXT",
       integer: "INTEGER",
       real: "REAL",
-      blob: "BLOB",
-      boolean: "INTEGER",
-      timestamp: "TEXT",
+      blob: "BYTEA",
+      boolean: "BOOLEAN",
+      timestamp: "TIMESTAMPTZ",
     };
 
     const columnDefs = input.columns.map((col) => {
@@ -359,12 +336,11 @@ const createTable = async (
     const ifNotExists = input.ifNotExists ? "IF NOT EXISTS " : "";
     const sql = `CREATE TABLE ${ifNotExists}${input.table} (${columnDefs.join(", ")})`;
 
-    if (input.type === "sqlite") {
-      const { Database } = await import("bun:sqlite");
-      const db = new Database(input.connection);
+    if (input.type === "pglite") {
+      const db = await createPGlite(input.connection);
 
       try {
-        db.run(sql);
+        await db.exec(sql);
 
         return {
           success: true,
@@ -376,7 +352,7 @@ const createTable = async (
           durationMs: performance.now() - startTime,
         };
       } finally {
-        db.close();
+        await db.close();
       }
     }
 
@@ -416,46 +392,39 @@ const insert = async (
     }
 
     const columns = Object.keys(rows[0]);
-    const placeholders = columns.map(() => "?").join(", ");
 
-    let verb = "INSERT";
-    if (input.onConflict === "ignore") verb = "INSERT OR IGNORE";
-    if (input.onConflict === "replace") verb = "INSERT OR REPLACE";
-
-    const sql = `${verb} INTO ${input.table} (${columns.join(", ")}) VALUES (${placeholders})`;
-
-    if (input.type === "sqlite") {
-      const { Database } = await import("bun:sqlite");
-      const db = new Database(input.connection);
+    if (input.type === "pglite") {
+      const db = await createPGlite(input.connection);
 
       try {
-        const stmt = db.prepare(sql);
         let totalChanges = 0;
-        let lastId: number | bigint = 0;
 
         for (const row of rows) {
-          const values = columns.map((col) => row[col]) as (
-            | string
-            | number
-            | boolean
-            | null
-            | Uint8Array
-          )[];
-          const result = stmt.run(...values);
-          totalChanges += result.changes;
-          lastId = result.lastInsertRowid;
+          const values = columns.map((col) => row[col]);
+          const placeholders = columns.map((_, i) => `$${i + 1}`).join(", ");
+
+          let sql = `INSERT INTO ${input.table} (${columns.join(", ")}) VALUES (${placeholders})`;
+
+          if (input.onConflict === "ignore") {
+            sql += " ON CONFLICT DO NOTHING";
+          } else if (input.onConflict === "replace" || input.onConflict === "update") {
+            const setClauses = columns.map((col) => `${col} = EXCLUDED.${col}`).join(", ");
+            sql += ` ON CONFLICT DO UPDATE SET ${setClauses}`;
+          }
+
+          const result = await db.query(sql, values);
+          totalChanges += result.affectedRows ?? 0;
         }
 
         return {
           success: true,
           output: {
             inserted: totalChanges,
-            lastInsertRowid: lastId,
           },
           durationMs: performance.now() - startTime,
         };
       } finally {
-        db.close();
+        await db.close();
       }
     }
 
@@ -485,39 +454,33 @@ const update = async (
   try {
     const input = inputs as unknown as UpdateInput;
 
-    const setClauses = Object.keys(input.data).map((col) => `${col} = ?`);
+    const dataKeys = Object.keys(input.data);
+    const setClauses = dataKeys.map((col, i) => `${col} = $${i + 1}`);
     const setParams = Object.values(input.data);
 
     const { clause: whereClause, params: whereParams } = buildWhere(
       input.where,
+      dataKeys.length + 1,
     );
 
     const sql = `UPDATE ${input.table} SET ${setClauses.join(", ")} ${whereClause}`;
-    const params = [...setParams, ...whereParams] as (
-      | string
-      | number
-      | boolean
-      | null
-      | Uint8Array
-    )[];
+    const params = [...setParams, ...whereParams];
 
-    if (input.type === "sqlite") {
-      const { Database } = await import("bun:sqlite");
-      const db = new Database(input.connection);
+    if (input.type === "pglite") {
+      const db = await createPGlite(input.connection);
 
       try {
-        const stmt = db.prepare(sql);
-        const result = stmt.run(...params);
+        const result = await db.query(sql, params);
 
         return {
           success: true,
           output: {
-            updated: result.changes,
+            updated: result.affectedRows ?? 0,
           },
           durationMs: performance.now() - startTime,
         };
       } finally {
-        db.close();
+        await db.close();
       }
     }
 
@@ -560,30 +523,21 @@ const deleteRows = async (
 
     const sql = `DELETE FROM ${input.table} ${whereClause}`;
 
-    if (input.type === "sqlite") {
-      const { Database } = await import("bun:sqlite");
-      const db = new Database(input.connection);
+    if (input.type === "pglite") {
+      const db = await createPGlite(input.connection);
 
       try {
-        const stmt = db.prepare(sql);
-        const typedParams = params as (
-          | string
-          | number
-          | boolean
-          | null
-          | Uint8Array
-        )[];
-        const result = stmt.run(...typedParams);
+        const result = await db.query(sql, params);
 
         return {
           success: true,
           output: {
-            deleted: result.changes,
+            deleted: result.affectedRows ?? 0,
           },
           durationMs: performance.now() - startTime,
         };
       } finally {
-        db.close();
+        await db.close();
       }
     }
 
@@ -613,26 +567,37 @@ const tableInfo = async (
   try {
     const input = inputs as unknown as DbConfig & { table: string };
 
-    if (input.type === "sqlite") {
-      const { Database } = await import("bun:sqlite");
-      const db = new Database(input.connection);
+    if (input.type === "pglite") {
+      const db = await createPGlite(input.connection);
 
       try {
-        const columns = db.prepare(`PRAGMA table_info(${input.table})`).all();
-        const indexes = db.prepare(`PRAGMA index_list(${input.table})`).all();
+        const columns = await db.query(
+          `SELECT column_name, data_type, is_nullable, column_default
+           FROM information_schema.columns
+           WHERE table_name = $1
+           ORDER BY ordinal_position`,
+          [input.table],
+        );
+
+        const indexes = await db.query(
+          `SELECT indexname, indexdef
+           FROM pg_indexes
+           WHERE tablename = $1`,
+          [input.table],
+        );
 
         return {
           success: true,
           output: {
             table: input.table,
-            columns,
-            indexes,
-            columnCount: (columns as unknown[]).length,
+            columns: columns.rows,
+            indexes: indexes.rows,
+            columnCount: columns.rows.length,
           },
           durationMs: performance.now() - startTime,
         };
       } finally {
-        db.close();
+        await db.close();
       }
     }
 
@@ -656,7 +621,7 @@ const tableInfo = async (
 export const databasePlugin: BuiltinPlugin = {
   id: "builtin:database",
   name: "Database",
-  description: "SQL database operations (SQLite, PostgreSQL, MySQL)",
+  description: "SQL database operations (PGlite, PostgreSQL, MySQL)",
   actions: {
     query: {
       name: "query",
