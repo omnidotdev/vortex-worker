@@ -44,6 +44,66 @@ import type { VersionedSchema } from "./schema-version-resolver";
 import type { OmniEvent } from "./types";
 
 /**
+ * CloudEvent type patterns that trigger the `tier:sync` Hatchet event.
+ * Mirrors the authz:sync webhook pattern: incoming events are bridged
+ * directly to a Hatchet event so the tier-sync workflow can react.
+ */
+const TIER_SYNC_EVENT_TYPES = new Set([
+  "platform.plan.created",
+  "platform.plan.updated",
+  "platform.plan.deleted",
+  "platform.plan_feature.created",
+  "platform.plan_feature.updated",
+  "platform.plan_feature.deleted",
+]);
+
+/**
+ * Bridge plan mutation CloudEvents to the `tier:sync` Hatchet event.
+ *
+ * When the Omni API emits `platform.plan.*` or `platform.plan_feature.*`
+ * events, this function pushes a `tier:sync` event to Hatchet so the
+ * tier-sync workflow can reseed entitlements via Aether.
+ *
+ * Follows the same pattern as the authz:sync webhook in vortex-api:
+ * receive an event, push a Hatchet event, let the workflow handle it.
+ */
+async function bridgeTierSyncEvent(
+  event: OmniEvent,
+  hatchet: ReturnType<typeof Hatchet.init>,
+): Promise<void> {
+  if (!TIER_SYNC_EVENT_TYPES.has(event.type)) return;
+
+  try {
+    const data = event.data as {
+      planId?: string;
+      appId?: string;
+      entityType?: string;
+    };
+
+    await hatchet.event.push("tier:sync", {
+      planId: data.planId,
+      appId: data.appId,
+      entityType: data.entityType,
+      eventType: event.type,
+      timestamp: event.timestamp ?? new Date().toISOString(),
+    });
+
+    logger.info("Bridged plan event to tier:sync", {
+      eventId: event.id,
+      type: event.type,
+      planId: data.planId,
+      appId: data.appId,
+    });
+  } catch (err) {
+    logger.error("Failed to bridge plan event to tier:sync", {
+      eventId: event.id,
+      type: event.type,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
  * Match a glob-style pattern against a value.
  *
  * Supports:
@@ -229,6 +289,9 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
     await context.with(trace.setSpan(parentCtx, routerSpan), async () => {
       const db = getDb();
       const hatchet = getHatchet();
+
+      // Bridge plan mutation events to tier:sync (best-effort, never blocks routing)
+      bridgeTierSyncEvent(event, hatchet);
 
       // Log this event for audit and replay (best-effort, never blocks routing)
       db.insert(eventLogTable)
