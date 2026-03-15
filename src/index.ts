@@ -62,6 +62,7 @@ import { chronicleAuditWorkflow } from "./workflows/chronicle.workflow";
 import { dslWorkflow } from "./workflows/dsl.workflow";
 import { fnInvokeWorkflow } from "./workflows/fnInvoke.workflow";
 import { searchBootstrapWorkflow } from "./workflows/searchBootstrap.workflow";
+import { tierSyncWorkflow } from "./workflows/tierSync.workflow";
 import { tokenRefreshWorkflow } from "./workflows/tokenRefresh.workflow";
 
 import type { ExecutionContext, Step, WorkflowDefinition } from "./dsl/types";
@@ -114,12 +115,13 @@ async function main() {
   // Start Hatchet worker with retry for transient gRPC failures
   const MAX_HATCHET_RETRIES = 5;
 
+  let hatchetInstance: ReturnType<typeof Hatchet.init>;
   let worker: Awaited<ReturnType<ReturnType<typeof Hatchet.init>["worker"]>>;
 
   for (let attempt = 1; attempt <= MAX_HATCHET_RETRIES; attempt++) {
     try {
-      const hatchet = Hatchet.init();
-      worker = await hatchet.worker("vortex-dsl-worker", {
+      hatchetInstance = Hatchet.init();
+      worker = await hatchetInstance.worker("vortex-dsl-worker", {
         workflows: [
           authzReconcileWorkflow,
           authzSyncWorkflow,
@@ -127,6 +129,7 @@ async function main() {
           dslWorkflow,
           fnInvokeWorkflow,
           searchBootstrapWorkflow,
+          tierSyncWorkflow,
           tokenRefreshWorkflow,
         ],
       });
@@ -348,8 +351,7 @@ async function main() {
             );
           }
 
-          const hatchet = Hatchet.init();
-          await hatchet.event.push(body.key, body.payload);
+          await hatchetInstance.event.push(body.key, body.payload);
 
           return Response.json({ ok: true });
         } catch (err) {

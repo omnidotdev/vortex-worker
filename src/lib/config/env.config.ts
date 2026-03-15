@@ -22,6 +22,9 @@ const WARDEN_API_URL = process.env.WARDEN_API_URL;
 const WARDEN_SERVICE_KEY = process.env.WARDEN_SERVICE_KEY;
 // App API URLs (for reconciliation)
 const RUNA_API_URL = process.env.RUNA_API_URL;
+// Aether (Billing & entitlements)
+const AETHER_API_URL = process.env.AETHER_API_URL;
+const AETHER_SERVICE_API_KEY = process.env.AETHER_SERVICE_API_KEY;
 // Chronicle (Audit logging)
 const CHRONICLE_API_URL = process.env.CHRONICLE_API_URL;
 // Meilisearch (unified search service)
@@ -113,6 +116,8 @@ export {
   WARDEN_API_URL,
   WARDEN_SERVICE_KEY,
   RUNA_API_URL,
+  AETHER_API_URL,
+  AETHER_SERVICE_API_KEY,
   CHRONICLE_API_URL,
   MEILISEARCH_URL,
   MEILISEARCH_MASTER_KEY,
