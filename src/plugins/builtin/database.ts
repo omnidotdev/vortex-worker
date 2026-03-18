@@ -5,10 +5,9 @@
  * Supports PGlite (embedded PostgreSQL), PostgreSQL, and MySQL.
  */
 
+import type { PGlite } from "@electric-sql/pglite";
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
-
-import type { PGlite } from "@electric-sql/pglite";
 
 /** Database connection config */
 interface DbConfig {
@@ -407,8 +406,13 @@ const insert = async (
 
           if (input.onConflict === "ignore") {
             sql += " ON CONFLICT DO NOTHING";
-          } else if (input.onConflict === "replace" || input.onConflict === "update") {
-            const setClauses = columns.map((col) => `${col} = EXCLUDED.${col}`).join(", ");
+          } else if (
+            input.onConflict === "replace" ||
+            input.onConflict === "update"
+          ) {
+            const setClauses = columns
+              .map((col) => `${col} = EXCLUDED.${col}`)
+              .join(", ");
             sql += ` ON CONFLICT DO UPDATE SET ${setClauses}`;
           }
 
