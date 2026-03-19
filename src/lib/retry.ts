@@ -107,5 +107,5 @@ async function withRetry<T>(
   throw lastError;
 }
 
-export { withRetry, defaultIsRetryable };
 export type { RetryOptions };
+export { defaultIsRetryable, withRetry };

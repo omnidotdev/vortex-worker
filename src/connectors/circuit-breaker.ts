@@ -279,5 +279,5 @@ async function withCircuitBreaker<T>(
   return breaker.execute(fn);
 }
 
-export { CircuitBreaker, CircuitOpenError, withCircuitBreaker };
 export type { CircuitBreakerConfig, CircuitData, CircuitState };
+export { CircuitBreaker, CircuitOpenError, withCircuitBreaker };

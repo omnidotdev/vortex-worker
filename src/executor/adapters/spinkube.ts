@@ -254,6 +254,5 @@ class SpinKubeExecutor {
   }
 }
 
-export { buildSpinAppManifest, SpinKubeExecutor, toK8sName };
-
 export type { DeployInput, SpinKubeConfig };
+export { SpinKubeExecutor, buildSpinAppManifest, toK8sName };

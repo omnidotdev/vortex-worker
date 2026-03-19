@@ -271,12 +271,11 @@ const runSandboxedCode = (input: SandboxInput): Promise<SandboxResult> => {
   });
 };
 
+export type { SandboxInput, SandboxResult };
 export {
-  runSandboxedCode,
   SandboxExecutionError,
   SandboxMemoryError,
   SandboxOutputError,
   SandboxTimeoutError,
+  runSandboxedCode,
 };
-
-export type { SandboxInput, SandboxResult };

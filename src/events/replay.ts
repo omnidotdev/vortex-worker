@@ -309,6 +309,5 @@ async function replayEvents(
   }
 }
 
-export { matchGlob, replayEvents };
-
 export type { ReplayOptions, ReplayResult };
+export { matchGlob, replayEvents };

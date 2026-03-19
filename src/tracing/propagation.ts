@@ -138,13 +138,12 @@ const endSpan = (span: Span, error?: unknown): void => {
   span.end();
 };
 
+export type { TraceContext };
 export {
+  endSpan,
   extractTraceContext,
   injectTraceContext,
   startRouterSpan,
   startStepSpan,
   startWorkflowSpan,
-  endSpan,
 };
-
-export type { TraceContext };

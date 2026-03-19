@@ -141,5 +141,5 @@ async function isRateLimited(
   return checkRateLimit(resource, organizationId, resolvedConfig);
 }
 
-export { checkRateLimit, isRateLimited, DEFAULT_LIMITS };
 export type { RateLimitConfig, RateLimitResult };
+export { DEFAULT_LIMITS, checkRateLimit, isRateLimited };

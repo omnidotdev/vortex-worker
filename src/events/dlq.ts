@@ -481,6 +481,7 @@ async function discardDlqEvent(
   }
 }
 
+export type { DlqErrorCode, DlqQuery, DlqStats, RetryConfig };
 export {
   discardDlqEvent,
   getDlqStats,
@@ -489,5 +490,3 @@ export {
   withRetry,
   writeToDlq,
 };
-
-export type { DlqErrorCode, DlqQuery, DlqStats, RetryConfig };
