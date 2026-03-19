@@ -351,7 +351,15 @@ async function main() {
             );
           }
 
-          await hatchetInstance.event.push(body.key, body.payload);
+          await Promise.race([
+            hatchetInstance.event.push(body.key, body.payload),
+            new Promise((_, reject) =>
+              setTimeout(
+                () => reject(new Error("Hatchet push timed out after 8s")),
+                8_000,
+              ),
+            ),
+          ]);
 
           return Response.json({ ok: true });
         } catch (err) {
