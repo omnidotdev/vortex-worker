@@ -351,15 +351,22 @@ async function main() {
             );
           }
 
-          await Promise.race([
-            hatchetInstance.event.push(body.key, body.payload),
-            new Promise((_, reject) =>
-              setTimeout(
-                () => reject(new Error("Hatchet push timed out after 8s")),
-                8_000,
-              ),
-            ),
-          ]);
+          {
+            const ac = new AbortController();
+            const timer = setTimeout(() => ac.abort(), 8_000);
+            try {
+              await Promise.race([
+                hatchetInstance.event.push(body.key, body.payload),
+                new Promise((_, reject) => {
+                  ac.signal.addEventListener("abort", () =>
+                    reject(new Error("Hatchet push timed out after 8s")),
+                  );
+                }),
+              ]);
+            } finally {
+              clearTimeout(timer);
+            }
+          }
 
           return Response.json({ ok: true });
         } catch (err) {
