@@ -208,6 +208,7 @@ export const dslWorkflow: Workflow = {
           await markRunFailed(
             dbRunId,
             new Error("Workflow has no trigger step"),
+            organizationId,
           );
           throw new Error("Workflow has no trigger step");
         }
@@ -250,7 +251,7 @@ export const dslWorkflow: Workflow = {
               );
 
               // Log step completion
-              await logStepComplete(dbRunId, step.id, result);
+              await logStepComplete(dbRunId, step.id, result, organizationId);
 
               ctx.log(
                 `Step ${step.id} completed with result: ${JSON.stringify(result)}`,
@@ -260,7 +261,7 @@ export const dslWorkflow: Workflow = {
               queue.push(...nextSteps);
             } catch (stepError) {
               // Log step failure
-              await logStepFailed(dbRunId, step.id, stepError);
+              await logStepFailed(dbRunId, step.id, stepError, organizationId);
               runLogger.error("Step failed", {
                 stepId: step.id,
                 error:
@@ -273,7 +274,7 @@ export const dslWorkflow: Workflow = {
           }
 
           // Mark run as complete
-          await markRunComplete(dbRunId, execCtx.stepResults);
+          await markRunComplete(dbRunId, execCtx.stepResults, organizationId);
           runLogger.info("Workflow execution completed", {
             completedSteps: Object.keys(execCtx.stepResults).length,
           });
@@ -306,7 +307,7 @@ export const dslWorkflow: Workflow = {
           };
         } catch (error) {
           // Mark run as failed
-          await markRunFailed(dbRunId, error);
+          await markRunFailed(dbRunId, error, organizationId);
           runLogger.error("Workflow execution failed", {
             error: error instanceof Error ? error.message : String(error),
           });

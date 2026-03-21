@@ -6,6 +6,7 @@
  * (non-blocking) so it never slows down plugin execution.
  */
 
+import { recordUsage } from "billing";
 import { getDb } from "db";
 import { pluginTable, pluginUsageTable } from "db/schema";
 import { eq } from "drizzle-orm";
@@ -82,6 +83,7 @@ class PluginRegistry {
     organizationId: string,
     workflowId: string | undefined,
     runId: string | undefined,
+    stepId: string | undefined,
     functionName: string,
     durationMs: number,
     success: boolean,
@@ -105,6 +107,16 @@ class PluginRegistry {
           error: err instanceof Error ? err.message : String(err),
         });
       });
+
+    if (organizationId) {
+      void recordUsage(
+        "organization",
+        organizationId,
+        "plugin_invocations",
+        1,
+        `plugin-${runId}-${stepId}-${functionName}`,
+      );
+    }
   }
 }
 

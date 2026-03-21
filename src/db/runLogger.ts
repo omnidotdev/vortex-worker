@@ -5,7 +5,9 @@
 
 import { and, eq } from "drizzle-orm";
 
+import { recordUsage } from "billing";
 import { VortexError } from "lib/errors";
+import logger from "lib/logger";
 import { getDb } from "./index";
 import { redactSensitive } from "./redact";
 import { workflowRunTable, workflowStepLogTable } from "./schema";
@@ -84,6 +86,7 @@ export async function logStepComplete(
   runId: string,
   stepId: string,
   output: unknown,
+  organizationId?: string,
 ): Promise<void> {
   const db = getDb();
 
@@ -100,6 +103,16 @@ export async function logStepComplete(
         eq(workflowStepLogTable.stepId, stepId),
       ),
     );
+
+  if (organizationId) {
+    void recordUsage(
+      "organization",
+      organizationId,
+      "step_executions",
+      1,
+      `step-${runId}-${stepId}`,
+    );
+  }
 }
 
 /**
@@ -109,6 +122,7 @@ export async function logStepFailed(
   runId: string,
   stepId: string,
   error: Error | unknown,
+  organizationId?: string,
 ): Promise<void> {
   const db = getDb();
 
@@ -135,6 +149,16 @@ export async function logStepFailed(
         eq(workflowStepLogTable.stepId, stepId),
       ),
     );
+
+  if (organizationId) {
+    void recordUsage(
+      "organization",
+      organizationId,
+      "step_executions",
+      1,
+      `step-${runId}-${stepId}`,
+    );
+  }
 }
 
 /**
@@ -167,6 +191,7 @@ export async function logStepSkipped(
 export async function markRunComplete(
   runId: string,
   output?: unknown,
+  organizationId?: string,
 ): Promise<void> {
   const db = getDb();
 
@@ -178,6 +203,28 @@ export async function markRunComplete(
       completedAt: new Date(),
     })
     .where(eq(workflowRunTable.id, runId));
+
+  if (organizationId) {
+    const [run] = await db
+      .select({ startedAt: workflowRunTable.startedAt })
+      .from(workflowRunTable)
+      .where(eq(workflowRunTable.id, runId));
+
+    if (run?.startedAt) {
+      const durationMs = Date.now() - run.startedAt.getTime();
+      void recordUsage(
+        "organization",
+        organizationId,
+        "compute_ms",
+        durationMs,
+        `compute-${runId}`,
+      );
+    } else {
+      logger.warn("Cannot record compute_ms: run missing startedAt", {
+        runId,
+      });
+    }
+  }
 }
 
 /**
@@ -186,6 +233,7 @@ export async function markRunComplete(
 export async function markRunFailed(
   runId: string,
   error: Error | unknown,
+  organizationId?: string,
 ): Promise<void> {
   const db = getDb();
 
@@ -207,6 +255,28 @@ export async function markRunFailed(
       completedAt: new Date(),
     })
     .where(eq(workflowRunTable.id, runId));
+
+  if (organizationId) {
+    const [run] = await db
+      .select({ startedAt: workflowRunTable.startedAt })
+      .from(workflowRunTable)
+      .where(eq(workflowRunTable.id, runId));
+
+    if (run?.startedAt) {
+      const durationMs = Date.now() - run.startedAt.getTime();
+      void recordUsage(
+        "organization",
+        organizationId,
+        "compute_ms",
+        durationMs,
+        `compute-${runId}`,
+      );
+    } else {
+      logger.warn("Cannot record compute_ms: run missing startedAt", {
+        runId,
+      });
+    }
+  }
 }
 
 /**

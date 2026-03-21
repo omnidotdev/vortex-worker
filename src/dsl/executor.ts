@@ -1289,6 +1289,7 @@ const executePlugin = async (
     ctx.organizationId ?? "",
     ctx.workflowId,
     ctx.runId,
+    step.id,
     plugin.function,
     callResult.durationMs,
     callResult.success,
