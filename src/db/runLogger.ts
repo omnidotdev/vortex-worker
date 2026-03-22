@@ -3,9 +3,9 @@
  * Handles persisting execution state to the database for debugging and monitoring.
  */
 
+import { recordUsage } from "billing";
 import { and, eq } from "drizzle-orm";
 
-import { recordUsage } from "billing";
 import { VortexError } from "lib/errors";
 import logger from "lib/logger";
 import { getDb } from "./index";

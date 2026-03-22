@@ -6,10 +6,7 @@
  * all errors are swallowed and logged so metering never blocks execution.
  */
 
-import {
-  AETHER_API_URL,
-  AETHER_SERVICE_API_KEY,
-} from "lib/config/env.config";
+import { AETHER_API_URL, AETHER_SERVICE_API_KEY } from "lib/config/env.config";
 import logger from "lib/logger";
 
 const APP_ID = "vortex";
