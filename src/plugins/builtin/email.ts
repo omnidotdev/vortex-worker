@@ -21,7 +21,7 @@ let resendClient: Resend | null = null;
  * Uses a module-level singleton when relying on the env var, or creates a new
  * instance per call when an explicit `apiKey` override is provided.
  */
-const getResendClient = (apiKey?: string): Resend => {
+const getResendClient = (apiKey?: string): Resend | null => {
   if (apiKey) {
     return new Resend(apiKey);
   }
@@ -30,9 +30,7 @@ const getResendClient = (apiKey?: string): Resend => {
     const RESEND_API_KEY = process.env.RESEND_API_KEY;
 
     if (!RESEND_API_KEY) {
-      throw new Error(
-        "RESEND_API_KEY environment variable is required for email plugin",
-      );
+      return null;
     }
 
     resendClient = new Resend(RESEND_API_KEY);
@@ -128,6 +126,21 @@ const sendEmail = async (
     const bccList = bcc ? (Array.isArray(bcc) ? bcc : [bcc]) : undefined;
 
     const resend = getResendClient(apiKey);
+
+    if (!resend) {
+      const toStr = Array.isArray(to) ? to.join(", ") : to;
+      // biome-ignore lint/suspicious/noConsole: stdout fallback when Resend not configured
+      console.info(
+        `[Email] ${subject} -> ${toStr}`,
+        JSON.stringify({ from: from ?? DEFAULT_FROM, body }, null, 2),
+      );
+
+      return {
+        success: true,
+        output: { sent: false, recipients: toList.length, fallback: "stdout" },
+        durationMs: performance.now() - startTime,
+      };
+    }
 
     const baseOptions = {
       from: from ?? DEFAULT_FROM,
