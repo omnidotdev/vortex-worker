@@ -21,7 +21,7 @@
         "type": "event",
         "config": {
           "pattern": "gatekeeper.user.created",
-          "source": "gatekeeper"
+          "source": "omni.gatekeeper"
         }
       },
       "next": "query-mantle"

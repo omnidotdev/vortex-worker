@@ -21,7 +21,7 @@
         "type": "event",
         "config": {
           "pattern": "gatekeeper.email.*",
-          "source": "gatekeeper"
+          "source": "omni.gatekeeper"
         }
       },
       "next": "check-suppression"
