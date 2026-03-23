@@ -133,7 +133,12 @@ async function main() {
           tokenRefreshWorkflow,
         ],
       });
-      await worker.start();
+      // Run in background — do not await (start() blocks until connection closes)
+      worker.start().catch((err) => {
+        logger.error("Hatchet worker error", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
       break;
     } catch (err) {
       logger.error(
