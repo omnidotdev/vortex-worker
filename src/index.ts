@@ -119,7 +119,6 @@ async function main() {
   // Runs in the background so the health server and trigger runners start immediately
   const MAX_HATCHET_RETRIES = 5;
 
-  // biome-ignore lint/style/useConst: assigned in background init
   let hatchetInstance: ReturnType<typeof Hatchet.init> | undefined;
 
   // Intentionally fire-and-forget — Hatchet init runs in background
