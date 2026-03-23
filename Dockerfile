@@ -3,7 +3,12 @@
 FROM oven/bun:1 AS base
 WORKDIR /app
 
-# Build
+# Install production dependencies only
+FROM base AS deps
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --ignore-scripts --production
+
+# Build (needs all deps including dev)
 FROM base AS builder
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --ignore-scripts
@@ -13,14 +18,12 @@ RUN bun run postinstall && bun run build
 # Run
 FROM base AS runner
 ENV NODE_ENV=production
+USER bun
 
-COPY --from=builder /app/node_modules ./node_modules
+COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/src/sandbox/wasm/evaluator.wasm ./build/wasm/evaluator.wasm
 COPY --from=builder /app/package.json ./
-
-RUN chown -R 1001:1001 /app
-USER 1001:1001
 
 EXPOSE 8080
 
