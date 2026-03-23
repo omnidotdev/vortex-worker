@@ -112,76 +112,85 @@ async function main() {
   // Initialize trigger adapter registry (built-in + external plugins)
   await initTriggerRegistry();
 
-  // Start Hatchet worker with retry for transient gRPC failures
+  // Track Hatchet readiness for health checks
+  let hatchetReady = false;
+
+  // Start Hatchet worker with retry for transient gRPC failures (background)
+  // Runs in the background so the health server and trigger runners start immediately
   const MAX_HATCHET_RETRIES = 5;
 
-  let hatchetInstance: ReturnType<typeof Hatchet.init>;
-  let worker: Awaited<ReturnType<ReturnType<typeof Hatchet.init>["worker"]>>;
+  // biome-ignore lint/style/useConst: assigned in background init
+  let hatchetInstance: ReturnType<typeof Hatchet.init> | undefined;
 
-  for (let attempt = 1; attempt <= MAX_HATCHET_RETRIES; attempt++) {
-    try {
-      hatchetInstance = Hatchet.init();
-      worker = await hatchetInstance.worker("vortex-dsl-worker", {
-        workflows: [
-          authzReconcileWorkflow,
-          authzSyncWorkflow,
-          chronicleAuditWorkflow,
-          dslWorkflow,
-          fnInvokeWorkflow,
-          searchBootstrapWorkflow,
-          tierSyncWorkflow,
-          tokenRefreshWorkflow,
-        ],
-      });
-      // Run in background — do not await (start() blocks until connection closes)
-      worker.start().catch((err) => {
-        logger.error("Hatchet worker error", {
-          error: err instanceof Error ? err.message : String(err),
+  // Intentionally fire-and-forget — Hatchet init runs in background
+  void (async () => {
+    for (let attempt = 1; attempt <= MAX_HATCHET_RETRIES; attempt++) {
+      try {
+        hatchetInstance = Hatchet.init();
+        const worker = await hatchetInstance.worker("vortex-dsl-worker", {
+          workflows: [
+            authzReconcileWorkflow,
+            authzSyncWorkflow,
+            chronicleAuditWorkflow,
+            dslWorkflow,
+            fnInvokeWorkflow,
+            searchBootstrapWorkflow,
+            tierSyncWorkflow,
+            tokenRefreshWorkflow,
+          ],
         });
-      });
-      break;
-    } catch (err) {
-      logger.error(
-        `Hatchet worker init failed (attempt ${attempt}/${MAX_HATCHET_RETRIES})`,
-        { error: err instanceof Error ? err.message : String(err) },
-      );
-      if (attempt === MAX_HATCHET_RETRIES) {
-        throw new Error(
-          `Hatchet worker failed after ${MAX_HATCHET_RETRIES} attempts: ${err instanceof Error ? err.message : String(err)}`,
+        hatchetReady = true;
+        logger.info("Hatchet worker registered");
+        // Run in background — do not await (start() blocks until connection closes)
+        worker.start().catch((err) => {
+          hatchetReady = false;
+          logger.error("Hatchet worker error", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+        return;
+      } catch (err) {
+        logger.error(
+          `Hatchet worker init failed (attempt ${attempt}/${MAX_HATCHET_RETRIES})`,
+          { error: err instanceof Error ? err.message : String(err) },
+        );
+        if (attempt === MAX_HATCHET_RETRIES) {
+          logger.error(
+            `Hatchet worker failed after ${MAX_HATCHET_RETRIES} attempts`,
+          );
+          return;
+        }
+        // Exponential backoff: 2s, 4s, 8s, 16s
+        await new Promise((resolve) =>
+          setTimeout(resolve, 2000 * 2 ** (attempt - 1)),
         );
       }
-      // Exponential backoff: 2s, 4s, 8s, 16s
-      await new Promise((resolve) =>
-        setTimeout(resolve, 2000 * 2 ** (attempt - 1)),
-      );
     }
-  }
+  })();
 
-  // Start Temporal worker if configured
-  let temporalWorker: import("@temporalio/worker").Worker | null = null;
-
+  // Start Temporal worker if configured (background)
   if (process.env.TEMPORAL_ADDRESS) {
-    try {
-      const { createTemporalWorker } = await import(
-        "./workflows/temporal/worker"
-      );
-      temporalWorker = await createTemporalWorker();
-      // Run in background — do not await (run() is blocking)
-      temporalWorker.run().catch((err) => {
-        logger.error("Temporal worker error", {
+    (async () => {
+      try {
+        const { createTemporalWorker } = await import(
+          "./workflows/temporal/worker"
+        );
+        const temporalWorker = await createTemporalWorker();
+        temporalWorker.run().catch((err) => {
+          logger.error("Temporal worker error", {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+        logger.info("Temporal worker started", {
+          address: process.env.TEMPORAL_ADDRESS,
+          taskQueue: process.env.TEMPORAL_TASK_QUEUE ?? "vortex-dsl",
+        });
+      } catch (err) {
+        logger.error("Failed to start Temporal worker", {
           error: err instanceof Error ? err.message : String(err),
         });
-      });
-      logger.info("Temporal worker started", {
-        address: process.env.TEMPORAL_ADDRESS,
-        taskQueue: process.env.TEMPORAL_TASK_QUEUE ?? "vortex-dsl",
-      });
-    } catch (err) {
-      logger.error("Failed to start Temporal worker", {
-        error: err instanceof Error ? err.message : String(err),
-      });
-      // Do not crash — Hatchet worker is still running
-    }
+      }
+    })();
   }
 
   // Start Kafka trigger runner
@@ -259,24 +268,16 @@ async function main() {
       const url = new URL(req.url);
 
       if (url.pathname === "/health") {
+        // Liveness: always 200 as long as the process is running
+        // Hatchet readiness is reported but does not block liveness
         const executorHealthy = await executor.healthCheck();
 
-        if (!executorHealthy) {
-          return Response.json(
-            {
-              status: "unhealthy",
-              timestamp: Date.now(),
-              service: "vortex-worker",
-              reason: "executor backend unreachable",
-            },
-            { status: 503 },
-          );
-        }
-
         return Response.json({
-          status: "ok",
+          status: executorHealthy && hatchetReady ? "ok" : "degraded",
           timestamp: Date.now(),
           service: "vortex-worker",
+          hatchet: hatchetReady ? "connected" : "initializing",
+          executor: executorHealthy ? "ok" : "unreachable",
         });
       }
 
@@ -356,6 +357,13 @@ async function main() {
             );
           }
 
+          if (!hatchetInstance) {
+            return Response.json(
+              { error: "Hatchet not initialized yet" },
+              { status: 503 },
+            );
+          }
+
           {
             const ac = new AbortController();
             const timer = setTimeout(() => ac.abort(), 8_000);
@@ -394,7 +402,7 @@ async function main() {
   const shutdown = async () => {
     logger.info("Shutting down worker");
     healthServer.stop();
-    temporalWorker?.shutdown();
+    // Temporal worker shuts down via its own error handling
     eventsConsumer?.stop();
     outboxSweeper?.stop();
     closePublisher();
