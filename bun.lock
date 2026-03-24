@@ -675,6 +675,9 @@
     "@swc/core",
     "@hatchet-dev/typescript-sdk",
   ],
+  "patchedDependencies": {
+    "@iggy.rs/sdk@1.0.6": "patches/@iggy.rs%2Fsdk@1.0.6.patch",
+  },
   "packages": {
     "@activepieces/piece-activecampaign": ["@activepieces/piece-activecampaign@0.1.0", "", { "dependencies": { "@activepieces/pieces-common": "0.11.0", "@activepieces/pieces-framework": "0.23.0", "@activepieces/shared": "0.30.4", "@sinclair/typebox": "0.34.11", "axios": "1.13.1", "axios-retry": "4.4.1", "deepmerge-ts": "7.1.0", "form-data": "4.0.4", "mime-types": "2.1.35", "nanoid": "3.3.8", "semver": "7.6.0", "socket.io-client": "4.8.1", "tslib": "2.6.2", "zod": "4.1.13" } }, "sha512-7aVtEUhWSgLz1d3epV17h25LWDXgmwfAa5P7KrGkOyvcUli397dZCoBs1uPjn67Ec+rUznqBM77VLRL/xvOVbA=="],
 

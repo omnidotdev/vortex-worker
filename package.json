@@ -687,5 +687,8 @@
     "ts-pattern": "^5.9.0",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
+  },
+  "patchedDependencies": {
+    "@iggy.rs/sdk@1.0.6": "patches/@iggy.rs%2Fsdk@1.0.6.patch"
   }
 }
