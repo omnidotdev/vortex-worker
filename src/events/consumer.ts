@@ -189,6 +189,17 @@ class EventsConsumer {
       // Group likely already exists — this is expected
     }
 
+    // Join the consumer group so the server registers this client as a member
+    try {
+      await client.group.join({
+        streamId: STREAM_ID,
+        topicId,
+        groupId: CONSUMER_GROUP_NAME,
+      });
+    } catch {
+      // Already joined — this is expected on reconnect
+    }
+
     this.#consumerGroups.add(topicId);
   }
 
