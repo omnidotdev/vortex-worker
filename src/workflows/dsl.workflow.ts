@@ -58,19 +58,31 @@ export const dslWorkflow: Workflow = {
         let { definition } = input;
         const runId = input.runId || ctx.workflowRunId();
 
-        // Verify organization ownership before executing
-        if (organizationId) {
+        // Verify organization ownership before executing.
+        // workflowId may be a composite engineWorkflowId (event-<uuid>-<ts>)
+        // so resolve the actual workflow UUID from the run table first.
+        if (organizationId && runId) {
           const db = getDb();
-          const [workflow] = await db
-            .select({ organizationId: workflowTable.organizationId })
-            .from(workflowTable)
-            .where(eq(workflowTable.id, workflowId))
+          const [run] = await db
+            .select({ workflowId: workflowRunTable.workflowId })
+            .from(workflowRunTable)
+            .where(eq(workflowRunTable.id, runId))
             .limit(1);
 
-          if (workflow && workflow.organizationId !== organizationId) {
-            throw new Error(
-              "Workflow does not belong to the specified organization",
-            );
+          const resolvedWorkflowId = run?.workflowId;
+
+          if (resolvedWorkflowId) {
+            const [workflow] = await db
+              .select({ organizationId: workflowTable.organizationId })
+              .from(workflowTable)
+              .where(eq(workflowTable.id, resolvedWorkflowId))
+              .limit(1);
+
+            if (workflow && workflow.organizationId !== organizationId) {
+              throw new Error(
+                "Workflow does not belong to the specified organization",
+              );
+            }
           }
         }
 
