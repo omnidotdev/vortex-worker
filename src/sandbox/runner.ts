@@ -27,6 +27,10 @@ type SandboxInput = {
   source: string;
   /** Key/value inputs available as `input` inside the code */
   inputs: Record<string, unknown>;
+  /** Trigger context available as `trigger` inside the code */
+  trigger?: { data: Record<string, unknown> };
+  /** Step results available as `steps` inside the code */
+  steps?: Record<string, unknown>;
   /** Resource limits */
   limits: {
     /** Maximum memory in megabytes (advisory -- enforced at Worker level) */
@@ -78,6 +82,8 @@ const BLOCKED_GLOBALS = [
 const buildWorkerSource = (
   source: string,
   inputs: Record<string, unknown>,
+  trigger: { data: Record<string, unknown> },
+  steps: Record<string, unknown>,
 ): string => {
   // Escape backticks and backslashes in the user source so it can be
   // safely embedded in a template literal inside the worker script.
@@ -86,8 +92,8 @@ const buildWorkerSource = (
     .replace(/`/g, "\\`")
     .replace(/\$/g, "\\$");
 
-  // Build parameter list: "input, process, require, Bun, ..."
-  const params = ["input", ...BLOCKED_GLOBALS].join(", ");
+  // Build parameter list: "input, trigger, steps, process, require, Bun, ..."
+  const params = ["input", "trigger", "steps", ...BLOCKED_GLOBALS].join(", ");
 
   return `
 (async () => {
@@ -100,9 +106,11 @@ const buildWorkerSource = (
       ${escapedSource}
     \`);
 
-    // Call with input + undefined for every blocked global
+    // Call with input, trigger, steps + undefined for every blocked global
     const __result = await __userFn(
       ${JSON.stringify(inputs)},
+      ${JSON.stringify(trigger)},
+      ${JSON.stringify(steps)},
       ${BLOCKED_GLOBALS.map(() => "undefined").join(", ")}
     );
 
@@ -175,14 +183,19 @@ class SandboxExecutionError extends Error {
  * @throws {SandboxExecutionError} If the user code throws
  */
 const runSandboxedCode = (input: SandboxInput): Promise<SandboxResult> => {
-  const { source, inputs, limits } = input;
+  const { source, inputs, trigger, steps, limits } = input;
   const maxOutputBytes = limits.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
 
   return new Promise<SandboxResult>((resolve, reject) => {
     const startTime = performance.now();
     let settled = false;
 
-    const workerSource = buildWorkerSource(source, inputs);
+    const workerSource = buildWorkerSource(
+      source,
+      inputs,
+      trigger ?? { data: {} },
+      steps ?? {},
+    );
     const blob = new Blob([workerSource], { type: "application/javascript" });
     const workerUrl = URL.createObjectURL(blob);
 

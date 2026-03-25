@@ -1624,6 +1624,8 @@ const executeCode = async (
     const { output, durationMs } = await runSandboxedCode({
       source: code.source,
       inputs: inputData,
+      trigger: { data: ctx.triggerData },
+      steps: ctx.stepResults,
       limits: { memoryMb, timeoutMs },
     });
 
