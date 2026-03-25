@@ -2840,6 +2840,8 @@ function getValueByPath(ctx: ExecutionContext, path: string): unknown {
     steps: {} as Record<string, unknown>,
     // Also expose stepResults directly for backwards compatibility
     stepResults: ctx.stepResults,
+    // Expose environment variables for workflow input mappings
+    env: process.env,
   };
 
   // Map step results to be accessible as steps.{stepId}.output
