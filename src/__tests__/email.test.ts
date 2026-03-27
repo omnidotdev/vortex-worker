@@ -4,7 +4,10 @@
 
 import { describe, expect, it } from "bun:test";
 
-import type { EmailActivityInput } from "../activities/email.activity";
+import {
+  executeEmailActivity,
+  type EmailActivityInput,
+} from "../activities/email.activity";
 
 describe("EmailActivityInput validation", () => {
   it("should accept valid email input with required fields", () => {
@@ -51,31 +54,17 @@ describe("EmailActivityInput validation", () => {
 });
 
 describe("executeEmailActivity", () => {
-  it("should return error when RESEND_API_KEY is not set", async () => {
-    // Clear any existing API key
-    const originalKey = process.env.RESEND_API_KEY;
-    delete process.env.RESEND_API_KEY;
-
-    // Dynamic import to get fresh module state
-    const { executeEmailActivity } = await import(
-      "../activities/email.activity"
-    );
-
+  it("should gracefully degrade to stdout when RESEND_API_KEY is not set", async () => {
     const input: EmailActivityInput = {
       to: "test@example.com",
       subject: "Test",
       body: "Test body",
     };
 
-    // Should return error result (not throw) because errors are caught
+    // Should succeed via stdout fallback when Resend is not configured
     const result = await executeEmailActivity(input);
 
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("RESEND_API_KEY");
-
-    // Restore original key
-    if (originalKey) {
-      process.env.RESEND_API_KEY = originalKey;
-    }
+    expect(result.success).toBe(true);
+    expect(result.messageId).toBe("stdout-fallback");
   });
 });
