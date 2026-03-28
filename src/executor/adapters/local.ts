@@ -17,6 +17,7 @@ import logger from "lib/logger";
 import {
   createExecutionContext,
   executeStep,
+  findRootSteps,
   findTriggerStep,
 } from "../../dsl/executor";
 import { isReactFlowFormat, reactFlowToDsl } from "../../dsl/reactFlowToDsl";
@@ -292,14 +293,18 @@ export class LocalExecutor implements WorkflowExecutor {
         run.stepNameToId,
       );
 
-      // Find trigger step
+      // Find trigger step or root steps for manual workflows
       const triggerStep = findTriggerStep(run.definition.steps);
-      if (!triggerStep) {
-        throw new Error("Workflow has no trigger step");
+      const initialSteps: Step[] = triggerStep
+        ? [triggerStep]
+        : findRootSteps(run.definition);
+
+      if (initialSteps.length === 0) {
+        throw new Error("Workflow has no trigger step or root steps");
       }
 
       // Execute workflow using BFS
-      const queue: Step[] = [triggerStep];
+      const queue: Step[] = [...initialSteps];
       const visited = new Set<string>();
 
       while (queue.length > 0) {

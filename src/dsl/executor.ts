@@ -384,6 +384,16 @@ export function findTriggerStep(steps: Step[]): TriggerStep | undefined {
   return steps.find((s): s is TriggerStep => s.type === "trigger");
 }
 
+/**
+ * Find root steps (steps with no incoming edges) for workflows without a
+ * trigger node, such as manually dispatched workflows
+ */
+export function findRootSteps(def: WorkflowDefinition): Step[] {
+  const targets = new Set(def.edges.map((e) => e.target));
+
+  return def.steps.filter((s) => !targets.has(s.id));
+}
+
 export function findNextSteps(
   def: WorkflowDefinition,
   currentStepId: string,

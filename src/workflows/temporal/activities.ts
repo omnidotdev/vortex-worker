@@ -8,6 +8,7 @@
 import {
   createExecutionContext,
   executeStep,
+  findRootSteps,
   findTriggerStep,
 } from "../../dsl/executor";
 import { isReactFlowFormat, reactFlowToDsl } from "../../dsl/reactFlowToDsl";
@@ -35,6 +36,8 @@ export interface InitializeResult {
   definition: WorkflowDefinition;
   context: ExecutionContext;
   triggerStepId: string;
+  /** Initial step IDs when no trigger step exists (manual workflows) */
+  initialStepIds?: string[];
 }
 
 /**
@@ -77,10 +80,14 @@ export async function initializeWorkflow(
 
   const dslDef = definition as WorkflowDefinition;
 
-  // Find trigger step
+  // Find trigger step or root steps for manual workflows
   const triggerStep = findTriggerStep(dslDef.steps);
-  if (!triggerStep) {
-    throw new Error("Workflow has no trigger step");
+  const initialSteps = triggerStep
+    ? [triggerStep]
+    : findRootSteps(dslDef);
+
+  if (initialSteps.length === 0) {
+    throw new Error("Workflow has no trigger step or root steps");
   }
 
   // Create execution context
@@ -89,7 +96,10 @@ export async function initializeWorkflow(
   return {
     definition: dslDef,
     context,
-    triggerStepId: triggerStep.id,
+    triggerStepId: triggerStep?.id ?? initialSteps[0].id,
+    ...(!triggerStep && {
+      initialStepIds: initialSteps.map((s) => s.id),
+    }),
   };
 }
 

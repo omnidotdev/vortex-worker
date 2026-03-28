@@ -4,10 +4,9 @@
 
 import { describe, expect, it } from "bun:test";
 
-import {
-  executeEmailActivity,
-  type EmailActivityInput,
-} from "../activities/email.activity";
+import { executeEmailActivity } from "../activities/email.activity";
+
+import type { EmailActivityInput } from "../activities/email.activity";
 
 describe("EmailActivityInput validation", () => {
   it("should accept valid email input with required fields", () => {

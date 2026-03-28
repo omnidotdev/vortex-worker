@@ -14,6 +14,7 @@ import { workflowRunTable, workflowTable } from "../db/schema";
 import {
   createExecutionContext,
   executeStep,
+  findRootSteps,
   findTriggerStep,
 } from "../dsl/executor";
 import { isReactFlowFormat, reactFlowToDsl } from "../dsl/reactFlowToDsl";
@@ -214,19 +215,23 @@ export const dslWorkflow: Workflow = {
           });
         }
 
-        // Find trigger step
+        // Find trigger step or root steps for manual workflows
         const triggerStep = findTriggerStep(dslDef.steps);
-        if (!triggerStep) {
+        const initialSteps = triggerStep
+          ? [triggerStep]
+          : findRootSteps(dslDef);
+
+        if (initialSteps.length === 0) {
           await markRunFailed(
             dbRunId,
-            new Error("Workflow has no trigger step"),
+            new Error("Workflow has no trigger step or root steps"),
             organizationId,
           );
-          throw new Error("Workflow has no trigger step");
+          throw new Error("Workflow has no trigger step or root steps");
         }
 
-        // Execute workflow starting from trigger (BFS)
-        const queue: typeof dslDef.steps = [triggerStep];
+        // Execute workflow starting from initial steps (BFS)
+        const queue: typeof dslDef.steps = [...initialSteps];
         const visited = new Set<string>();
 
         try {
