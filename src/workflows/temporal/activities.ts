@@ -82,9 +82,7 @@ export async function initializeWorkflow(
 
   // Find trigger step or root steps for manual workflows
   const triggerStep = findTriggerStep(dslDef.steps);
-  const initialSteps = triggerStep
-    ? [triggerStep]
-    : findRootSteps(dslDef);
+  const initialSteps = triggerStep ? [triggerStep] : findRootSteps(dslDef);
 
   if (initialSteps.length === 0) {
     throw new Error("Workflow has no trigger step or root steps");
