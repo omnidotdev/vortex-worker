@@ -33,7 +33,7 @@
       "position": { "x": 0, "y": 100 },
       "code": {
         "sandbox": "worker",
-        "source": "const { owner } = trigger.data;\nconst orgRes = await fetch(`${process.env.GATEKEEPER_API_URL}/api/organization/by-slug/${owner}`, {\n  headers: { 'Content-Type': 'application/json' }\n});\nif (!orgRes.ok) return { recipients: [] };\nconst org = await orgRes.json();\nconst membersRes = await fetch(`${process.env.GATEKEEPER_API_URL}/api/organization/members?orgId=${org.id}`, {\n  headers: { 'Content-Type': 'application/json' }\n});\nif (!membersRes.ok) return { recipients: [] };\nconst { data: members } = await membersRes.json();\nconst owners = members.filter(m => m.role === 'owner');\nreturn { recipients: owners.map(m => m.user.email) };"
+        "source": "const { owner } = trigger.data;\nconst orgRes = await fetch(`${process.env.AUTH_API_URL}/api/organization/by-slug/${owner}`, {\n  headers: { 'Content-Type': 'application/json' }\n});\nif (!orgRes.ok) return { recipients: [] };\nconst org = await orgRes.json();\nconst membersRes = await fetch(`${process.env.AUTH_API_URL}/api/organization/members?orgId=${org.id}`, {\n  headers: { 'Content-Type': 'application/json' }\n});\nif (!membersRes.ok) return { recipients: [] };\nconst { data: members } = await membersRes.json();\nconst owners = members.filter(m => m.role === 'owner');\nreturn { recipients: owners.map(m => m.user.email) };"
       },
       "next": "send-emails"
     },

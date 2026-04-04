@@ -55,7 +55,7 @@
       "position": { "x": 0, "y": 300 },
       "code": {
         "sandbox": "worker",
-        "source": "const { templateId, templateData } = trigger.data;\nconst res = await fetch(`${process.env.GATEKEEPER_API_URL}/api/email/render`, {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${process.env.EMAIL_RENDER_SECRET}`\n  },\n  body: JSON.stringify({ templateId, templateData })\n});\nif (!res.ok) throw new Error(`Render failed: ${res.status}`);\nconst json = await res.json();\nreturn { html: json.html, subject: json.subject };"
+        "source": "const { templateId, templateData } = trigger.data;\nconst res = await fetch(`${process.env.AUTH_API_URL}/api/email/render`, {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${process.env.EMAIL_RENDER_SECRET}`\n  },\n  body: JSON.stringify({ templateId, templateData })\n});\nif (!res.ok) throw new Error(`Render failed: ${res.status}`);\nconst json = await res.json();\nreturn { html: json.html, subject: json.subject };"
       },
       "next": "send"
     },
