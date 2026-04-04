@@ -13,8 +13,8 @@
  */
 
 import {
-  AETHER_API_URL,
-  AETHER_SERVICE_API_KEY,
+  BILLING_API_URL,
+  BILLING_SERVICE_API_KEY,
 } from "../lib/config/env.config";
 
 import type { Workflow } from "@hatchet-dev/typescript-sdk";
@@ -43,19 +43,19 @@ export const tierSyncWorkflow: Workflow = {
       run: async (ctx) => {
         const input = ctx.workflowInput() as TierSyncInput;
 
-        if (!AETHER_API_URL) {
-          ctx.log("AETHER_API_URL not configured, skipping sync");
+        if (!BILLING_API_URL) {
+          ctx.log("BILLING_API_URL not configured, skipping sync");
           return {
             success: false,
-            error: "AETHER_API_URL not configured",
+            error: "BILLING_API_URL not configured",
           };
         }
 
-        if (!AETHER_SERVICE_API_KEY) {
-          ctx.log("AETHER_SERVICE_API_KEY not configured, skipping sync");
+        if (!BILLING_SERVICE_API_KEY) {
+          ctx.log("BILLING_SERVICE_API_KEY not configured, skipping sync");
           return {
             success: false,
-            error: "AETHER_SERVICE_API_KEY not configured",
+            error: "BILLING_SERVICE_API_KEY not configured",
           };
         }
 
@@ -64,12 +64,12 @@ export const tierSyncWorkflow: Workflow = {
         );
 
         const response = await fetch(
-          `${AETHER_API_URL}/admin/sync-tier-limits?reseed=true`,
+          `${BILLING_API_URL}/admin/sync-tier-limits?reseed=true`,
           {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-service-api-key": AETHER_SERVICE_API_KEY,
+              "x-service-api-key": BILLING_SERVICE_API_KEY,
             },
             signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
           },

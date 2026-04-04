@@ -6,7 +6,7 @@
  * all errors are swallowed and logged so metering never blocks execution.
  */
 
-import { AETHER_API_URL, AETHER_SERVICE_API_KEY } from "lib/config/env.config";
+import { BILLING_API_URL, BILLING_SERVICE_API_KEY } from "lib/config/env.config";
 import logger from "lib/logger";
 
 const APP_ID = "vortex";
@@ -27,16 +27,16 @@ async function aetherFetch<T>(
   path: string,
   options?: RequestInit,
 ): Promise<T | null> {
-  if (!AETHER_API_URL || !AETHER_SERVICE_API_KEY) {
+  if (!BILLING_API_URL || !BILLING_SERVICE_API_KEY) {
     return null;
   }
 
   try {
-    const response = await fetch(`${AETHER_API_URL}${path}`, {
+    const response = await fetch(`${BILLING_API_URL}${path}`, {
       ...options,
       headers: {
         "content-type": "application/json",
-        "x-service-api-key": AETHER_SERVICE_API_KEY,
+        "x-service-api-key": BILLING_SERVICE_API_KEY,
         ...options?.headers,
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

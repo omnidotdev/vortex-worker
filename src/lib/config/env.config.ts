@@ -17,14 +17,14 @@ const VORTEX_EXECUTOR = process.env.VORTEX_EXECUTOR ?? "hatchet";
 const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS;
 const TEMPORAL_NAMESPACE = process.env.TEMPORAL_NAMESPACE;
 const TEMPORAL_TASK_QUEUE = process.env.TEMPORAL_TASK_QUEUE;
-// Warden (AuthZ PDP)
-const WARDEN_API_URL = process.env.WARDEN_API_URL;
-const WARDEN_SERVICE_KEY = process.env.WARDEN_SERVICE_KEY;
+// AuthZ PDP
+const AUTHZ_API_URL = process.env.AUTHZ_API_URL;
+const AUTHZ_SERVICE_KEY = process.env.AUTHZ_SERVICE_KEY;
 // App API URLs (for reconciliation)
 const RUNA_API_URL = process.env.RUNA_API_URL;
 // Aether (Billing & entitlements)
-const AETHER_API_URL = process.env.AETHER_API_URL;
-const AETHER_SERVICE_API_KEY = process.env.AETHER_SERVICE_API_KEY;
+const BILLING_API_URL = process.env.BILLING_API_URL;
+const BILLING_SERVICE_API_KEY = process.env.BILLING_SERVICE_API_KEY;
 // Chronicle (Audit logging)
 const CHRONICLE_API_URL = process.env.CHRONICLE_API_URL;
 // Meilisearch (unified search service)
@@ -105,8 +105,8 @@ export function validateEnv(): void {
 
 // Export validated variables
 export {
-  AETHER_API_URL,
-  AETHER_SERVICE_API_KEY,
+  BILLING_API_URL,
+  BILLING_SERVICE_API_KEY,
   CACHE_URL,
   CHRONICLE_API_URL,
   DATABASE_URL,
@@ -133,6 +133,6 @@ export {
   VORTEX_CALLBACK_BASE_URL,
   VORTEX_EXECUTOR,
   VORTEX_PUBLIC_URL,
-  WARDEN_API_URL,
-  WARDEN_SERVICE_KEY,
+  AUTHZ_API_URL,
+  AUTHZ_SERVICE_KEY,
 };
