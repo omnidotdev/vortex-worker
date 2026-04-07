@@ -13,7 +13,7 @@
  * TODO: Add Backfeed, Gaia when they have reconcile endpoints
  */
 
-import { RUNA_API_URL, AUTHZ_SERVICE_KEY } from "../lib/config/env.config";
+import { AUTHZ_SERVICE_KEY, RUNA_API_URL } from "../lib/config/env.config";
 
 import type { Workflow } from "@hatchet-dev/typescript-sdk";
 
