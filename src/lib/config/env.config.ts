@@ -105,6 +105,8 @@ export function validateEnv(): void {
 
 // Export validated variables
 export {
+  AUTHZ_API_URL,
+  AUTHZ_SERVICE_KEY,
   BILLING_API_URL,
   BILLING_SERVICE_API_KEY,
   CACHE_URL,
@@ -133,6 +135,4 @@ export {
   VORTEX_CALLBACK_BASE_URL,
   VORTEX_EXECUTOR,
   VORTEX_PUBLIC_URL,
-  AUTHZ_API_URL,
-  AUTHZ_SERVICE_KEY,
 };

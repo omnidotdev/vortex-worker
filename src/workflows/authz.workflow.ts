@@ -11,7 +11,7 @@
  * 4. Tuples are forwarded to Warden API
  */
 
-import { WARDEN_API_URL } from "../lib/config/env.config";
+import { AUTHZ_API_URL } from "../lib/config/env.config";
 
 import type { Workflow } from "@hatchet-dev/typescript-sdk";
 
@@ -40,11 +40,11 @@ export const authzSyncWorkflow: Workflow = {
         const input = ctx.workflowInput() as AuthzSyncInput;
         const { eventType, tuples, source } = input;
 
-        if (!WARDEN_API_URL) {
-          ctx.log("WARDEN_API_URL not configured, skipping sync");
+        if (!AUTHZ_API_URL) {
+          ctx.log("AUTHZ_API_URL not configured, skipping sync");
           return {
             success: false,
-            error: "WARDEN_API_URL not configured",
+            error: "AUTHZ_API_URL not configured",
             tupleCount: tuples.length,
             source,
           };
@@ -65,7 +65,7 @@ export const authzSyncWorkflow: Workflow = {
           `Syncing ${tuples.length} tuples from ${source} to Warden (${method})`,
         );
 
-        const response = await fetch(`${WARDEN_API_URL}/tuples`, {
+        const response = await fetch(`${AUTHZ_API_URL}/tuples`, {
           method,
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ tuples }),

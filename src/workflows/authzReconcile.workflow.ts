@@ -13,7 +13,7 @@
  * TODO: Add Backfeed, Gaia when they have reconcile endpoints
  */
 
-import { RUNA_API_URL, WARDEN_SERVICE_KEY } from "../lib/config/env.config";
+import { RUNA_API_URL, AUTHZ_SERVICE_KEY } from "../lib/config/env.config";
 
 import type { Workflow } from "@hatchet-dev/typescript-sdk";
 
@@ -101,12 +101,12 @@ export const authzReconcileWorkflow: Workflow = {
         const results: ReconcileResult[] = [];
 
         // Reconcile Runa
-        if (RUNA_API_URL && WARDEN_SERVICE_KEY) {
+        if (RUNA_API_URL && AUTHZ_SERVICE_KEY) {
           ctx.log("Reconciling Runa...");
           const runaResult = await reconcileApp(
             "runa",
             RUNA_API_URL,
-            WARDEN_SERVICE_KEY,
+            AUTHZ_SERVICE_KEY,
           );
           results.push(runaResult);
 
@@ -118,7 +118,7 @@ export const authzReconcileWorkflow: Workflow = {
             ctx.log(`Runa reconcile failed: ${runaResult.error}`);
           }
         } else {
-          ctx.log("Skipping Runa: RUNA_API_URL or WARDEN_SERVICE_KEY not set");
+          ctx.log("Skipping Runa: RUNA_API_URL or AUTHZ_SERVICE_KEY not set");
         }
 
         // TODO: Add more apps as they implement /authz/reconcile
