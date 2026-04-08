@@ -53,6 +53,7 @@ export const dslWorkflow: Workflow = {
   steps: [
     {
       name: "execute-dsl",
+      timeout: "300s",
       run: async (ctx) => {
         const input = ctx.workflowInput() as DSLWorkflowInput;
         const { workflowId, organizationId, triggerData } = input;
