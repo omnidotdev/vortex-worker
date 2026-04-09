@@ -9,11 +9,15 @@
  * 2. Log results for observability
  * 3. Alert on errors (via workflow failure)
  *
- * Currently supports: Runa
+ * Currently supports: Vortex, Runa
  * TODO: Add Backfeed, Gaia when they have reconcile endpoints
  */
 
-import { AUTHZ_SERVICE_KEY, RUNA_API_URL } from "../lib/config/env.config";
+import {
+  AUTHZ_SERVICE_KEY,
+  RUNA_API_URL,
+  VORTEX_API_URL,
+} from "../lib/config/env.config";
 
 import type { Workflow } from "@hatchet-dev/typescript-sdk";
 
@@ -38,9 +42,10 @@ async function reconcileApp(
   app: string,
   apiUrl: string,
   serviceKey: string,
+  path = "/authz/reconcile",
 ): Promise<ReconcileResult> {
   try {
-    const response = await fetch(`${apiUrl}/authz/reconcile`, {
+    const response = await fetch(`${apiUrl}${path}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -99,6 +104,30 @@ export const authzReconcileWorkflow: Workflow = {
       retries: 2,
       run: async (ctx) => {
         const results: ReconcileResult[] = [];
+
+        // Reconcile Vortex
+        if (VORTEX_API_URL && AUTHZ_SERVICE_KEY) {
+          ctx.log("Reconciling Vortex...");
+          const vortexResult = await reconcileApp(
+            "vortex",
+            VORTEX_API_URL,
+            AUTHZ_SERVICE_KEY,
+            "/api/v1/authz/reconcile",
+          );
+          results.push(vortexResult);
+
+          if (vortexResult.success) {
+            ctx.log(
+              `Vortex: expected=${vortexResult.expected}, actual=${vortexResult.actual}, written=${vortexResult.written}`,
+            );
+          } else {
+            ctx.log(`Vortex reconcile failed: ${vortexResult.error}`);
+          }
+        } else {
+          ctx.log(
+            "Skipping Vortex: VORTEX_API_URL or AUTHZ_SERVICE_KEY not set",
+          );
+        }
 
         // Reconcile Runa
         if (RUNA_API_URL && AUTHZ_SERVICE_KEY) {
