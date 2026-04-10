@@ -389,9 +389,10 @@ export function findTriggerStep(steps: Step[]): TriggerStep | undefined {
  * trigger node, such as manually dispatched workflows
  */
 export function findRootSteps(def: WorkflowDefinition): Step[] {
-  const targets = new Set(def.edges.map((e) => e.target));
+  const edges = def.edges ?? [];
+  const targets = new Set(edges.map((e) => e.target));
 
-  return def.steps.filter((s) => !targets.has(s.id));
+  return (def.steps ?? []).filter((s) => !targets.has(s.id));
 }
 
 export function findNextSteps(
@@ -399,7 +400,8 @@ export function findNextSteps(
   currentStepId: string,
   sourceHandle?: string,
 ): Step[] {
-  const outgoingEdges = def.edges.filter((e) => {
+  const edges = def.edges ?? [];
+  const outgoingEdges = edges.filter((e) => {
     if (e.source !== currentStepId) return false;
     if (sourceHandle && e.sourceHandle !== sourceHandle) return false;
     return true;

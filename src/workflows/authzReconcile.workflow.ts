@@ -56,6 +56,15 @@ async function reconcileApp(
     });
 
     if (!response.ok) {
+      // 404 means the app doesn't expose a reconcile endpoint yet -- treat
+      // as a skip, not a failure, so the cron doesn't fail unnecessarily
+      if (response.status === 404) {
+        return {
+          app,
+          success: true,
+          error: "endpoint not implemented (skipped)",
+        };
+      }
       const errorText = await response.text().catch(() => "Unknown error");
       return {
         app,
