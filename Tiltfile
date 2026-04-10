@@ -20,7 +20,7 @@ local_resource(
     resource_deps=["hatchet"],
 )
 
-docker_compose('docker-compose.yml')
+docker_compose('compose.yaml')
 
 # Hatchet dashboard at http://localhost:8888
 dc_resource('hatchet', labels=['workflow-engine'])
