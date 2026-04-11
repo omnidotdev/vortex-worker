@@ -119,7 +119,9 @@ describe("checkUsage", () => {
 
   it("should return null when Aether returns non-OK status", async () => {
     globalThis.fetch = (async () =>
-      new Response("Internal Server Error", { status: 500 })) as unknown as typeof fetch;
+      new Response("Internal Server Error", {
+        status: 500,
+      })) as unknown as typeof fetch;
 
     const { checkUsage } = await import("../billing/usageClient");
     const result = await checkUsage(
