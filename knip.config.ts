@@ -56,6 +56,9 @@ const knipConfig: KnipConfig = {
     "extism-js",
   ],
   ignoreDependencies: [
+    // Changeset tooling (invoked via npx/bunx, not imported)
+    "@changesets/changelog-github",
+    "@changesets/cli",
     // All @activepieces/* packages are dynamically loaded at runtime based on integration type
     "@activepieces/*",
     // OpenTelemetry deps used by instrumentation.ts (loaded via --import)
