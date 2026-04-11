@@ -1,1 +1,1 @@
-export { recordUsage } from "./usageClient";
+export { checkUsage, recordUsage } from "./usageClient";

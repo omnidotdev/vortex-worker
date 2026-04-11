@@ -71,6 +71,39 @@ async function aetherFetch<T>(
  * @param delta - Amount to increment
  * @param idempotencyKey - Optional key to prevent duplicate recording
  */
+type UsageCheckResponse = {
+  allowed: boolean;
+  currentUsage: number;
+  limit: number;
+};
+
+/**
+ * Check whether additional usage is allowed under the current plan.
+ * Returns null on any error for graceful degradation (allows execution
+ * to proceed if Aether is unreachable).
+ *
+ * @param entityType - Billing entity type (e.g. "organization")
+ * @param entityId - ID of the billing entity
+ * @param meterKey - Usage meter identifier
+ * @param additionalUsage - How many units to check against the limit
+ */
+export async function checkUsage(
+  entityType: string,
+  entityId: string,
+  meterKey: string,
+  additionalUsage?: number,
+): Promise<UsageCheckResponse | null> {
+  const params = new URLSearchParams();
+  if (additionalUsage !== undefined) {
+    params.set("additionalUsage", String(additionalUsage));
+  }
+
+  const qs = params.toString();
+  const path = `/usage/${APP_ID}/${entityType}/${entityId}/${meterKey}/check${qs ? `?${qs}` : ""}`;
+
+  return aetherFetch<UsageCheckResponse>(path);
+}
+
 export async function recordUsage(
   entityType: string,
   entityId: string,

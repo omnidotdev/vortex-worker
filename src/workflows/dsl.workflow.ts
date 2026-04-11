@@ -1,3 +1,4 @@
+import { checkUsage, recordUsage } from "billing";
 import { eq } from "drizzle-orm";
 
 import logger from "lib/logger";
@@ -194,6 +195,28 @@ export const dslWorkflow: Workflow = {
 
         // Create inverted map for looking up step names by ID
         const stepIdToName = invertStepNameMap(stepNameToId);
+
+        // Pre-execution billing check (defense-in-depth, API also checks)
+        if (organizationId) {
+          const usageCheck = await checkUsage(
+            "organization",
+            organizationId,
+            "workflow_executions",
+            1,
+          );
+
+          if (usageCheck && !usageCheck.allowed) {
+            void recordUsage(
+              "organization",
+              organizationId,
+              "rejected_executions",
+              1,
+            );
+            throw new Error(
+              `Plan limit reached: workflow executions (${usageCheck.currentUsage}/${usageCheck.limit}). Upgrade your plan to continue.`,
+            );
+          }
+        }
 
         runLogger.info("Starting workflow execution");
 

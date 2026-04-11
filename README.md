@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌪️ Vortex Worker
+# Vortex Worker
 
 DSL executor and workflow engine for Vortex
 
@@ -26,16 +26,20 @@ Vortex Worker is the execution engine for [Vortex](https://github.com/omnidotdev
 
 First, `cp .env.local.template .env.local` and fill in the values.
 
+### Building and Running
+
+Run `tilt up`, or:
+
 Install dependencies:
 
 ```sh
-bun install
+bun i
 ```
 
 Run the worker:
 
 ```sh
-bun run dev
+bun dev
 ```
 
 The worker connects to Hatchet (or Temporal/local, depending on `EXECUTOR_ADAPTER`) and begins processing workflow events.
@@ -43,6 +47,18 @@ The worker connects to Hatchet (or Temporal/local, depending on `EXECUTOR_ADAPTE
 ## Architecture
 
 Step types live in `src/dsl/types.ts` (Zod schemas) with dispatch logic in `src/dsl/executor.ts`. Trigger adapters live in `src/adapters/*.adapter.ts` and are registered in `src/triggers/registry.ts`. Hatchet workflows live in `src/workflows/`.
+
+## Testing
+
+```sh
+bun test
+
+# or in watch mode
+bun test:watch
+
+# or test with coverage reporting
+bun test:coverage
+```
 
 ## License
 
