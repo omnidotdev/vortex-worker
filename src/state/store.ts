@@ -1,0 +1,94 @@
+/**
+ * Cross-workflow state store backed by cache
+ *
+ * Provides org-scoped key-value storage for sharing data between workflows
+ */
+
+import Redis from "iovalkey";
+
+const CACHE_URL = process.env.CACHE_URL;
+
+let cache: Redis | null = null;
+
+function getCache(): Redis {
+  if (!cache) {
+    if (!CACHE_URL) {
+      throw new Error("CACHE_URL is required for state store");
+    }
+    cache = new Redis(CACHE_URL);
+  }
+  return cache;
+}
+
+function scopedKey(orgId: string, key: string): string {
+  return `vortex:state:${orgId}:${key}`;
+}
+
+export const stateStore = {
+  async get(orgId: string, key: string): Promise<unknown | null> {
+    const value = await getCache().get(scopedKey(orgId, key));
+    if (value === null) return null;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  },
+
+  async set(
+    orgId: string,
+    key: string,
+    value: unknown,
+    ttl?: number,
+  ): Promise<void> {
+    const serialized = JSON.stringify(value);
+    if (ttl) {
+      await getCache().setex(scopedKey(orgId, key), ttl, serialized);
+    } else {
+      await getCache().set(scopedKey(orgId, key), serialized);
+    }
+  },
+
+  async delete(orgId: string, key: string): Promise<void> {
+    await getCache().del(scopedKey(orgId, key));
+  },
+
+  async increment(orgId: string, key: string, by = 1): Promise<number> {
+    if (by === 1) {
+      return getCache().incr(scopedKey(orgId, key));
+    }
+    return getCache().incrby(scopedKey(orgId, key), by);
+  },
+
+  async append(orgId: string, key: string, value: unknown): Promise<void> {
+    const serialized = JSON.stringify(value);
+    await getCache().rpush(scopedKey(orgId, key), serialized);
+  },
+
+  async getList(orgId: string, key: string): Promise<unknown[]> {
+    const items = await getCache().lrange(scopedKey(orgId, key), 0, -1);
+    return items.map((item) => {
+      try {
+        return JSON.parse(item);
+      } catch {
+        return item;
+      }
+    });
+  },
+
+  async publish(
+    orgId: string,
+    channel: string,
+    message: unknown,
+  ): Promise<void> {
+    await getCache().publish(
+      `vortex:pubsub:${orgId}:${channel}`,
+      JSON.stringify(message),
+    );
+  },
+
+  async exists(orgId: string, key: string): Promise<boolean> {
+    const result = await getCache().exists(scopedKey(orgId, key));
+    return result === 1;
+  },
+};
