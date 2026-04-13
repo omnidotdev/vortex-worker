@@ -1,0 +1,94 @@
+{
+  "version": "1.0",
+  "executor": "temporal",
+  "settings": {
+    "timeout": "2m",
+    "retryPolicy": {
+      "maxAttempts": 3,
+      "backoffCoefficient": 2,
+      "initialInterval": "1s",
+      "maxInterval": "30s"
+    }
+  },
+  "edges": [],
+  "steps": [
+    {
+      "id": "trigger",
+      "type": "trigger",
+      "name": "Email Requested",
+      "position": { "x": 0, "y": 0 },
+      "trigger": {
+        "type": "event",
+        "config": {
+          "pattern": "gatekeeper.email.*",
+          "source": "omni.gatekeeper"
+        }
+      },
+      "next": "check-suppression"
+    },
+    {
+      "id": "check-suppression",
+      "type": "code",
+      "name": "Check Suppression List",
+      "position": { "x": 0, "y": 100 },
+      "code": {
+        "sandbox": "worker",
+        "source": "const { to } = trigger.data;\nconst res = await fetch(process.env.VORTEX_API_URL, {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${process.env.VORTEX_API_KEY}`\n  },\n  body: JSON.stringify({\n    query: `query CheckSuppression($email: String!) {\n      emailSuppressions(condition: { email: $email }) {\n        totalCount\n      }\n    }`,\n    variables: { email: to }\n  })\n});\nconst json = await res.json();\nconst count = json.data?.emailSuppressions?.totalCount ?? 0;\nreturn { suppressed: count > 0 };"
+      },
+      "next": "check-not-suppressed"
+    },
+    {
+      "id": "check-not-suppressed",
+      "type": "condition",
+      "name": "Suppressed?",
+      "position": { "x": 0, "y": 200 },
+      "condition": {
+        "expression": "{{ steps['check-suppression'].output.suppressed === true }}",
+        "trueBranch": "end-suppressed",
+        "falseBranch": "render"
+      }
+    },
+    {
+      "id": "render",
+      "type": "code",
+      "name": "Render Email Template",
+      "position": { "x": 0, "y": 300 },
+      "code": {
+        "sandbox": "worker",
+        "source": "const { templateId, templateData } = trigger.data;\nconst res = await fetch(`${process.env.AUTH_API_URL}/api/email/render`, {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${process.env.EMAIL_RENDER_SECRET}`\n  },\n  body: JSON.stringify({ templateId, templateData })\n});\nif (!res.ok) throw new Error(`Render failed: ${res.status}`);\nconst json = await res.json();\nreturn { html: json.html, subject: json.subject };"
+      },
+      "next": "send"
+    },
+    {
+      "id": "send",
+      "type": "code",
+      "name": "Send via Resend",
+      "position": { "x": 0, "y": 400 },
+      "code": {
+        "sandbox": "worker",
+        "source": "const { to, senderAddress } = trigger.data;\nconst { html, subject } = steps['render'].output;\nconst res = await fetch('https://api.resend.com/emails', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${process.env.RESEND_API_KEY}`\n  },\n  body: JSON.stringify({\n    from: senderAddress,\n    to: [to],\n    subject,\n    html\n  })\n});\nif (!res.ok) throw new Error(`Resend failed: ${res.status}`);\nconst json = await res.json();\nreturn { messageId: json.id };"
+      },
+      "next": "end"
+    },
+    {
+      "id": "end",
+      "type": "stop",
+      "name": "Workflow Complete",
+      "position": { "x": 0, "y": 500 },
+      "stop": {
+        "status": "success",
+        "reason": "Email sent successfully"
+      }
+    },
+    {
+      "id": "end-suppressed",
+      "type": "stop",
+      "name": "Email Suppressed",
+      "position": { "x": 200, "y": 300 },
+      "stop": {
+        "status": "success",
+        "reason": "Email suppressed"
+      }
+    }
+  ]
+}
