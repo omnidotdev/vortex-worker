@@ -1,0 +1,18 @@
+build/
+node_modules/
+
+# TLS
+*.pem
+
+# environment
+.env
+.env.*
+!.env.*template
+!.env.development
+!.env.production
+
+# logs
+logs/
+
+# catalog cache
+scripts/.catalog-cache
