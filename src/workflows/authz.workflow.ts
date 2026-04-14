@@ -11,7 +11,7 @@
  * 4. Tuples are forwarded to Warden API
  */
 
-import { AUTHZ_API_URL } from "../lib/config/env.config";
+import { AUTHZ_API_URL, AUTHZ_SERVICE_KEY } from "../lib/config/env.config";
 
 import type { Workflow } from "@hatchet-dev/typescript-sdk";
 
@@ -65,9 +65,17 @@ export const authzSyncWorkflow: Workflow = {
           `Syncing ${tuples.length} tuples from ${source} to Warden (${method})`,
         );
 
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+
+        if (AUTHZ_SERVICE_KEY) {
+          headers["X-Service-Key"] = AUTHZ_SERVICE_KEY;
+        }
+
         const response = await fetch(`${AUTHZ_API_URL}/tuples`, {
           method,
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({ tuples }),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
