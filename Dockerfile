@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.3 AS base
+FROM oven/bun:1.3.13 AS base
 WORKDIR /app
 
 # Install production dependencies only
