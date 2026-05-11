@@ -673,7 +673,7 @@
     "@types/amqplib": "^0.10.8",
     "@types/papaparse": "^5.5.2",
     "ajv": "^8.18.0",
-    "amqplib": "^1.0.3",
+    "amqplib": "^2.0.0",
     "cel-js": "^0.8.2",
     "drizzle-orm": "^0.45.2",
     "graphql-ws": "^6.0.8",
