@@ -1,0 +1,28 @@
+diff --git a/dist/wire/topic/topic.utils.js b/dist/wire/topic/topic.utils.js
+index b4db840a9b934a987a5fa8bba6e596b313f8cff3..f8e2a1c3d4b5a6e7f8091a2b3c4d5e6f7a8b9c0d 100644
+--- a/dist/wire/topic/topic.utils.js
++++ b/dist/wire/topic/topic.utils.js
+@@ -50,10 +50,9 @@ export const deserializeTopic = (p, pos = 0) => {
+     const { bytesRead, data } = deserializeBaseTopic(p, pos);
+     pos += bytesRead;
+     const partitions = [];
+-    const end = p.length;
+-    while (pos < end) {
+-        const { bytesRead, data } = deserializePartition(p, pos);
+-        partitions.push(data);
++    for (let i = 0; i < data.partitionsCount; i++) {
++        const { bytesRead, data: partData } = deserializePartition(p, pos);
++        partitions.push(partData);
+         pos += bytesRead;
+     }
+     return { bytesRead: pos - start, data: { ...data, partitions } };
+@@ -61,8 +60,8 @@ export const deserializeTopic = (p, pos = 0) => {
+ export const deserializeTopics = (p, pos = 0) => {
+     const topics = [];
+     const len = p.length;
+     while (pos < len) {
+-        const { bytesRead, data } = deserializeTopic(p, pos);
++        const { bytesRead, data } = deserializeBaseTopic(p, pos);
+         topics.push(data);
+         pos += bytesRead;
+     }
