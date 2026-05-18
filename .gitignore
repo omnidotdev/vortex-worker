@@ -3,6 +3,12 @@ build/
 node_modules/
 .playwright-mcp/
 
+# tooling
+.claude
+AGENTS.md
+CLAUDE.md
+.cursorrules
+
 # TLS
 *.pem
 

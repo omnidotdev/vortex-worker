@@ -17,6 +17,7 @@
     "catalog:generate": "bun run scripts/generateCatalog.ts",
     "postinstall": "bun catalog:generate",
     "test": "bun test",
+    "test:coverage": "bun test --coverage",
     "test:integration": "bun test src/__tests__/integration/",
     "test:watch": "bun test --watch",
     "build:evaluator": "extism-js src/sandbox/wasm/evaluator.js -i src/sandbox/wasm/evaluator.d.ts -o src/sandbox/wasm/evaluator.wasm",
@@ -29,7 +30,7 @@
     "protobufjs"
   ],
   "devDependencies": {
-    "@biomejs/biome": "2.4.12",
+    "@biomejs/biome": "2.4.15",
     "@changesets/changelog-github": "^0.6.0",
     "@changesets/cli": "^2.31.0",
     "@types/bun": "^1.3.12",
@@ -653,7 +654,7 @@
     "@google-cloud/storage": "^7.19.0",
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
-    "@hatchet-dev/typescript-sdk": "^1.21.0",
+    "@hatchet-dev/typescript-sdk": "^1.22.3",
     "@iggy.rs/sdk": "^1.0.6",
     "@ironclad/rivet-core": "^1.25.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
