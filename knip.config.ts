@@ -5,7 +5,7 @@ import type { KnipConfig } from "knip";
  * @see https://knip.dev/overview/configuration
  */
 const knipConfig: KnipConfig = {
-  entry: ["src/index.ts"],
+  entry: ["src/index.ts", "src/health.worker.ts"],
   project: ["src/**/*.ts"],
   // Used for proper management of exports (see https://knip.dev/reference/configuration#ignoreexportsusedinfile)
   ignoreExportsUsedInFile: true,

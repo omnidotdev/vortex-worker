@@ -122,70 +122,29 @@ const pushEventBucket = {
 };
 
 async function main() {
-  // Track Hatchet readiness for health checks
-  let hatchetReady = false;
   let hatchetInstance: ReturnType<typeof Hatchet.init> | undefined;
 
-  // Lazily initialized executor for health checks (avoid blocking server startup)
-  let executor: Awaited<ReturnType<typeof getDefaultExecutor>> | null = null;
-  let executorInitFailed = false;
-
-  // Set to true once the executor initialises successfully. Not reset on
-  // transient errors — liveness only needs to know the process is live.
-  // Calling executor.healthCheck() (which does a live gRPC ping) blocks
-  // Bun's event loop when Hatchet is slow, preventing the probe from
-  // responding within its 1 s timeout. We track health through
-  // initialisation events instead.
-  let executorEverReady = false;
-
-  // Start HTTP server FIRST so liveness/readiness probes and push-event
-  // are available immediately, before any external dependency connects
+  // Spawn the health worker on HEALTH_PORT (8080). It runs on a dedicated
+  // event loop so Iggy's blocking TCP I/O never delays probe responses.
+  // The main thread's API server runs on HEALTH_PORT+1 and the worker proxies
+  // /push-event and /execute-step to it.
   const HEALTH_PORT = Number(process.env.HEALTH_PORT ?? "8080");
+  const API_PORT = HEALTH_PORT + 1;
+  const healthWorkerPath = import.meta.path
+    .replace(/index\.js$/, "health.worker.js")
+    .replace(/index\.ts$/, "health.worker.ts");
+  const healthWorker = new Worker(healthWorkerPath);
+
+  const postHealthState = (patch: Record<string, unknown>) =>
+    healthWorker.postMessage(patch);
+
+  // Start API server on API_PORT (8081) for push-event and execute-step.
+  // Health probes hit the worker on 8080 instead.
   const healthServer = Bun.serve({
-    port: HEALTH_PORT,
+    port: API_PORT,
     hostname: "0.0.0.0",
     async fetch(req) {
       const url = new URL(req.url);
-
-      if (url.pathname === "/health") {
-        // Liveness: process is alive as long as this handler can respond.
-        // No external ping — gRPC healthCheck() blocks Bun's event loop and
-        // causes the 1 s kubelet timeout to fire before we can reply.
-        return Response.json({
-          status: executorEverReady && hatchetReady ? "ok" : "degraded",
-          timestamp: Date.now(),
-          service: "vortex-worker",
-          hatchet: hatchetReady ? "connected" : "initializing",
-          executor: executor
-            ? executorEverReady
-              ? "ok"
-              : "unreachable"
-            : executorInitFailed
-              ? "init_failed"
-              : "initializing",
-        });
-      }
-
-      if (url.pathname === "/ready") {
-        const isReady = hatchetReady && executorEverReady;
-
-        return Response.json(
-          {
-            ready: isReady,
-            timestamp: Date.now(),
-            service: "vortex-worker",
-            hatchet: hatchetReady ? "connected" : "initializing",
-            executor: executor
-              ? executorEverReady
-                ? "ok"
-                : "unreachable"
-              : executorInitFailed
-                ? "init_failed"
-                : "initializing",
-          },
-          { status: isReady ? 200 : 503 },
-        );
-      }
 
       if (req.method === "POST" && url.pathname === "/execute-step") {
         // Validate internal secret (skip in dev when not configured)
@@ -335,7 +294,7 @@ async function main() {
       return new Response("Not found", { status: 404 });
     },
   });
-  logger.info("Worker health server running", { port: HEALTH_PORT });
+  logger.info("Worker API server running", { port: API_PORT });
 
   // Now initialize dependencies (HTTP server is already accepting requests)
   await initCache();
@@ -347,14 +306,14 @@ async function main() {
   // Initialize trigger adapter registry (built-in + external plugins)
   await initTriggerRegistry();
 
-  // Initialize executor for health checks (background, non-blocking)
+  // Initialize executor to verify connectivity (background, non-blocking)
   void (async () => {
     try {
-      executor = await getDefaultExecutor();
-      executorEverReady = true;
+      await getDefaultExecutor();
+      postHealthState({ executorEverReady: true, hasExecutor: true });
       logger.info("Executor initialized for health checks");
     } catch (err) {
-      executorInitFailed = true;
+      postHealthState({ executorInitFailed: true });
       logger.error("Failed to initialize executor for health checks", {
         error: err instanceof Error ? err.message : String(err),
       });
@@ -382,11 +341,11 @@ async function main() {
             tokenRefreshWorkflow,
           ],
         });
-        hatchetReady = true;
+        postHealthState({ hatchetReady: true });
         logger.info("Hatchet worker registered");
         // Run in background, do not await (start() blocks until connection closes)
         worker.start().catch((err) => {
-          hatchetReady = false;
+          postHealthState({ hatchetReady: false });
           logger.error("Hatchet worker error", {
             error: err instanceof Error ? err.message : String(err),
           });
@@ -508,6 +467,7 @@ async function main() {
   // Graceful shutdown
   const shutdown = async () => {
     logger.info("Shutting down worker");
+    healthWorker.terminate();
     healthServer.stop();
     // Temporal worker shuts down via its own error handling
     eventsConsumer?.stop();
