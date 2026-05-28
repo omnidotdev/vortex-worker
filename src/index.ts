@@ -130,6 +130,29 @@ async function main() {
   let executor: Awaited<ReturnType<typeof getDefaultExecutor>> | null = null;
   let executorInitFailed = false;
 
+  // Cached executor health state updated by a background loop.
+  // Probes read this directly so the HTTP handler always returns instantly —
+  // calling executor.healthCheck() inline can block Bun's event loop when
+  // Hatchet is slow, which causes the kubelet probe to time out even though
+  // Bun.sleep-based races cannot fire while the loop is blocked.
+  let cachedExecutorHealthy = false;
+
+  async function runHealthLoop() {
+    while (true) {
+      await Bun.sleep(5000);
+      if (!executor) continue;
+      try {
+        cachedExecutorHealthy = await Promise.race([
+          executor.healthCheck(),
+          Bun.sleep(4000).then(() => false),
+        ]);
+      } catch {
+        cachedExecutorHealthy = false;
+      }
+    }
+  }
+  runHealthLoop();
+
   // Start HTTP server FIRST so liveness/readiness probes and push-event
   // are available immediately, before any external dependency connects
   const HEALTH_PORT = Number(process.env.HEALTH_PORT ?? "8080");
@@ -140,28 +163,13 @@ async function main() {
       const url = new URL(req.url);
 
       if (url.pathname === "/health") {
-        // Liveness: always 200 as long as the process is running
-        // Hatchet readiness is reported but does not block liveness
-        let executorHealthy = false;
-        if (executor) {
-          try {
-            // Timeout so a stuck Hatchet connection never blocks liveness
-            executorHealthy = await Promise.race([
-              executor.healthCheck(),
-              Bun.sleep(2000).then(() => false),
-            ]);
-          } catch {
-            executorHealthy = false;
-          }
-        }
-
         return Response.json({
-          status: executorHealthy && hatchetReady ? "ok" : "degraded",
+          status: cachedExecutorHealthy && hatchetReady ? "ok" : "degraded",
           timestamp: Date.now(),
           service: "vortex-worker",
           hatchet: hatchetReady ? "connected" : "initializing",
           executor: executor
-            ? executorHealthy
+            ? cachedExecutorHealthy
               ? "ok"
               : "unreachable"
             : executorInitFailed
@@ -171,21 +179,7 @@ async function main() {
       }
 
       if (url.pathname === "/ready") {
-        // Readiness: returns 503 when Hatchet or executor are not healthy,
-        // so K8s stops routing traffic until the worker is fully operational
-        let executorHealthy = false;
-        if (executor) {
-          try {
-            executorHealthy = await Promise.race([
-              executor.healthCheck(),
-              Bun.sleep(2000).then(() => false),
-            ]);
-          } catch {
-            executorHealthy = false;
-          }
-        }
-
-        const isReady = hatchetReady && executorHealthy;
+        const isReady = hatchetReady && cachedExecutorHealthy;
 
         return Response.json(
           {
@@ -194,7 +188,7 @@ async function main() {
             service: "vortex-worker",
             hatchet: hatchetReady ? "connected" : "initializing",
             executor: executor
-              ? executorHealthy
+              ? cachedExecutorHealthy
                 ? "ok"
                 : "unreachable"
               : executorInitFailed
