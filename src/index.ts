@@ -145,7 +145,11 @@ async function main() {
         let executorHealthy = false;
         if (executor) {
           try {
-            executorHealthy = await executor.healthCheck();
+            // Timeout so a stuck Hatchet connection never blocks liveness
+            executorHealthy = await Promise.race([
+              executor.healthCheck(),
+              Bun.sleep(2000).then(() => false),
+            ]);
           } catch {
             executorHealthy = false;
           }
@@ -172,7 +176,10 @@ async function main() {
         let executorHealthy = false;
         if (executor) {
           try {
-            executorHealthy = await executor.healthCheck();
+            executorHealthy = await Promise.race([
+              executor.healthCheck(),
+              Bun.sleep(2000).then(() => false),
+            ]);
           } catch {
             executorHealthy = false;
           }
