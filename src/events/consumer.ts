@@ -21,6 +21,9 @@ const DEFAULT_PARTITIONS = 3;
 // 90-day retention
 const RETENTION_SECONDS = 90 * 24 * 60 * 60;
 
+// Token bucket defaults — VORTEX_MAX_EVENTS_PER_SECOND env var overrides
+const DEFAULT_MAX_EVENTS_PER_SECOND = 50;
+
 class EventsConsumer {
   #config: EventsConfig;
   #handler: EventHandler;
@@ -31,10 +34,30 @@ class EventsConsumer {
   #consumerGroups = new Set<string>();
   // Track which DLQ topics have been created
   #dlqTopics = new Set<string>();
+  // Token bucket for rate limiting — null means unlimited
+  #tokenBucket: {
+    tokens: number;
+    lastRefillMs: number;
+    maxTokens: number;
+    refillRatePerMs: number;
+  } | null = null;
 
   constructor(config: EventsConfig, handler: EventHandler) {
     this.#config = config;
     this.#handler = handler;
+
+    const maxEventsPerSecond = Number(
+      process.env.VORTEX_MAX_EVENTS_PER_SECOND ?? DEFAULT_MAX_EVENTS_PER_SECOND,
+    );
+
+    if (maxEventsPerSecond > 0) {
+      this.#tokenBucket = {
+        tokens: maxEventsPerSecond,
+        lastRefillMs: Date.now(),
+        maxTokens: maxEventsPerSecond,
+        refillRatePerMs: maxEventsPerSecond / 1000,
+      };
+    }
   }
 
   /**
@@ -126,6 +149,35 @@ class EventsConsumer {
   }
 
   /**
+   * Block until a rate-limit token is available, then consume it.
+   *
+   * No-op when no token bucket is configured (VORTEX_MAX_EVENTS_PER_SECOND=0).
+   */
+  async #consumeToken(): Promise<void> {
+    const bucket = this.#tokenBucket;
+    if (!bucket) return;
+
+    const now = Date.now();
+    const elapsed = now - bucket.lastRefillMs;
+    bucket.tokens = Math.min(
+      bucket.maxTokens,
+      bucket.tokens + elapsed * bucket.refillRatePerMs,
+    );
+    bucket.lastRefillMs = now;
+
+    if (bucket.tokens >= 1) {
+      bucket.tokens -= 1;
+      return;
+    }
+
+    // Sleep until enough tokens have accrued for one event
+    const waitMs = Math.ceil((1 - bucket.tokens) / bucket.refillRatePerMs);
+    await Bun.sleep(waitMs);
+    bucket.tokens = 0;
+    bucket.lastRefillMs = Date.now();
+  }
+
+  /**
    * Poll a single topic and dispatch each message to the handler.
    */
   async #pollTopic(client: Client, topicId: string): Promise<void> {
@@ -153,6 +205,7 @@ class EventsConsumer {
       }
 
       try {
+        await this.#consumeToken();
         await this.#handler(event);
       } catch (err) {
         logger.error("Event handler failed", {
