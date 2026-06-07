@@ -664,7 +664,7 @@
     "@opentelemetry/exporter-trace-otlp-http": "^0.214.0",
     "@opentelemetry/resources": "^2.7.0",
     "@opentelemetry/sdk-logs": "^0.214.0",
-    "@opentelemetry/sdk-node": "^0.214.0",
+    "@opentelemetry/sdk-node": "^0.218.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@sentry/bun": "^10.49.0",
     "@temporalio/activity": "^1.16.0",
