@@ -199,13 +199,28 @@ describe("halo-order-confirmed template", () => {
     expect(resendSends).toHaveLength(0);
     expect(heraldSends[0].body).toMatchObject({
       to: "buyer@example.com",
-      from: "orders@omni.dev",
+      // Herald sends from its DKIM-signed sending domain, not the Resend sender
+      from: "orders@send.omni.dev",
       subject: "Your Hike & Heal order ORD-ABC",
     });
     // Idempotency key dedupes the send across the workflow's retry policy
     expect(heraldSends[0].body.idempotencyKey).toBe(
       "ORD-ABC:buyer@example.com",
     );
+  });
+
+  it("sends Herald mail from send.omni.dev, overridable via HERALD_SENDER_EMAIL_ADDRESS", async () => {
+    // Default: the verified send.omni.dev domain (KumoMTA only DKIM-signs that),
+    // independent of the Resend SENDER_EMAIL_ADDRESS
+    const def = await runWithFetch(sampleData, heraldEnv, okHandler);
+    expect(def.heraldSends[0].body.from).toBe("orders@send.omni.dev");
+
+    const overridden = await runWithFetch(
+      sampleData,
+      { ...heraldEnv, HERALD_SENDER_EMAIL_ADDRESS: "receipts@send.omni.dev" },
+      okHandler,
+    );
+    expect(overridden.heraldSends[0].body.from).toBe("receipts@send.omni.dev");
   });
 
   it("falls back to Resend when a Herald send fails", async () => {
