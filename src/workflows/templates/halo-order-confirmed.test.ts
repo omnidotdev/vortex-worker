@@ -138,6 +138,109 @@ describe("halo-order-confirmed template", () => {
     expect(sends).toHaveLength(0);
   });
 
+  // Capture every outbound call (Herald, Resend, Vortex suppression) so a test
+  // can assert which provider the send path chose. `handler` decides each
+  // response so a test can simulate a Herald success or failure.
+  const runWithFetch = async (
+    data: Record<string, unknown>,
+    env: Record<string, string>,
+    handler: (url: string, body: Record<string, unknown>) => unknown,
+  ) => {
+    const calls: { url: string; body: Record<string, unknown> }[] = [];
+    const fetchMock = async (url: string, opts: { body: string }) => {
+      const body = JSON.parse(opts.body);
+      calls.push({ url, body });
+      return handler(url, body);
+    };
+    const fn = new Function(
+      "trigger",
+      "process",
+      "fetch",
+      "console",
+      `return (async () => { ${codeSource()} })()`,
+    );
+    const result = await fn({ data }, { env }, fetchMock, console);
+    return {
+      result,
+      heraldSends: calls.filter((c) => c.url.includes("/messages")),
+      resendSends: calls.filter((c) => c.url.includes("resend.com")),
+    };
+  };
+
+  const heraldEnv = {
+    ...fullEnv,
+    HERALD_SEND_ENABLED: "true",
+    HERALD_API_URL: "https://api.herald.test",
+    HERALD_API_KEY: "hk_test",
+  };
+
+  // Default handler: Herald accepts, Resend accepts, no suppression
+  const okHandler = (url: string) => {
+    if (url.includes("/messages"))
+      return { ok: true, json: async () => ({ id: "h1", status: "queued" }) };
+    if (url.includes("resend.com"))
+      return { ok: true, json: async () => ({ id: "r1" }) };
+    return {
+      ok: true,
+      json: async () => ({ data: { emailSuppressions: { totalCount: 0 } } }),
+      text: async () => "",
+    };
+  };
+
+  it("sends via Herald (not Resend) when HERALD_SEND_ENABLED is true", async () => {
+    const { result, heraldSends, resendSends } = await runWithFetch(
+      sampleData,
+      heraldEnv,
+      okHandler,
+    );
+
+    expect(result).toEqual({ sent: 2 });
+    expect(heraldSends).toHaveLength(2);
+    expect(resendSends).toHaveLength(0);
+    expect(heraldSends[0].body).toMatchObject({
+      to: "buyer@example.com",
+      from: "orders@omni.dev",
+      subject: "Your Hike & Heal order ORD-ABC",
+    });
+    // Idempotency key dedupes the send across the workflow's retry policy
+    expect(heraldSends[0].body.idempotencyKey).toBe(
+      "ORD-ABC:buyer@example.com",
+    );
+  });
+
+  it("falls back to Resend when a Herald send fails", async () => {
+    const { result, heraldSends, resendSends } = await runWithFetch(
+      sampleData,
+      heraldEnv,
+      (url) => {
+        if (url.includes("/messages"))
+          return { ok: false, status: 502, text: async () => "engine down" };
+        return okHandler(url);
+      },
+    );
+
+    expect(result).toEqual({ sent: 2 });
+    // Tried Herald for both, fell back to Resend for both
+    expect(heraldSends).toHaveLength(2);
+    expect(resendSends).toHaveLength(2);
+  });
+
+  it("does not use Herald unless the flag is true, even with creds present", async () => {
+    const { result, heraldSends, resendSends } = await runWithFetch(
+      sampleData,
+      {
+        ...fullEnv,
+        HERALD_API_URL: "https://api.herald.test",
+        HERALD_API_KEY: "hk_test",
+      },
+      okHandler,
+    );
+
+    expect(result).toEqual({ sent: 2 });
+    expect(heraldSends).toHaveLength(0);
+    expect(resendSends).toHaveLength(2);
+  });
+
   it("skips a suppressed recipient", async () => {
     const calls: string[] = [];
     const fetchMock = async (url: string, opts: { body: string }) => {
