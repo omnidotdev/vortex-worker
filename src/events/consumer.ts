@@ -34,6 +34,11 @@ const DEFAULT_MAX_EVENTS_PER_SECOND = 50;
 class EventsConsumer {
   #config: EventsConfig;
   #handler: EventHandler;
+  // Optional override for topic discovery. The Iggy SDK's `topic.list`
+  // deserialization is incompatible with our server version and throws, so the
+  // composition root injects a discovery function (e.g. a DB lookup of org
+  // topics) instead of relying on the broken wire call.
+  #listTopics?: () => Promise<string[]>;
   #client: Client | null = null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #running = false;
@@ -47,9 +52,14 @@ class EventsConsumer {
     refillRatePerMs: number;
   } | null = null;
 
-  constructor(config: EventsConfig, handler: EventHandler) {
+  constructor(
+    config: EventsConfig,
+    handler: EventHandler,
+    listTopics?: () => Promise<string[]>,
+  ) {
     this.#config = config;
     this.#handler = handler;
+    this.#listTopics = listTopics;
 
     const maxEventsPerSecond = Number(
       process.env.VORTEX_MAX_EVENTS_PER_SECOND ?? DEFAULT_MAX_EVENTS_PER_SECOND,
@@ -159,21 +169,31 @@ class EventsConsumer {
     const client = this.#client;
     if (!client) return;
 
-    let topics: Array<{ id: number; name: string }>;
+    let topicNames: string[];
 
     try {
-      topics = await withTimeout(
-        client.topic.list({ streamId: STREAM_ID }),
-        IGGY_OP_TIMEOUT_MS,
-        "topic.list",
-      );
+      // Prefer the injected discovery function; the SDK's topic.list throws a
+      // deserialization error against our server, so it is only a fallback.
+      topicNames = this.#listTopics
+        ? await withTimeout(
+            this.#listTopics(),
+            IGGY_OP_TIMEOUT_MS,
+            "listTopics",
+          )
+        : (
+            await withTimeout(
+              client.topic.list({ streamId: STREAM_ID }),
+              IGGY_OP_TIMEOUT_MS,
+              "topic.list",
+            )
+          ).map((t) => t.name);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
       // A timeout means the TCP connection is wedged; rebuild it. A plain error
       // is usually just an empty stream the API hasn't published to yet.
       if (this.#isTimeout(err)) {
-        logger.warn("Iggy topic.list stalled, reconnecting", {
+        logger.warn("Iggy topic discovery stalled, reconnecting", {
           error: message,
         });
         this.#reconnect();
@@ -183,15 +203,15 @@ class EventsConsumer {
       return;
     }
 
-    for (const topic of topics) {
+    for (const topicName of topicNames) {
       // Skip dead-letter topics
-      if (topic.name.endsWith("-dlq")) continue;
+      if (topicName.endsWith("-dlq")) continue;
 
       try {
-        await this.#pollTopic(client, topic.name);
+        await this.#pollTopic(client, topicName);
       } catch (err) {
         logger.error("Error polling topic", {
-          topic: topic.name,
+          topic: topicName,
           error: err instanceof Error ? err.message : String(err),
         });
 

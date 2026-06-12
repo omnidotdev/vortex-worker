@@ -11,6 +11,9 @@ import Sentry from "lib/sentry";
 validateEnv();
 
 import Hatchet from "@hatchet-dev/typescript-sdk";
+import { getDb } from "db";
+import { eventRoutingRuleTable, eventSubscriptionTable } from "db/schema";
+import { eq } from "drizzle-orm";
 
 import { closeCache, initCache } from "lib/cache";
 import logger from "lib/logger";
@@ -92,6 +95,34 @@ function parseEventsUrl(url: string): EventsConfig {
     username: process.env.IGGY_USERNAME ?? "iggy",
     password: process.env.IGGY_PASSWORD ?? "iggy",
   };
+}
+
+// Topic discovery for the events consumer. The Iggy SDK's `topic.list` throws a
+// deserialization error against our server version, so enumerate the org topics
+// worth polling from the database instead: those with an enabled routing rule or
+// subscription (an event with neither is not actionable). Cached briefly so the
+// 100ms poll loop does not hammer the database.
+const TOPIC_CACHE_TTL_MS = 30_000;
+let topicCache: { names: string[]; expiresAt: number } | null = null;
+
+async function listTopics(): Promise<string[]> {
+  if (topicCache && Date.now() < topicCache.expiresAt) return topicCache.names;
+
+  const db = getDb();
+  const [rules, subs] = await Promise.all([
+    db
+      .selectDistinct({ org: eventRoutingRuleTable.organizationId })
+      .from(eventRoutingRuleTable)
+      .where(eq(eventRoutingRuleTable.enabled, true)),
+    db
+      .selectDistinct({ org: eventSubscriptionTable.organizationId })
+      .from(eventSubscriptionTable)
+      .where(eq(eventSubscriptionTable.enabled, true)),
+  ]);
+
+  const names = [...new Set([...rules, ...subs].map((r) => r.org))];
+  topicCache = { names, expiresAt: Date.now() + TOPIC_CACHE_TTL_MS };
+  return names;
 }
 
 const resolvedSecret = process.env.INTERNAL_API_SECRET;
@@ -448,7 +479,7 @@ async function main() {
   if (eventsUrl) {
     try {
       const config = parseEventsUrl(eventsUrl);
-      eventsConsumer = new EventsConsumer(config, routeEvent);
+      eventsConsumer = new EventsConsumer(config, routeEvent, listTopics);
       await eventsConsumer.start();
       await initPublisher(config);
 
