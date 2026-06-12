@@ -12,14 +12,13 @@ import { Client, Partitioning } from "@iggy.rs/sdk";
 import { CompressionAlgorithmKind } from "@iggy.rs/sdk/dist/wire/topic/topic.utils.js";
 
 import logger from "lib/logger";
+import { RETENTION_MICROSECONDS } from "./retention";
 
 import type { EventInput, EventsConfig, OmniEvent } from "./types";
 
 const STREAM_NAME = "omni-events";
 const STREAM_ID = 1;
 const DEFAULT_PARTITIONS = 3;
-// 90-day retention
-const RETENTION_SECONDS = 90 * 24 * 60 * 60;
 
 let client: Client | null = null;
 const knownTopics = new Set<string>();
@@ -134,7 +133,7 @@ async function ensureTopic(name: string): Promise<void> {
       name,
       partitionCount: DEFAULT_PARTITIONS,
       compressionAlgorithm: CompressionAlgorithmKind.None,
-      messageExpiry: BigInt(RETENTION_SECONDS),
+      messageExpiry: RETENTION_MICROSECONDS,
     });
     logger.info("Created topic", { streamId: STREAM_ID, topic: name });
   }
