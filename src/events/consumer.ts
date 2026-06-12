@@ -15,7 +15,9 @@ import { withTimeout } from "./withTimeout";
 import type { DlqEvent, EventHandler, EventsConfig, OmniEvent } from "./types";
 
 const STREAM_ID = 1;
-const CONSUMER_GROUP_NAME = "vortex-worker";
+// Shared named consumer. Both worker replicas use the same id so the server
+// coordinates their per-partition offsets (each message is delivered once).
+const CONSUMER_ID = "vortex-worker";
 const POLL_INTERVAL_MS = 100;
 // Hard ceiling on any single Iggy request. The SDK has no client-side timeout,
 // so a half-open connection makes `topic.list` / `message.poll` hang forever,
@@ -35,8 +37,6 @@ class EventsConsumer {
   #client: Client | null = null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #running = false;
-  // Track which topics already have a consumer group created
-  #consumerGroups = new Set<string>();
   // Track which DLQ topics have been created
   #dlqTopics = new Set<string>();
   // Token bucket for rate limiting — null means unlimited
@@ -95,9 +95,8 @@ class EventsConsumer {
   /**
    * Tear down a wedged connection and open a fresh one.
    *
-   * Called when an Iggy request times out or errors. The consumer-group and DLQ
-   * topic caches are cleared so the new connection re-creates and re-joins its
-   * groups before polling again.
+   * Called when an Iggy request times out or errors. The DLQ topic cache is
+   * cleared so the fresh connection re-creates any DLQ topics it needs.
    */
   #reconnect(): void {
     try {
@@ -108,7 +107,6 @@ class EventsConsumer {
       });
     }
 
-    this.#consumerGroups.clear();
     this.#dlqTopics.clear();
     this.#connect();
 
@@ -128,7 +126,6 @@ class EventsConsumer {
 
     this.#client?.destroy();
     this.#client = null;
-    this.#consumerGroups.clear();
     this.#dlqTopics.clear();
 
     logger.info("Events consumer stopped");
@@ -191,7 +188,6 @@ class EventsConsumer {
       if (topic.name.endsWith("-dlq")) continue;
 
       try {
-        await this.#ensureConsumerGroup(topic.name);
         await this.#pollTopic(client, topic.name);
       } catch (err) {
         logger.error("Error polling topic", {
@@ -247,94 +243,58 @@ class EventsConsumer {
    * Poll a single topic and dispatch each message to the handler.
    */
   async #pollTopic(client: Client, topicId: string): Promise<void> {
-    const response = await withTimeout(
-      client.message.poll({
-        streamId: STREAM_ID,
-        topicId,
-        consumer: { kind: 2, id: CONSUMER_GROUP_NAME },
-        partitionId: 0,
-        pollingStrategy: { kind: 5, value: 0n },
-        count: BATCH_SIZE,
-        autocommit: true,
-      }),
-      IGGY_OP_TIMEOUT_MS,
-      `message.poll:${topicId}`,
-    );
-
-    for (const message of response.messages) {
-      let event: OmniEvent;
-
-      try {
-        event = JSON.parse(message.payload.toString()) as OmniEvent;
-      } catch (err) {
-        logger.error("Failed to parse event payload", {
-          topic: topicId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        continue;
-      }
-
-      try {
-        await this.#consumeToken();
-        await this.#handler(event);
-      } catch (err) {
-        logger.error("Event handler failed", {
-          eventId: event.id,
-          type: event.type,
-          topic: topicId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        await this.#publishToDlq(event, topicId, err);
-      }
-    }
-  }
-
-  /**
-   * Idempotently create a consumer group for a topic.
-   *
-   * Consumer groups must exist before polling with kind 2. We cache
-   * known groups in memory so we only call create once per topic.
-   */
-  async #ensureConsumerGroup(topicId: string): Promise<void> {
-    if (this.#consumerGroups.has(topicId)) return;
-
-    const client = this.#client;
-    if (!client) return;
-
-    try {
-      await withTimeout(
-        client.group.create({
+    // The experimental Iggy node SDK's consumer-group auto-rotation
+    // (`consumer: group`, `partitionId: 0`) stops returning messages after the
+    // first batch on our server. Poll each partition explicitly as a single
+    // named consumer instead; the shared consumer id keeps the two worker
+    // replicas' per-partition offsets coordinated server-side, and `Next` +
+    // autocommit advance each partition independently.
+    for (
+      let partitionId = 1;
+      partitionId <= DEFAULT_PARTITIONS;
+      partitionId++
+    ) {
+      const response = await withTimeout(
+        client.message.poll({
           streamId: STREAM_ID,
           topicId,
-          groupId: 0,
-          name: CONSUMER_GROUP_NAME,
+          consumer: { kind: 1, id: CONSUMER_ID },
+          partitionId,
+          pollingStrategy: { kind: 5, value: 0n },
+          count: BATCH_SIZE,
+          autocommit: true,
         }),
         IGGY_OP_TIMEOUT_MS,
-        `group.create:${topicId}`,
+        `message.poll:${topicId}:${partitionId}`,
       );
-    } catch (err) {
-      // A timeout means a wedged connection; surface it so #poll reconnects.
-      // Any other error just means the group already exists, which is expected.
-      if (this.#isTimeout(err)) throw err;
-    }
 
-    // Join the consumer group so the server registers this client as a member
-    try {
-      await withTimeout(
-        client.group.join({
-          streamId: STREAM_ID,
-          topicId,
-          groupId: CONSUMER_GROUP_NAME,
-        }),
-        IGGY_OP_TIMEOUT_MS,
-        `group.join:${topicId}`,
-      );
-    } catch (err) {
-      if (this.#isTimeout(err)) throw err;
-      // Already joined, this is expected on reconnect
-    }
+      for (const message of response.messages) {
+        let event: OmniEvent;
 
-    this.#consumerGroups.add(topicId);
+        try {
+          event = JSON.parse(message.payload.toString()) as OmniEvent;
+        } catch (err) {
+          logger.error("Failed to parse event payload", {
+            topic: topicId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          continue;
+        }
+
+        try {
+          await this.#consumeToken();
+          await this.#handler(event);
+        } catch (err) {
+          logger.error("Event handler failed", {
+            eventId: event.id,
+            type: event.type,
+            topic: topicId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+          await this.#publishToDlq(event, topicId, err);
+        }
+      }
+    }
   }
 
   /**
