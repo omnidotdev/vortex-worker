@@ -10,12 +10,17 @@ import { Client, Partitioning } from "@iggy.rs/sdk";
 import { CompressionAlgorithmKind } from "@iggy.rs/sdk/dist/wire/topic/topic.utils.js";
 
 import logger from "lib/logger";
+import { withTimeout } from "./withTimeout";
 
 import type { DlqEvent, EventHandler, EventsConfig, OmniEvent } from "./types";
 
 const STREAM_ID = 1;
 const CONSUMER_GROUP_NAME = "vortex-worker";
 const POLL_INTERVAL_MS = 100;
+// Hard ceiling on any single Iggy request. The SDK has no client-side timeout,
+// so a half-open connection makes `topic.list` / `message.poll` hang forever,
+// freezing the sequential poll loop. On timeout we reconnect and carry on.
+const IGGY_OP_TIMEOUT_MS = 5000;
 const BATCH_SIZE = 10;
 const DEFAULT_PARTITIONS = 3;
 // 90-day retention
@@ -64,15 +69,7 @@ class EventsConsumer {
    * Connect to Iggy and begin the polling loop.
    */
   async start(): Promise<void> {
-    this.#client = new Client({
-      transport: "TCP",
-      options: { host: this.#config.host, port: this.#config.port },
-      credentials: {
-        username: this.#config.username,
-        password: this.#config.password,
-      },
-    });
-
+    this.#connect();
     this.#running = true;
 
     logger.info("Events consumer started", {
@@ -81,6 +78,41 @@ class EventsConsumer {
     });
 
     this.#schedulePoll();
+  }
+
+  /** Open a fresh Iggy client. The SDK connects lazily on the first request. */
+  #connect(): void {
+    this.#client = new Client({
+      transport: "TCP",
+      options: { host: this.#config.host, port: this.#config.port },
+      credentials: {
+        username: this.#config.username,
+        password: this.#config.password,
+      },
+    });
+  }
+
+  /**
+   * Tear down a wedged connection and open a fresh one.
+   *
+   * Called when an Iggy request times out or errors. The consumer-group and DLQ
+   * topic caches are cleared so the new connection re-creates and re-joins its
+   * groups before polling again.
+   */
+  #reconnect(): void {
+    try {
+      this.#client?.destroy();
+    } catch (err) {
+      logger.debug("Error destroying wedged Iggy client", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    this.#consumerGroups.clear();
+    this.#dlqTopics.clear();
+    this.#connect();
+
+    logger.warn("Reconnected Iggy consumer after a stalled request");
   }
 
   /**
@@ -108,8 +140,18 @@ class EventsConsumer {
     if (!this.#running) return;
 
     this.#timer = setTimeout(async () => {
-      await this.#poll();
-      this.#schedulePoll();
+      try {
+        await this.#poll();
+      } catch (err) {
+        // #poll handles its own errors; this is a last-resort guard so an
+        // unexpected throw can never break the reschedule chain and silently
+        // kill the consumer.
+        logger.error("Unexpected error in poll cycle", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      } finally {
+        this.#schedulePoll();
+      }
     }, POLL_INTERVAL_MS);
   }
 
@@ -123,12 +165,24 @@ class EventsConsumer {
     let topics: Array<{ id: number; name: string }>;
 
     try {
-      topics = await client.topic.list({ streamId: STREAM_ID });
+      topics = await withTimeout(
+        client.topic.list({ streamId: STREAM_ID }),
+        IGGY_OP_TIMEOUT_MS,
+        "topic.list",
+      );
     } catch (err) {
-      // Stream may not exist yet if the API hasn't published anything
-      logger.debug("Failed to list topics", {
-        error: err instanceof Error ? err.message : String(err),
-      });
+      const message = err instanceof Error ? err.message : String(err);
+
+      // A timeout means the TCP connection is wedged; rebuild it. A plain error
+      // is usually just an empty stream the API hasn't published to yet.
+      if (this.#isTimeout(err)) {
+        logger.warn("Iggy topic.list stalled, reconnecting", {
+          error: message,
+        });
+        this.#reconnect();
+      } else {
+        logger.debug("Failed to list topics", { error: message });
+      }
       return;
     }
 
@@ -144,8 +198,20 @@ class EventsConsumer {
           topic: topic.name,
           error: err instanceof Error ? err.message : String(err),
         });
+
+        // A wedged connection fails for every topic, so don't grind through the
+        // rest on a dead client; reconnect and resume cleanly next cycle.
+        if (this.#isTimeout(err)) {
+          this.#reconnect();
+          return;
+        }
       }
     }
+  }
+
+  /** True when an error came from {@link withTimeout} exceeding its deadline. */
+  #isTimeout(err: unknown): boolean {
+    return err instanceof Error && err.message.includes("timed out after");
   }
 
   /**
@@ -181,15 +247,19 @@ class EventsConsumer {
    * Poll a single topic and dispatch each message to the handler.
    */
   async #pollTopic(client: Client, topicId: string): Promise<void> {
-    const response = await client.message.poll({
-      streamId: STREAM_ID,
-      topicId,
-      consumer: { kind: 2, id: CONSUMER_GROUP_NAME },
-      partitionId: 0,
-      pollingStrategy: { kind: 5, value: 0n },
-      count: BATCH_SIZE,
-      autocommit: true,
-    });
+    const response = await withTimeout(
+      client.message.poll({
+        streamId: STREAM_ID,
+        topicId,
+        consumer: { kind: 2, id: CONSUMER_GROUP_NAME },
+        partitionId: 0,
+        pollingStrategy: { kind: 5, value: 0n },
+        count: BATCH_SIZE,
+        autocommit: true,
+      }),
+      IGGY_OP_TIMEOUT_MS,
+      `message.poll:${topicId}`,
+    );
 
     for (const message of response.messages) {
       let event: OmniEvent;
@@ -232,24 +302,35 @@ class EventsConsumer {
     if (!client) return;
 
     try {
-      await client.group.create({
-        streamId: STREAM_ID,
-        topicId,
-        groupId: 0,
-        name: CONSUMER_GROUP_NAME,
-      });
-    } catch {
-      // Group likely already exists, this is expected
+      await withTimeout(
+        client.group.create({
+          streamId: STREAM_ID,
+          topicId,
+          groupId: 0,
+          name: CONSUMER_GROUP_NAME,
+        }),
+        IGGY_OP_TIMEOUT_MS,
+        `group.create:${topicId}`,
+      );
+    } catch (err) {
+      // A timeout means a wedged connection; surface it so #poll reconnects.
+      // Any other error just means the group already exists, which is expected.
+      if (this.#isTimeout(err)) throw err;
     }
 
     // Join the consumer group so the server registers this client as a member
     try {
-      await client.group.join({
-        streamId: STREAM_ID,
-        topicId,
-        groupId: CONSUMER_GROUP_NAME,
-      });
-    } catch {
+      await withTimeout(
+        client.group.join({
+          streamId: STREAM_ID,
+          topicId,
+          groupId: CONSUMER_GROUP_NAME,
+        }),
+        IGGY_OP_TIMEOUT_MS,
+        `group.join:${topicId}`,
+      );
+    } catch (err) {
+      if (this.#isTimeout(err)) throw err;
       // Already joined, this is expected on reconnect
     }
 
