@@ -2457,6 +2457,7 @@ async function executeEmail(
       to: resolveValue(email.to, ctx),
       cc: email.cc ? resolveValue(email.cc, ctx) : undefined,
       bcc: email.bcc ? resolveValue(email.bcc, ctx) : undefined,
+      from: email.from ? resolveValue(email.from, ctx) : undefined,
       subject: resolveValue(email.subject, ctx),
       body: resolveValue(email.body, ctx),
       contentType: email.contentType,

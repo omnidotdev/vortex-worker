@@ -587,6 +587,7 @@ export const EmailStep = BaseStep.extend({
     to: z.union([z.string(), z.array(z.string())]),
     cc: z.union([z.string(), z.array(z.string())]).optional(),
     bcc: z.union([z.string(), z.array(z.string())]).optional(),
+    from: z.string().optional(),
     subject: z.string(),
     body: z.string(),
     contentType: z.enum(["text", "html"]).default("text"),

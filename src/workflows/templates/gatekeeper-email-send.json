@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "executor": "temporal",
+  "executor": "hatchet",
   "settings": {
     "timeout": "2m",
     "retryPolicy": {
@@ -24,49 +24,34 @@
           "source": "omni.gatekeeper"
         }
       },
-      "next": "check-suppression"
-    },
-    {
-      "id": "check-suppression",
-      "type": "code",
-      "name": "Check Suppression List",
-      "position": { "x": 0, "y": 100 },
-      "code": {
-        "sandbox": "worker",
-        "source": "const { to } = trigger.data;\nconst res = await fetch(process.env.VORTEX_API_URL, {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${process.env.VORTEX_API_KEY}`\n  },\n  body: JSON.stringify({\n    query: `query CheckSuppression($email: String!) {\n      emailSuppressions(condition: { email: $email }) {\n        totalCount\n      }\n    }`,\n    variables: { email: to }\n  })\n});\nconst json = await res.json();\nconst count = json.data?.emailSuppressions?.totalCount ?? 0;\nreturn { suppressed: count > 0 };"
-      },
-      "next": "check-not-suppressed"
-    },
-    {
-      "id": "check-not-suppressed",
-      "type": "condition",
-      "name": "Suppressed?",
-      "position": { "x": 0, "y": 200 },
-      "condition": {
-        "expression": "{{ steps['check-suppression'].output.suppressed === true }}",
-        "trueBranch": "end-suppressed",
-        "falseBranch": "render"
-      }
+      "next": "render"
     },
     {
       "id": "render",
-      "type": "code",
+      "type": "action",
       "name": "Render Email Template",
-      "position": { "x": 0, "y": 300 },
-      "code": {
-        "sandbox": "worker",
-        "source": "const { templateId, templateData } = trigger.data;\nconst res = await fetch(`${process.env.AUTH_API_URL}/api/email/render`, {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${process.env.EMAIL_RENDER_SECRET}`\n  },\n  body: JSON.stringify({ templateId, templateData })\n});\nif (!res.ok) throw new Error(`Render failed: ${res.status}`);\nconst json = await res.json();\nreturn { html: json.html, subject: json.subject };"
+      "position": { "x": 0, "y": 100 },
+      "action": {
+        "pluginId": "builtin:emailRender",
+        "operation": "render",
+        "inputs": {
+          "templateId": "{{trigger.data.templateId}}",
+          "templateData": "{{trigger.data.templateData}}"
+        }
       },
       "next": "send"
     },
     {
       "id": "send",
-      "type": "code",
-      "name": "Send via Resend",
-      "position": { "x": 0, "y": 400 },
-      "code": {
-        "sandbox": "worker",
-        "source": "const { to, senderAddress } = trigger.data;\nconst { html, subject } = steps['render'].output;\nconst res = await fetch('https://api.resend.com/emails', {\n  method: 'POST',\n  headers: {\n    'Content-Type': 'application/json',\n    'Authorization': `Bearer ${process.env.RESEND_API_KEY}`\n  },\n  body: JSON.stringify({\n    from: senderAddress,\n    to: [to],\n    subject,\n    html\n  })\n});\nif (!res.ok) throw new Error(`Resend failed: ${res.status}`);\nconst json = await res.json();\nreturn { messageId: json.id };"
+      "type": "email",
+      "name": "Send Email",
+      "position": { "x": 0, "y": 200 },
+      "email": {
+        "to": "{{trigger.data.to}}",
+        "from": "noreply@send.omni.dev",
+        "subject": "{{steps['render'].output.subject}}",
+        "body": "{{steps['render'].output.html}}",
+        "contentType": "html"
       },
       "next": "end"
     },
@@ -74,20 +59,10 @@
       "id": "end",
       "type": "stop",
       "name": "Workflow Complete",
-      "position": { "x": 0, "y": 500 },
+      "position": { "x": 0, "y": 300 },
       "stop": {
         "status": "success",
         "reason": "Email sent successfully"
-      }
-    },
-    {
-      "id": "end-suppressed",
-      "type": "stop",
-      "name": "Email Suppressed",
-      "position": { "x": 200, "y": 300 },
-      "stop": {
-        "status": "success",
-        "reason": "Email suppressed"
       }
     }
   ]
