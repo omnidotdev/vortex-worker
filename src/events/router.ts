@@ -5,7 +5,6 @@
  * dispatches matching workflows to Hatchet for execution.
  */
 
-import Hatchet from "@hatchet-dev/typescript-sdk";
 import { context, trace } from "@opentelemetry/api";
 import { getDb } from "db";
 import {
@@ -28,6 +27,7 @@ import {
 import { z } from "zod";
 
 import { cacheClient } from "lib/cache/client";
+import { getHatchet } from "lib/hatchet";
 import logger from "lib/logger";
 import { matchEvent as matchCollectEvent } from "../dsl/collect-state";
 import BatchAccumulator from "./batch-accumulator";
@@ -69,7 +69,7 @@ const TIER_SYNC_EVENT_TYPES = new Set([
  */
 async function bridgeTierSyncEvent(
   event: OmniEvent,
-  hatchet: ReturnType<typeof Hatchet.init>,
+  hatchet: ReturnType<typeof getHatchet>,
 ): Promise<void> {
   if (!TIER_SYNC_EVENT_TYPES.has(event.type)) return;
 
@@ -208,15 +208,6 @@ const accumulators = new Map<string, BatchAccumulator>();
 export async function shutdownAccumulators(): Promise<void> {
   await Promise.all([...accumulators.values()].map((acc) => acc.shutdown()));
   accumulators.clear();
-}
-
-let _hatchet: ReturnType<typeof Hatchet.init> | null = null;
-
-function getHatchet(): ReturnType<typeof Hatchet.init> {
-  if (!_hatchet) {
-    _hatchet = Hatchet.init();
-  }
-  return _hatchet;
 }
 
 /**
