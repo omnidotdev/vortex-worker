@@ -1,11 +1,14 @@
 import { describe, expect, it } from "bun:test";
 
+import { WorkflowDefinition } from "../../dsl/types";
 import template from "./halo-order-confirmed.json";
 
 /**
- * The halo-order-confirmed workflow renders and sends a buyer receipt and an
- * optional seller notification from a halo.order.confirmed event, entirely
- * from the event payload (no callback into halo).
+ * The halo-order-confirmed workflow builds a buyer receipt and an optional
+ * seller notification from a halo.order.confirmed event and sends them via the
+ * first-class email step (Herald). The HTML is built in a pure, I/O-free code
+ * step (sandbox-safe); sending and suppression are handled by the email step
+ * and Herald, not by hand-rolled fetch in the template.
  */
 
 const sampleData = {
@@ -21,276 +24,92 @@ const sampleData = {
   taxTotal: 413,
   total: 5512,
   lines: [
-    {
-      title: "Trail Balm",
-      variantTitle: "2oz",
-      quantity: 2,
-      unitPrice: 2500,
-      total: 5000,
-    },
+    { title: "Trail Balm", variantTitle: "2oz", quantity: 2, total: 5000 },
   ],
 };
 
-const codeSource = () => {
-  const step = template.steps.find(
-    (s: { id: string }) => s.id === "send-order-emails",
-  ) as {
-    code: { source: string };
-  };
-  return step.code.source;
-};
+const stepById = (id: string) =>
+  template.steps.find((s: { id: string }) => s.id === id) as Record<
+    string,
+    unknown
+  >;
 
-interface SendCall {
-  url: string;
-  body: { to: string[]; subject: string; html: string };
-}
+const buildEmailsSource = () =>
+  (stepById("build-emails").code as { source: string }).source;
 
-const runWorkflowCode = async (
-  data: Record<string, unknown>,
-  env: Record<string, string>,
-) => {
-  const calls: SendCall[] = [];
-  const fetchMock = async (url: string, opts: { body: string }) => {
-    const body = JSON.parse(opts.body);
-    calls.push({ url, body });
-    if (url.includes("resend.com")) {
-      return { ok: true, json: async () => ({ id: `msg_${calls.length}` }) };
-    }
-    // Vortex suppression query
-    return {
-      ok: true,
-      json: async () => ({ data: { emailSuppressions: { totalCount: 0 } } }),
-      text: async () => "",
-    };
-  };
+/** Execute the pure build-emails code with a trigger payload. */
+const runBuildEmails = (data: Record<string, unknown>) => {
   const fn = new Function(
     "trigger",
-    "process",
-    "fetch",
-    "console",
-    `return (async () => { ${codeSource()} })()`,
+    `return (async () => { ${buildEmailsSource()} })()`,
   );
-  const result = await fn({ data }, { env }, fetchMock, console);
-  const sends = calls.filter((c) => c.url.includes("resend.com"));
-  return { result, sends };
-};
-
-const fullEnv = {
-  RESEND_API_KEY: "re_test",
-  SENDER_EMAIL_ADDRESS: "orders@omni.dev",
-  VORTEX_API_URL: "https://vortex.test/graphql",
-  VORTEX_API_KEY: "vk_test",
+  return fn({ data }) as Promise<Record<string, string | boolean>>;
 };
 
 describe("halo-order-confirmed template", () => {
-  it("uses the temporal executor", () => {
-    expect(template.executor).toBe("temporal");
+  it("is a valid workflow definition", () => {
+    const result = WorkflowDefinition.safeParse(template);
+    expect(result.success).toBe(true);
+  });
+
+  it("runs on the hatchet executor", () => {
+    expect(template.executor).toBe("hatchet");
   });
 
   it("triggers on halo.order.confirmed from omni.halo", () => {
-    const trigger = template.steps.find(
-      (s: { type: string }) => s.type === "trigger",
-    ) as { trigger: { config: { pattern: string; source: string } } };
+    const trigger = stepById("trigger") as {
+      trigger: { config: { pattern: string; source: string } };
+    };
     expect(trigger.trigger.config.pattern).toBe("halo.order.confirmed");
     expect(trigger.trigger.config.source).toBe("omni.halo");
   });
 
-  it("ends with a stop step", () => {
-    expect(
-      template.steps.some((s: { type: string }) => s.type === "stop"),
-    ).toBe(true);
-  });
+  it("sends via the first-class email step, not hand-rolled fetch", () => {
+    // The build step must be pure: no network, no secrets in the sandbox
+    const source = buildEmailsSource();
+    expect(source).not.toContain("fetch");
+    expect(source).not.toContain("process.env");
+    expect(source).not.toContain("resend");
 
-  it("sends a buyer receipt and a seller notification with order details", async () => {
-    const { result, sends } = await runWorkflowCode(sampleData, fullEnv);
-
-    expect(result).toEqual({ sent: 2 });
-    expect(sends).toHaveLength(2);
-
-    // The workflow emits the buyer receipt first, then the seller notification
-    const [buyer, seller] = sends;
-    expect(buyer.body.to).toEqual(["buyer@example.com"]);
-    expect(buyer.body.subject).toBe("Your Hike & Heal order ORD-ABC");
-    expect(buyer.body.html).toContain("ORD-ABC");
-    expect(buyer.body.html).toContain("$55.12");
-    expect(buyer.body.html).toContain("Trail Balm");
-
-    expect(seller.body.to).toEqual(["seller@example.com"]);
-    expect(seller.body.subject).toBe("New order ORD-ABC - Hike & Heal");
-  });
-
-  it("sends only the buyer receipt when no seller email is configured", async () => {
-    const { result, sends } = await runWorkflowCode(
-      { ...sampleData, sellerEmail: null },
-      fullEnv,
-    );
-    expect(result).toEqual({ sent: 1 });
-    expect(sends).toHaveLength(1);
-    expect(sends[0].body.to).toEqual(["buyer@example.com"]);
-  });
-
-  it("does nothing when Resend is not configured", async () => {
-    const { result, sends } = await runWorkflowCode(sampleData, {
-      ...fullEnv,
-      RESEND_API_KEY: "",
-    });
-    expect(result).toMatchObject({ sent: 0 });
-    expect(sends).toHaveLength(0);
-  });
-
-  // Capture every outbound call (Herald, Resend, Vortex suppression) so a test
-  // can assert which provider the send path chose. `handler` decides each
-  // response so a test can simulate a Herald success or failure.
-  const runWithFetch = async (
-    data: Record<string, unknown>,
-    env: Record<string, string>,
-    handler: (url: string, body: Record<string, unknown>) => unknown,
-  ) => {
-    const calls: { url: string; body: Record<string, unknown> }[] = [];
-    const fetchMock = async (url: string, opts: { body: string }) => {
-      const body = JSON.parse(opts.body);
-      calls.push({ url, body });
-      return handler(url, body);
+    // Buyer + seller are sent via email steps with rendered HTML bodies
+    const buyer = stepById("send-buyer") as {
+      type: string;
+      email: { to: string; body: string; contentType: string };
     };
-    const fn = new Function(
-      "trigger",
-      "process",
-      "fetch",
-      "console",
-      `return (async () => { ${codeSource()} })()`,
-    );
-    const result = await fn({ data }, { env }, fetchMock, console);
-    return {
-      result,
-      heraldSends: calls.filter((c) => c.url.includes("/messages")),
-      resendSends: calls.filter((c) => c.url.includes("resend.com")),
+    expect(buyer.type).toBe("email");
+    expect(buyer.email.contentType).toBe("html");
+    expect(buyer.email.to).toBe("{{steps['build-emails'].output.buyerEmail}}");
+    expect(buyer.email.body).toBe("{{steps['build-emails'].output.buyerHtml}}");
+
+    const seller = stepById("send-seller") as { type: string };
+    expect(seller.type).toBe("email");
+  });
+
+  it("only emails the seller when a seller address is present", () => {
+    const cond = stepById("check-seller") as {
+      condition: { trueBranch: string; falseBranch: string };
     };
-  };
-
-  const heraldEnv = {
-    ...fullEnv,
-    HERALD_SEND_ENABLED: "true",
-    HERALD_API_URL: "https://api.herald.test",
-    HERALD_API_KEY: "hk_test",
-  };
-
-  // Default handler: Herald accepts, Resend accepts, no suppression
-  const okHandler = (url: string) => {
-    if (url.includes("/messages"))
-      return { ok: true, json: async () => ({ id: "h1", status: "queued" }) };
-    if (url.includes("resend.com"))
-      return { ok: true, json: async () => ({ id: "r1" }) };
-    return {
-      ok: true,
-      json: async () => ({ data: { emailSuppressions: { totalCount: 0 } } }),
-      text: async () => "",
-    };
-  };
-
-  it("sends via Herald (not Resend) when HERALD_SEND_ENABLED is true", async () => {
-    const { result, heraldSends, resendSends } = await runWithFetch(
-      sampleData,
-      heraldEnv,
-      okHandler,
-    );
-
-    expect(result).toEqual({ sent: 2 });
-    expect(heraldSends).toHaveLength(2);
-    expect(resendSends).toHaveLength(0);
-    expect(heraldSends[0].body).toMatchObject({
-      to: "buyer@example.com",
-      // Herald sends from its DKIM-signed sending domain, not the Resend sender
-      from: "orders@send.omni.dev",
-      subject: "Your Hike & Heal order ORD-ABC",
-    });
-    // Idempotency key dedupes the send across the workflow's retry policy
-    expect(heraldSends[0].body.idempotencyKey).toBe(
-      "ORD-ABC:buyer@example.com",
-    );
+    expect(cond.condition.trueBranch).toBe("send-seller");
+    expect(cond.condition.falseBranch).toBe("end");
   });
 
-  it("sends Herald mail from send.omni.dev, overridable via HERALD_SENDER_EMAIL_ADDRESS", async () => {
-    // Default: the verified send.omni.dev domain (KumoMTA only DKIM-signs that),
-    // independent of the Resend SENDER_EMAIL_ADDRESS
-    const def = await runWithFetch(sampleData, heraldEnv, okHandler);
-    expect(def.heraldSends[0].body.from).toBe("orders@send.omni.dev");
+  it("builds a buyer receipt and seller notification with order details", async () => {
+    const out = await runBuildEmails(sampleData);
 
-    const overridden = await runWithFetch(
-      sampleData,
-      { ...heraldEnv, HERALD_SENDER_EMAIL_ADDRESS: "receipts@send.omni.dev" },
-      okHandler,
-    );
-    expect(overridden.heraldSends[0].body.from).toBe("receipts@send.omni.dev");
+    expect(out.buyerEmail).toBe("buyer@example.com");
+    expect(out.buyerSubject).toBe("Your Hike & Heal order ORD-ABC");
+    expect(out.buyerHtml).toContain("ORD-ABC");
+    expect(out.buyerHtml).toContain("$55.12");
+    expect(out.buyerHtml).toContain("Trail Balm");
+
+    expect(out.sellerEmail).toBe("seller@example.com");
+    expect(out.sellerSubject).toBe("New order ORD-ABC - Hike & Heal");
+    expect(out.hasSeller).toBe(true);
   });
 
-  it("falls back to Resend when a Herald send fails", async () => {
-    const { result, heraldSends, resendSends } = await runWithFetch(
-      sampleData,
-      heraldEnv,
-      (url) => {
-        if (url.includes("/messages"))
-          return { ok: false, status: 502, text: async () => "engine down" };
-        return okHandler(url);
-      },
-    );
-
-    expect(result).toEqual({ sent: 2 });
-    // Tried Herald for both, fell back to Resend for both
-    expect(heraldSends).toHaveLength(2);
-    expect(resendSends).toHaveLength(2);
-  });
-
-  it("does not use Herald unless the flag is true, even with creds present", async () => {
-    const { result, heraldSends, resendSends } = await runWithFetch(
-      sampleData,
-      {
-        ...fullEnv,
-        HERALD_API_URL: "https://api.herald.test",
-        HERALD_API_KEY: "hk_test",
-      },
-      okHandler,
-    );
-
-    expect(result).toEqual({ sent: 2 });
-    expect(heraldSends).toHaveLength(0);
-    expect(resendSends).toHaveLength(2);
-  });
-
-  it("skips a suppressed recipient", async () => {
-    const calls: string[] = [];
-    const fetchMock = async (url: string, opts: { body: string }) => {
-      calls.push(url);
-      if (url.includes("resend.com")) {
-        return { ok: true, json: async () => ({ id: "msg" }) };
-      }
-      const body = JSON.parse(opts.body);
-      const email = body.variables?.email;
-      // Suppress the buyer only
-      const total = email === "buyer@example.com" ? 1 : 0;
-      return {
-        ok: true,
-        json: async () => ({
-          data: { emailSuppressions: { totalCount: total } },
-        }),
-        text: async () => "",
-      };
-    };
-    const fn = new Function(
-      "trigger",
-      "process",
-      "fetch",
-      "console",
-      `return (async () => { ${codeSource()} })()`,
-    );
-    const result = await fn(
-      { data: sampleData },
-      { env: fullEnv },
-      fetchMock,
-      console,
-    );
-
-    expect(result).toEqual({ sent: 1 });
-    const sends = calls.filter((u) => u.includes("resend.com"));
-    expect(sends).toHaveLength(1);
+  it("marks hasSeller false when no seller email is present", async () => {
+    const out = await runBuildEmails({ ...sampleData, sellerEmail: null });
+    expect(out.hasSeller).toBe(false);
+    expect(out.buyerEmail).toBe("buyer@example.com");
   });
 });
