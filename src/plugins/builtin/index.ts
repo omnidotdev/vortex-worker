@@ -18,6 +18,7 @@ export { dateTimePlugin } from "./dateTime";
 export { decryptPlugin } from "./decrypt";
 export { delayPlugin } from "./delay";
 export { emailPlugin } from "./email";
+export { emailRenderPlugin } from "./emailRender";
 export { embeddingPlugin } from "./embedding";
 export { encryptPlugin } from "./encrypt";
 export { errorPlugin } from "./error";
@@ -88,6 +89,7 @@ import { dateTimePlugin } from "./dateTime";
 import { decryptPlugin } from "./decrypt";
 import { delayPlugin } from "./delay";
 import { emailPlugin } from "./email";
+import { emailRenderPlugin } from "./emailRender";
 import { embeddingPlugin } from "./embedding";
 import { encryptPlugin } from "./encrypt";
 import { errorPlugin } from "./error";
@@ -161,6 +163,7 @@ const builtinPlugins: Map<string, BuiltinPlugin> = new Map([
   [decryptPlugin.id, decryptPlugin],
   [delayPlugin.id, delayPlugin],
   [emailPlugin.id, emailPlugin],
+  [emailRenderPlugin.id, emailRenderPlugin],
   [embeddingPlugin.id, embeddingPlugin],
   [encryptPlugin.id, encryptPlugin],
   [errorPlugin.id, errorPlugin],

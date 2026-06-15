@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "executor": "temporal",
+  "executor": "hatchet",
   "settings": {
     "timeout": "2m",
     "retryPolicy": {
@@ -24,16 +24,53 @@
           "source": "omni.halo"
         }
       },
-      "next": "send-order-emails"
+      "next": "build-emails"
     },
     {
-      "id": "send-order-emails",
+      "id": "build-emails",
       "type": "code",
-      "name": "Send Order Emails",
+      "name": "Build Order Emails",
       "position": { "x": 0, "y": 100 },
       "code": {
         "sandbox": "worker",
-        "source": "const d = trigger.data; const resendApiKey = process.env.RESEND_API_KEY; const sender = process.env.SENDER_EMAIL_ADDRESS || 'orders@omni.dev'; const vortexApiUrl = process.env.VORTEX_API_URL; const vortexApiKey = process.env.VORTEX_API_KEY; const heraldUrl = process.env.HERALD_API_URL; const heraldKey = process.env.HERALD_API_KEY; const heraldSender = process.env.HERALD_SENDER_EMAIL_ADDRESS || 'orders@send.omni.dev'; const heraldEnabled = process.env.HERALD_SEND_ENABLED === 'true' && !!heraldUrl && !!heraldKey; if (!resendApiKey && !heraldEnabled) { console.error('[halo-order-email] no email provider configured'); return { sent: 0, reason: 'no-email-provider' }; } const fmt = (c) => new Intl.NumberFormat('en-US', { style: 'currency', currency: d.currency || 'USD' }).format((c || 0) / 100); const rows = (d.lines || []).map((l) => `<tr><td style='padding:6px 0'>${l.title}${l.variantTitle ? ' - ' + l.variantTitle : ''} &times; ${l.quantity}</td><td style='padding:6px 0;text-align:right'>${fmt(l.total)}</td></tr>`).join(''); const totals = [['Subtotal', d.subtotal], d.discountTotal ? ['Discount', -d.discountTotal] : null, d.shippingTotal ? ['Shipping', d.shippingTotal] : null, d.taxTotal ? ['Tax', d.taxTotal] : null].filter(Boolean).map((t) => `<tr><td style='padding:2px 0;color:#555'>${t[0]}</td><td style='padding:2px 0;text-align:right;color:#555'>${fmt(t[1])}</td></tr>`).join(''); const summary = `<table style='width:100%;border-collapse:collapse;font-family:sans-serif;font-size:14px'>${rows}<tr><td colspan='2' style='border-top:1px solid #eee;padding-top:8px'></td></tr>${totals}<tr><td style='padding-top:6px;font-weight:700'>Total</td><td style='padding-top:6px;text-align:right;font-weight:700'>${fmt(d.total)}</td></tr></table>`; const buyerHtml = `<div style='max-width:560px;margin:0 auto;font-family:sans-serif;color:#111'><h2>Thank you for your order</h2><p>${d.storeName} received your order <strong>${d.orderNumber}</strong>. Here is your receipt.</p>${summary}<p style='color:#888;font-size:12px;margin-top:24px'>Questions? Just reply to this email.</p></div>`; const sellerHtml = `<div style='max-width:560px;margin:0 auto;font-family:sans-serif;color:#111'><h2>New order ${d.orderNumber}</h2><p>${d.storeName} received a new order from ${d.buyerEmail}.</p>${summary}</div>`; const recipients = [{ email: d.buyerEmail, subject: `Your ${d.storeName} order ${d.orderNumber}`, html: buyerHtml }]; if (d.sellerEmail) { recipients.push({ email: d.sellerEmail, subject: `New order ${d.orderNumber} - ${d.storeName}`, html: sellerHtml }); } const sendViaHerald = async (r) => { try { const res = await fetch(`${heraldUrl}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${heraldKey}` }, body: JSON.stringify({ to: r.email, from: heraldSender, subject: r.subject, html: r.html, idempotencyKey: `${d.orderNumber}:${r.email}` }) }); if (res.ok) { return true; } const b = await res.text().catch(() => ''); console.error(`[halo-order-email] herald failed for ${r.email}: ${res.status} ${b}`); return false; } catch (e) { console.error('[halo-order-email] herald error', e); return false; } }; const sendViaResend = async (r) => { if (!resendApiKey) { return false; } const res = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${resendApiKey}` }, body: JSON.stringify({ from: sender, to: [r.email], subject: r.subject, html: r.html }) }); if (!res.ok) { const b = await res.text().catch(() => ''); console.error(`[halo-order-email] resend failed for ${r.email}: ${res.status} ${b}`); return false; } return true; }; let sent = 0; for (const r of recipients) { if (!r.email) { continue; } try { if (vortexApiUrl && vortexApiKey) { const sup = await fetch(vortexApiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${vortexApiKey}` }, body: JSON.stringify({ query: 'query($email:String!){emailSuppressions(condition:{email:$email}){totalCount}}', variables: { email: r.email } }) }); const sj = await sup.json(); if ((sj.data?.emailSuppressions?.totalCount ?? 0) > 0) { console.log(`[halo-order-email] suppressed ${r.email}`); continue; } } } catch (e) { console.error('[halo-order-email] suppression check failed', e); } let ok = false; if (heraldEnabled) { ok = await sendViaHerald(r); } if (!ok) { ok = await sendViaResend(r); } if (ok) { sent++; } } return { sent };"
+        "source": "const d = trigger.data; const fmt = (c) => new Intl.NumberFormat('en-US', { style: 'currency', currency: d.currency || 'USD' }).format((c || 0) / 100); const rows = (d.lines || []).map((l) => `<tr><td style='padding:6px 0'>${l.title}${l.variantTitle ? ' - ' + l.variantTitle : ''} &times; ${l.quantity}</td><td style='padding:6px 0;text-align:right'>${fmt(l.total)}</td></tr>`).join(''); const totals = [['Subtotal', d.subtotal], d.discountTotal ? ['Discount', -d.discountTotal] : null, d.shippingTotal ? ['Shipping', d.shippingTotal] : null, d.taxTotal ? ['Tax', d.taxTotal] : null].filter(Boolean).map((t) => `<tr><td style='padding:2px 0;color:#555'>${t[0]}</td><td style='padding:2px 0;text-align:right;color:#555'>${fmt(t[1])}</td></tr>`).join(''); const summary = `<table style='width:100%;border-collapse:collapse;font-family:sans-serif;font-size:14px'>${rows}<tr><td colspan='2' style='border-top:1px solid #eee;padding-top:8px'></td></tr>${totals}<tr><td style='padding-top:6px;font-weight:700'>Total</td><td style='padding-top:6px;text-align:right;font-weight:700'>${fmt(d.total)}</td></tr></table>`; const buyerHtml = `<div style='max-width:560px;margin:0 auto;font-family:sans-serif;color:#111'><h2>Thank you for your order</h2><p>${d.storeName} received your order <strong>${d.orderNumber}</strong>. Here is your receipt.</p>${summary}<p style='color:#888;font-size:12px;margin-top:24px'>Questions? Just reply to this email.</p></div>`; const sellerHtml = `<div style='max-width:560px;margin:0 auto;font-family:sans-serif;color:#111'><h2>New order ${d.orderNumber}</h2><p>${d.storeName} received a new order from ${d.buyerEmail}.</p>${summary}</div>`; return { buyerEmail: d.buyerEmail || '', buyerSubject: `Your ${d.storeName} order ${d.orderNumber}`, buyerHtml, sellerEmail: d.sellerEmail || '', sellerSubject: `New order ${d.orderNumber} - ${d.storeName}`, sellerHtml, hasSeller: !!d.sellerEmail };"
+      },
+      "next": "send-buyer"
+    },
+    {
+      "id": "send-buyer",
+      "type": "email",
+      "name": "Email Buyer",
+      "position": { "x": 0, "y": 200 },
+      "email": {
+        "to": "{{steps['build-emails'].output.buyerEmail}}",
+        "subject": "{{steps['build-emails'].output.buyerSubject}}",
+        "body": "{{steps['build-emails'].output.buyerHtml}}",
+        "contentType": "html"
+      },
+      "next": "check-seller"
+    },
+    {
+      "id": "check-seller",
+      "type": "condition",
+      "name": "Has Seller?",
+      "position": { "x": 0, "y": 300 },
+      "condition": {
+        "expression": "{{ steps['build-emails'].output.hasSeller === true }}",
+        "trueBranch": "send-seller",
+        "falseBranch": "end"
+      }
+    },
+    {
+      "id": "send-seller",
+      "type": "email",
+      "name": "Email Seller",
+      "position": { "x": 0, "y": 400 },
+      "email": {
+        "to": "{{steps['build-emails'].output.sellerEmail}}",
+        "subject": "{{steps['build-emails'].output.sellerSubject}}",
+        "body": "{{steps['build-emails'].output.sellerHtml}}",
+        "contentType": "html"
       },
       "next": "end"
     },
@@ -41,7 +78,7 @@
       "id": "end",
       "type": "stop",
       "name": "Workflow Complete",
-      "position": { "x": 0, "y": 200 },
+      "position": { "x": 0, "y": 500 },
       "stop": {
         "status": "success",
         "reason": "Halo order emails processed"
