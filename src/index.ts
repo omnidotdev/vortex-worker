@@ -10,12 +10,12 @@ import Sentry from "lib/sentry";
 
 validateEnv();
 
-import Hatchet from "@hatchet-dev/typescript-sdk";
 import { getDb } from "db";
 import { eventRoutingRuleTable, eventSubscriptionTable } from "db/schema";
 import { eq } from "drizzle-orm";
 
 import { closeCache, initCache } from "lib/cache";
+import { getHatchet } from "lib/hatchet";
 import logger from "lib/logger";
 import { executeStep } from "./dsl/executor";
 import EventsConsumer from "./events/consumer";
@@ -153,7 +153,7 @@ const pushEventBucket = {
 };
 
 async function main() {
-  let hatchetInstance: ReturnType<typeof Hatchet.init> | undefined;
+  const hatchet = getHatchet();
 
   // Spawn the health worker on HEALTH_PORT (8080). It runs on a dedicated
   // event loop so Iggy's blocking TCP I/O never delays probe responses.
@@ -286,19 +286,12 @@ async function main() {
             );
           }
 
-          if (!hatchetInstance) {
-            return Response.json(
-              { error: "Hatchet not initialized yet" },
-              { status: 503 },
-            );
-          }
-
           {
             const ac = new AbortController();
             const timer = setTimeout(() => ac.abort(), 15_000);
             try {
               await Promise.race([
-                hatchetInstance.event.push(body.key, body.payload),
+                hatchet.event.push(body.key, body.payload),
                 new Promise((_, reject) => {
                   ac.signal.addEventListener("abort", () =>
                     reject(new Error("Hatchet push timed out after 15s")),
@@ -359,8 +352,7 @@ async function main() {
   void (async () => {
     for (let attempt = 1; attempt <= MAX_HATCHET_RETRIES; attempt++) {
       try {
-        hatchetInstance = Hatchet.init();
-        const worker = await hatchetInstance.worker("vortex-dsl-worker", {
+        const worker = await hatchet.worker("vortex-dsl-worker", {
           workflows: [
             authzReconcileWorkflow,
             authzSyncWorkflow,
