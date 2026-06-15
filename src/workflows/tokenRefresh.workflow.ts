@@ -10,6 +10,7 @@
  * 3. Update token in database or mark as expired
  */
 
+import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk";
 import { and, eq, isNotNull, lt } from "drizzle-orm";
 
 import { db } from "../db";
@@ -25,8 +26,6 @@ import {
   SLACK_OAUTH_CLIENT_ID,
   SLACK_OAUTH_CLIENT_SECRET,
 } from "../lib/config/env.config";
-
-import type { Workflow } from "@hatchet-dev/typescript-sdk";
 
 /** Window before expiration to trigger refresh (30 minutes) */
 const REFRESH_WINDOW_MINUTES = 30;
@@ -131,138 +130,129 @@ function encrypt(plaintext: string): string {
   ].join(":");
 }
 
-export const tokenRefreshWorkflow: Workflow = {
-  id: "oauth-token-refresh",
+export const tokenRefreshWorkflow = CreateTaskWorkflow({
+  name: "oauth-token-refresh",
   description: "Refresh expiring OAuth tokens",
   on: {
     cron: "*/15 * * * *", // Every 15 minutes
   },
-  steps: [
-    {
-      name: "refresh-tokens",
-      timeout: "5m",
-      run: async (ctx) => {
-        const cutoff = new Date(
-          Date.now() + REFRESH_WINDOW_MINUTES * 60 * 1000,
-        );
+  executionTimeout: "5m",
+  fn: async (_input, ctx) => {
+    const cutoff = new Date(Date.now() + REFRESH_WINDOW_MINUTES * 60 * 1000);
 
-        // Find tokens expiring soon that have refresh tokens
-        const expiringTokens = await db
-          .select({
-            id: oauthTokenTable.id,
-            integrationId: oauthTokenTable.integrationId,
-            provider: oauthTokenTable.provider,
-            refreshToken: oauthTokenTable.refreshToken,
-          })
-          .from(oauthTokenTable)
-          .where(
-            and(
-              lt(oauthTokenTable.expiresAt, cutoff.toISOString()),
-              isNotNull(oauthTokenTable.refreshToken),
-            ),
+    // Find tokens expiring soon that have refresh tokens
+    const expiringTokens = await db
+      .select({
+        id: oauthTokenTable.id,
+        integrationId: oauthTokenTable.integrationId,
+        provider: oauthTokenTable.provider,
+        refreshToken: oauthTokenTable.refreshToken,
+      })
+      .from(oauthTokenTable)
+      .where(
+        and(
+          lt(oauthTokenTable.expiresAt, cutoff.toISOString()),
+          isNotNull(oauthTokenTable.refreshToken),
+        ),
+      );
+
+    ctx.log(`Found ${expiringTokens.length} tokens to refresh`);
+
+    let refreshed = 0;
+    let failed = 0;
+
+    for (const token of expiringTokens) {
+      if (!token.refreshToken) continue;
+
+      const credentials = getCredentials(token.provider);
+      if (!credentials) {
+        ctx.log(`No credentials configured for provider: ${token.provider}`);
+        failed++;
+        continue;
+      }
+
+      const tokenUrl = TOKEN_URLS[token.provider];
+      if (!tokenUrl) {
+        ctx.log(`No token URL for provider: ${token.provider}`);
+        failed++;
+        continue;
+      }
+
+      try {
+        // Decrypt refresh token
+        const refreshTokenValue = decrypt(token.refreshToken);
+
+        // Make refresh request
+        const response = await fetch(tokenUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            Accept: "application/json",
+          },
+          body: new URLSearchParams({
+            grant_type: "refresh_token",
+            refresh_token: refreshTokenValue,
+            client_id: credentials.clientId,
+            client_secret: credentials.clientSecret,
+          }).toString(),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          ctx.log(
+            `Token refresh failed for ${token.provider}: ${response.status} - ${errorText}`,
           );
 
-        ctx.log(`Found ${expiringTokens.length} tokens to refresh`);
+          // Mark integration as expired
+          await db
+            .update(integrationTable)
+            .set({
+              oauthStatus: "expired",
+              updatedAt: new Date().toISOString(),
+            })
+            .where(eq(integrationTable.id, token.integrationId));
 
-        let refreshed = 0;
-        let failed = 0;
-
-        for (const token of expiringTokens) {
-          if (!token.refreshToken) continue;
-
-          const credentials = getCredentials(token.provider);
-          if (!credentials) {
-            ctx.log(
-              `No credentials configured for provider: ${token.provider}`,
-            );
-            failed++;
-            continue;
-          }
-
-          const tokenUrl = TOKEN_URLS[token.provider];
-          if (!tokenUrl) {
-            ctx.log(`No token URL for provider: ${token.provider}`);
-            failed++;
-            continue;
-          }
-
-          try {
-            // Decrypt refresh token
-            const refreshTokenValue = decrypt(token.refreshToken);
-
-            // Make refresh request
-            const response = await fetch(tokenUrl, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/x-www-form-urlencoded",
-                Accept: "application/json",
-              },
-              body: new URLSearchParams({
-                grant_type: "refresh_token",
-                refresh_token: refreshTokenValue,
-                client_id: credentials.clientId,
-                client_secret: credentials.clientSecret,
-              }).toString(),
-            });
-
-            if (!response.ok) {
-              const errorText = await response.text();
-              ctx.log(
-                `Token refresh failed for ${token.provider}: ${response.status} - ${errorText}`,
-              );
-
-              // Mark integration as expired
-              await db
-                .update(integrationTable)
-                .set({
-                  oauthStatus: "expired",
-                  updatedAt: new Date().toISOString(),
-                })
-                .where(eq(integrationTable.id, token.integrationId));
-
-              failed++;
-              continue;
-            }
-
-            const data = await response.json();
-
-            // Calculate new expiration
-            let expiresAt: string | null = null;
-            if (data.expires_in) {
-              expiresAt = new Date(
-                Date.now() + data.expires_in * 1000,
-              ).toISOString();
-            }
-
-            // Update token
-            await db
-              .update(oauthTokenTable)
-              .set({
-                accessToken: encrypt(data.access_token),
-                refreshToken: data.refresh_token
-                  ? encrypt(data.refresh_token)
-                  : token.refreshToken,
-                expiresAt,
-                updatedAt: new Date().toISOString(),
-              })
-              .where(eq(oauthTokenTable.id, token.id));
-
-            ctx.log(`Refreshed token for integration ${token.integrationId}`);
-            refreshed++;
-          } catch (err) {
-            ctx.log(
-              `Error refreshing token: ${err instanceof Error ? err.message : "Unknown error"}`,
-            );
-            failed++;
-          }
+          failed++;
+          continue;
         }
 
-        return {
-          total: expiringTokens.length,
-          refreshed,
-          failed,
-        };
-      },
-    },
-  ],
-};
+        const data = await response.json();
+
+        // Calculate new expiration
+        let expiresAt: string | null = null;
+        if (data.expires_in) {
+          expiresAt = new Date(
+            Date.now() + data.expires_in * 1000,
+          ).toISOString();
+        }
+
+        // Update token
+        await db
+          .update(oauthTokenTable)
+          .set({
+            accessToken: encrypt(data.access_token),
+            refreshToken: data.refresh_token
+              ? encrypt(data.refresh_token)
+              : token.refreshToken,
+            expiresAt,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(oauthTokenTable.id, token.id));
+
+        ctx.log(`Refreshed token for integration ${token.integrationId}`);
+        refreshed++;
+      } catch (err) {
+        ctx.log(
+          `Error refreshing token: ${err instanceof Error ? err.message : "Unknown error"}`,
+        );
+        failed++;
+      }
+    }
+
+    return {
+      total: expiringTokens.length,
+      refreshed,
+      failed,
+    };
+  },
+});
