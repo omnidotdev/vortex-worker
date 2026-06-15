@@ -1,52 +1,57 @@
 /**
  * Built-in Email Plugin
  *
- * Sends emails via Resend.
+ * Sends emails via Herald through the notification provider.
  */
 
-import { Resend } from "resend";
+import { createNotificationProvider } from "@omnidotdev/providers";
 
+import type { NotificationProvider } from "@omnidotdev/providers";
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
 /** Default sender address */
-const DEFAULT_FROM = "Vortex <noreply@vortex.omni.dev>";
+const DEFAULT_FROM = "Omni <noreply@send.omni.dev>";
 
-/** Module-level singleton for the env-key Resend client */
-let resendClient: Resend | null = null;
+/** Module-level singleton notification provider */
+let provider: NotificationProvider | null = null;
+/** Env signature the cached provider was built from */
+let providerKey: string | null = null;
 
 /**
- * Get a Resend client instance.
+ * Get the notification provider.
  *
- * Uses a module-level singleton when relying on the env var, or creates a new
- * instance per call when an explicit `apiKey` override is provided.
+ * Builds a Herald provider when `HERALD_API_URL` and `HERALD_API_KEY` are set,
+ * otherwise a noop provider that logs and returns success. Cached as a
+ * module-level singleton keyed on the resolved env so the same instance is
+ * reused across calls.
  */
-const getResendClient = (apiKey?: string): Resend | null => {
-  if (apiKey) {
-    return new Resend(apiKey);
+const getProvider = (): NotificationProvider => {
+  const apiUrl = process.env.HERALD_API_URL;
+  const apiKey = process.env.HERALD_API_KEY;
+  const key = `${apiUrl ?? ""}|${apiKey ?? ""}`;
+
+  if (provider && providerKey === key) {
+    return provider;
   }
 
-  if (!resendClient) {
-    const RESEND_API_KEY = process.env.RESEND_API_KEY;
-
-    if (!RESEND_API_KEY) {
-      return null;
-    }
-
-    resendClient = new Resend(RESEND_API_KEY);
+  if (apiUrl && apiKey) {
+    provider = createNotificationProvider({
+      provider: "herald",
+      apiKey,
+      apiUrl,
+      defaultFrom:
+        process.env.HERALD_SENDER_EMAIL_ADDRESS ??
+        process.env.SENDER_EMAIL_ADDRESS ??
+        DEFAULT_FROM,
+    });
+  } else {
+    provider = createNotificationProvider({});
   }
 
-  return resendClient;
-};
+  providerKey = key;
 
-/** Email attachment */
-type EmailAttachment = {
-  /** Filename for the attachment */
-  filename: string;
-  /** Base64 encoded content or plain text */
-  content: string;
-  /** MIME type (default: application/octet-stream) */
-  contentType?: string;
+  return provider;
 };
 
 /** Email send input */
@@ -63,14 +68,10 @@ type EmailSendInput = {
   body: string;
   /** Content type: text or html (default: text) */
   contentType?: "text" | "html";
-  /** File attachments */
-  attachments?: EmailAttachment[];
   /** Sender address override */
   from?: string;
   /** Reply-to address */
   replyTo?: string;
-  /** Resend API key override */
-  apiKey?: string;
 };
 
 /**
@@ -90,10 +91,8 @@ const sendEmail = async (
       subject,
       body,
       contentType = "text",
-      attachments,
       from,
       replyTo,
-      apiKey,
     } = inputs as unknown as EmailSendInput;
 
     if (!to) {
@@ -125,48 +124,21 @@ const sendEmail = async (
     const ccList = cc ? (Array.isArray(cc) ? cc : [cc]) : undefined;
     const bccList = bcc ? (Array.isArray(bcc) ? bcc : [bcc]) : undefined;
 
-    const resend = getResendClient(apiKey);
-
-    if (!resend) {
-      const toStr = Array.isArray(to) ? to.join(", ") : to;
-      console.info(
-        `[Email] ${subject} -> ${toStr}`,
-        JSON.stringify({ from: from ?? DEFAULT_FROM, body }, null, 2),
-      );
-
-      return {
-        success: true,
-        output: { sent: false, recipients: toList.length, fallback: "stdout" },
-        durationMs: performance.now() - startTime,
-      };
-    }
-
-    const baseOptions = {
-      from: from ?? DEFAULT_FROM,
+    const result = await getProvider().sendEmail({
       to: toList,
       subject,
+      body,
+      html: contentType === "html",
+      ...(from && { from }),
+      ...(replyTo && { replyTo }),
       ...(ccList && { cc: ccList }),
       ...(bccList && { bcc: bccList }),
-      ...(replyTo && { replyTo }),
-      ...(attachments && {
-        attachments: attachments.map((a) => ({
-          filename: a.filename,
-          content: a.content,
-          ...(a.contentType && { content_type: a.contentType }),
-        })),
-      }),
-    };
+    });
 
-    const { data, error } = await resend.emails.send(
-      contentType === "html"
-        ? { ...baseOptions, html: body }
-        : { ...baseOptions, text: body },
-    );
-
-    if (error) {
+    if (!result.success) {
       return {
         success: false,
-        error: error.message,
+        error: result.error,
         durationMs: performance.now() - startTime,
       };
     }
@@ -174,9 +146,9 @@ const sendEmail = async (
     return {
       success: true,
       output: {
-        sent: true,
+        sent: result.success,
         recipients: toList.length,
-        messageId: data?.id,
+        messageId: result.messageId,
       },
       durationMs: performance.now() - startTime,
     };
@@ -195,7 +167,7 @@ const sendEmail = async (
 export const emailPlugin: BuiltinPlugin = {
   id: "builtin:email",
   name: "Email",
-  description: "Send emails via Resend",
+  description: "Send emails via Herald",
   actions: {
     send: {
       name: "send",
