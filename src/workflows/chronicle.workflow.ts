@@ -17,9 +17,9 @@
  * - Custom product-specific events
  */
 
-import { CHRONICLE_API_URL } from "../lib/config/env.config";
+import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk";
 
-import type { Workflow } from "@hatchet-dev/typescript-sdk";
+import { CHRONICLE_API_URL } from "../lib/config/env.config";
 
 /**
  * Audit event structure from apps (Runa, Backfeed, etc.).
@@ -109,81 +109,75 @@ const REQUEST_TIMEOUT_MS = 10000;
 /** Maximum events per batch */
 const MAX_BATCH_SIZE = 100;
 
-export const chronicleAuditWorkflow: Workflow = {
-  id: "chronicle-audit",
+export const chronicleAuditWorkflow = CreateTaskWorkflow({
+  name: "chronicle-audit",
   description: "Log audit events to Chronicle service",
   on: {
     event: "audit:log",
   },
-  steps: [
-    {
-      name: "log-to-chronicle",
-      timeout: "30s",
-      retries: 3,
-      run: async (ctx) => {
-        const input = ctx.workflowInput() as AuditLogInput;
-        const { events } = input;
+  executionTimeout: "30s",
+  retries: 3,
+  fn: async (rawInput, ctx) => {
+    const { events } = rawInput as AuditLogInput;
 
-        if (!CHRONICLE_API_URL) {
-          ctx.log("CHRONICLE_API_URL not configured, skipping audit log");
-          return {
-            success: false,
-            error: "CHRONICLE_API_URL not configured",
-            eventCount: events?.length ?? 0,
-          };
-        }
+    if (!CHRONICLE_API_URL) {
+      ctx.log("CHRONICLE_API_URL not configured, skipping audit log");
+      return {
+        success: false,
+        error: "CHRONICLE_API_URL not configured",
+        eventCount: events?.length ?? 0,
+      };
+    }
 
-        if (!events || events.length === 0) {
-          ctx.log("No events to log");
-          return {
-            success: true,
-            eventCount: 0,
-          };
-        }
+    if (!events || events.length === 0) {
+      ctx.log("No events to log");
+      return {
+        success: true,
+        eventCount: 0,
+      };
+    }
 
-        if (events.length > MAX_BATCH_SIZE) {
-          ctx.log(
-            `Warning: Batch size ${events.length} exceeds max ${MAX_BATCH_SIZE}, truncating`,
-          );
-        }
+    if (events.length > MAX_BATCH_SIZE) {
+      ctx.log(
+        `Warning: Batch size ${events.length} exceeds max ${MAX_BATCH_SIZE}, truncating`,
+      );
+    }
 
-        const batch = events.slice(0, MAX_BATCH_SIZE);
-        const sources = [...new Set(batch.map((e) => e.source))];
+    const batch = events.slice(0, MAX_BATCH_SIZE);
+    const sources = [...new Set(batch.map((e) => e.source))];
 
-        ctx.log(
-          `Logging ${batch.length} events from ${sources.join(", ")} to Chronicle`,
-        );
+    ctx.log(
+      `Logging ${batch.length} events from ${sources.join(", ")} to Chronicle`,
+    );
 
-        // Transform events from app format to Chronicle format
-        const chronicleEvents = batch.map(transformToChronicleEvent);
+    // Transform events from app format to Chronicle format
+    const chronicleEvents = batch.map(transformToChronicleEvent);
 
-        const response = await fetch(`${CHRONICLE_API_URL}/ingest/events`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ events: chronicleEvents }),
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        });
+    const response = await fetch(`${CHRONICLE_API_URL}/ingest/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ events: chronicleEvents }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
 
-        if (!response.ok) {
-          const errorText = await response
-            .text()
-            .catch((err) => (err instanceof Error ? err.message : String(err)));
-          throw new Error(
-            `Chronicle POST failed: ${response.status} - ${errorText}`,
-          );
-        }
+    if (!response.ok) {
+      const errorText = await response
+        .text()
+        .catch((err) => (err instanceof Error ? err.message : String(err)));
+      throw new Error(
+        `Chronicle POST failed: ${response.status} - ${errorText}`,
+      );
+    }
 
-        const result = (await response.json()) as { count: number };
+    const result = (await response.json()) as { count: number };
 
-        ctx.log(`Successfully logged ${result.count} events to Chronicle`);
+    ctx.log(`Successfully logged ${result.count} events to Chronicle`);
 
-        return {
-          success: true,
-          eventCount: batch.length,
-          insertedCount: result.count,
-          sources,
-        };
-      },
-    },
-  ],
-};
+    return {
+      success: true,
+      eventCount: batch.length,
+      insertedCount: result.count,
+      sources,
+    };
+  },
+});

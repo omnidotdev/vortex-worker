@@ -6,7 +6,7 @@
  * scheduling, and observability.
  */
 
-import Hatchet, { HatchetClient } from "@hatchet-dev/typescript-sdk";
+import { getHatchet } from "lib/hatchet";
 
 import type { WorkflowDefinition } from "../../dsl/types";
 import type { WorkflowExecutor } from "../interface";
@@ -48,13 +48,8 @@ function mapHatchetStatus(status: string): RunStatus {
 
 export class HatchetExecutor implements WorkflowExecutor {
   readonly name = "hatchet";
-  private hatchet: ReturnType<typeof Hatchet.init>;
-  private v1Client: HatchetClient;
 
-  constructor(_options?: Record<string, unknown>) {
-    this.hatchet = Hatchet.init();
-    this.v1Client = HatchetClient.init();
-  }
+  constructor(_options?: Record<string, unknown>) {}
 
   async execute(
     definition: WorkflowDefinition,
@@ -72,7 +67,7 @@ export class HatchetExecutor implements WorkflowExecutor {
     });
 
     // Push event to Hatchet to trigger workflow execution
-    await this.hatchet.event.push("workflow:execute", {
+    await getHatchet().event.push("workflow:execute", {
       workflowId,
       runId,
       triggerData: triggerData || {},
@@ -85,7 +80,7 @@ export class HatchetExecutor implements WorkflowExecutor {
   async getStatus(runId: string): Promise<ExecutionResult> {
     try {
       // Use Hatchet v1 API to get run details
-      const runDetails = await this.v1Client.runs.get(runId);
+      const runDetails = await getHatchet().runs.get(runId);
       const run = runDetails.run;
 
       const status = mapHatchetStatus(run.status || "PENDING");
@@ -143,7 +138,7 @@ export class HatchetExecutor implements WorkflowExecutor {
   async cancel(runId: string): Promise<void> {
     try {
       // Use Hatchet v1 API to cancel the run
-      await this.v1Client.runs.cancel({ ids: [runId] });
+      await getHatchet().runs.cancel({ ids: [runId] });
 
       // Emit cancel event
       this.emitEvent(runId, {
@@ -288,7 +283,7 @@ export class HatchetExecutor implements WorkflowExecutor {
     try {
       // Verify we can connect to Hatchet by listing workflows
       // This is a lightweight API call that confirms connectivity
-      const workflows = await this.v1Client.workflows.list({ limit: 1 });
+      const workflows = await getHatchet().workflows.list({ limit: 1 });
       return workflows !== null;
     } catch {
       return false;

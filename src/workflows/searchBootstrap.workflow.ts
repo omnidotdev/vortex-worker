@@ -11,12 +11,12 @@
  * @see https://www.meilisearch.com/docs/learn/security/tenant_token_reference
  */
 
+import { CreateWorkflow } from "@hatchet-dev/typescript-sdk";
+
 import {
   MEILISEARCH_MASTER_KEY,
   MEILISEARCH_URL,
 } from "../lib/config/env.config";
-
-import type { Workflow } from "@hatchet-dev/typescript-sdk";
 
 /** Index configuration matching @omnidotdev/search package */
 interface IndexConfig {
@@ -192,203 +192,205 @@ async function waitForTask(taskUid: number): Promise<void> {
   throw new Error(`Task ${taskUid} timed out after ${TASK_POLL_TIMEOUT_MS}ms`);
 }
 
-export const searchBootstrapWorkflow: Workflow = {
-  id: "search-bootstrap",
+export const searchBootstrapWorkflow = CreateWorkflow({
+  name: "search-bootstrap",
   description: "Initialize Meilisearch with API keys and indexes",
   on: {
     event: "search:bootstrap",
   },
-  steps: [
-    {
-      name: "create-search-key",
-      timeout: "60s",
-      retries: 3,
-      run: async (ctx) => {
-        if (!MEILISEARCH_URL || !MEILISEARCH_MASTER_KEY) {
-          ctx.log("Meilisearch not configured, skipping bootstrap");
-          return {
-            success: false,
-            error: "MEILISEARCH_URL or MEILISEARCH_MASTER_KEY not configured",
-          };
-        }
+});
 
-        ctx.log("Checking for existing search-only API key...");
+const _createSearchKey = searchBootstrapWorkflow.task({
+  name: "create-search-key",
+  executionTimeout: "60s",
+  retries: 3,
+  fn: async (_input, ctx) => {
+    if (!MEILISEARCH_URL || !MEILISEARCH_MASTER_KEY) {
+      ctx.log("Meilisearch not configured, skipping bootstrap");
+      return {
+        success: false,
+        error: "MEILISEARCH_URL or MEILISEARCH_MASTER_KEY not configured",
+      };
+    }
 
-        // List existing keys
-        const keysResponse = await fetch(`${MEILISEARCH_URL}/keys`, {
-          headers: { Authorization: `Bearer ${MEILISEARCH_MASTER_KEY}` },
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        });
+    ctx.log("Checking for existing search-only API key...");
 
-        if (!keysResponse.ok) {
-          throw new Error(`Failed to list keys: ${keysResponse.status}`);
-        }
+    // List existing keys
+    const keysResponse = await fetch(`${MEILISEARCH_URL}/keys`, {
+      headers: { Authorization: `Bearer ${MEILISEARCH_MASTER_KEY}` },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
 
-        const keysData = (await keysResponse.json()) as {
-          results: Array<{
-            uid: string;
-            name: string | null;
-            actions: string[];
-          }>;
+    if (!keysResponse.ok) {
+      throw new Error(`Failed to list keys: ${keysResponse.status}`);
+    }
+
+    const keysData = (await keysResponse.json()) as {
+      results: Array<{
+        uid: string;
+        name: string | null;
+        actions: string[];
+      }>;
+    };
+
+    // Check if search-only key already exists
+    const existingKey = keysData.results.find(
+      (k) =>
+        k.name === SEARCH_KEY_NAME ||
+        (k.actions.length === 1 && k.actions[0] === "search"),
+    );
+
+    if (existingKey) {
+      ctx.log(`Search-only key already exists: ${existingKey.uid}`);
+      return {
+        success: true,
+        keyUid: existingKey.uid,
+        created: false,
+      };
+    }
+
+    ctx.log("Creating new search-only API key...");
+
+    // Create search-only key
+    const createResponse = await fetch(`${MEILISEARCH_URL}/keys`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${MEILISEARCH_MASTER_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: SEARCH_KEY_NAME,
+        description:
+          "Search-only key for tenant token generation in Omni products",
+        actions: ["search"],
+        indexes: ["*"],
+        expiresAt: null, // Never expires
+      }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+
+    if (!createResponse.ok) {
+      const errorText = await createResponse.text().catch(() => "Unknown");
+      throw new Error(
+        `Failed to create search key: ${createResponse.status} - ${errorText}`,
+      );
+    }
+
+    const newKey = (await createResponse.json()) as { uid: string };
+    ctx.log(`Created search-only key: ${newKey.uid}`);
+
+    return {
+      success: true,
+      keyUid: newKey.uid,
+      created: true,
+    };
+  },
+});
+
+searchBootstrapWorkflow.task({
+  name: "configure-indexes",
+  parents: [_createSearchKey],
+  // 5 min - indexes are configured sequentially with task polling
+  executionTimeout: "300s",
+  retries: 2,
+  fn: async (_input, ctx) => {
+    if (!MEILISEARCH_URL || !MEILISEARCH_MASTER_KEY) {
+      return { success: false, error: "Meilisearch not configured" };
+    }
+
+    const results: Array<{
+      index: string;
+      created: boolean;
+      configured: boolean;
+    }> = [];
+
+    for (const indexConfig of INDEXES) {
+      ctx.log(`Configuring index: ${indexConfig.name}`);
+
+      // Create index (idempotent - returns 409 if already exists)
+      const createResponse = await fetch(`${MEILISEARCH_URL}/indexes`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${MEILISEARCH_MASTER_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          uid: indexConfig.name,
+          primaryKey: "id",
+        }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+
+      const alreadyExists = createResponse.status === 409;
+      let created = false;
+
+      if (createResponse.status === 202) {
+        // Async task - wait for completion
+        const createTask = (await createResponse.json()) as {
+          taskUid: number;
         };
-
-        // Check if search-only key already exists
-        const existingKey = keysData.results.find(
-          (k) =>
-            k.name === SEARCH_KEY_NAME ||
-            (k.actions.length === 1 && k.actions[0] === "search"),
+        ctx.log(
+          `Index ${indexConfig.name} creation task: ${createTask.taskUid}`,
         );
+        await waitForTask(createTask.taskUid);
+        created = true;
+      } else if (!alreadyExists && createResponse.status !== 201) {
+        ctx.log(
+          `Warning: Could not create index ${indexConfig.name}: ${createResponse.status}`,
+        );
+      }
 
-        if (existingKey) {
-          ctx.log(`Search-only key already exists: ${existingKey.uid}`);
-          return {
-            success: true,
-            keyUid: existingKey.uid,
-            created: false,
-          };
-        }
-
-        ctx.log("Creating new search-only API key...");
-
-        // Create search-only key
-        const createResponse = await fetch(`${MEILISEARCH_URL}/keys`, {
-          method: "POST",
+      // Update settings (also async)
+      const settingsResponse = await fetch(
+        `${MEILISEARCH_URL}/indexes/${indexConfig.name}/settings`,
+        {
+          method: "PATCH",
           headers: {
             Authorization: `Bearer ${MEILISEARCH_MASTER_KEY}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            name: SEARCH_KEY_NAME,
-            description:
-              "Search-only key for tenant token generation in Omni products",
-            actions: ["search"],
-            indexes: ["*"],
-            expiresAt: null, // Never expires
+            searchableAttributes: indexConfig.searchableAttributes,
+            filterableAttributes: indexConfig.filterableAttributes,
+            sortableAttributes: indexConfig.sortableAttributes ?? [],
           }),
           signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-        });
+        },
+      );
 
-        if (!createResponse.ok) {
-          const errorText = await createResponse.text().catch(() => "Unknown");
-          throw new Error(
-            `Failed to create search key: ${createResponse.status} - ${errorText}`,
-          );
-        }
-
-        const newKey = (await createResponse.json()) as { uid: string };
-        ctx.log(`Created search-only key: ${newKey.uid}`);
-
-        return {
-          success: true,
-          keyUid: newKey.uid,
-          created: true,
+      let configured = false;
+      if (settingsResponse.status === 202) {
+        const settingsTask = (await settingsResponse.json()) as {
+          taskUid: number;
         };
-      },
-    },
-    {
-      name: "configure-indexes",
-      timeout: "300s", // 5 min - indexes are configured sequentially with task polling
-      retries: 2,
-      run: async (ctx) => {
-        if (!MEILISEARCH_URL || !MEILISEARCH_MASTER_KEY) {
-          return { success: false, error: "Meilisearch not configured" };
-        }
-
-        const results: Array<{
-          index: string;
-          created: boolean;
-          configured: boolean;
-        }> = [];
-
-        for (const indexConfig of INDEXES) {
-          ctx.log(`Configuring index: ${indexConfig.name}`);
-
-          // Create index (idempotent - returns 409 if already exists)
-          const createResponse = await fetch(`${MEILISEARCH_URL}/indexes`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${MEILISEARCH_MASTER_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              uid: indexConfig.name,
-              primaryKey: "id",
-            }),
-            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-          });
-
-          const alreadyExists = createResponse.status === 409;
-          let created = false;
-
-          if (createResponse.status === 202) {
-            // Async task - wait for completion
-            const createTask = (await createResponse.json()) as {
-              taskUid: number;
-            };
-            ctx.log(
-              `Index ${indexConfig.name} creation task: ${createTask.taskUid}`,
-            );
-            await waitForTask(createTask.taskUid);
-            created = true;
-          } else if (!alreadyExists && createResponse.status !== 201) {
-            ctx.log(
-              `Warning: Could not create index ${indexConfig.name}: ${createResponse.status}`,
-            );
-          }
-
-          // Update settings (also async)
-          const settingsResponse = await fetch(
-            `${MEILISEARCH_URL}/indexes/${indexConfig.name}/settings`,
-            {
-              method: "PATCH",
-              headers: {
-                Authorization: `Bearer ${MEILISEARCH_MASTER_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                searchableAttributes: indexConfig.searchableAttributes,
-                filterableAttributes: indexConfig.filterableAttributes,
-                sortableAttributes: indexConfig.sortableAttributes ?? [],
-              }),
-              signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-            },
-          );
-
-          let configured = false;
-          if (settingsResponse.status === 202) {
-            const settingsTask = (await settingsResponse.json()) as {
-              taskUid: number;
-            };
-            ctx.log(
-              `Index ${indexConfig.name} settings task: ${settingsTask.taskUid}`,
-            );
-            await waitForTask(settingsTask.taskUid);
-            configured = true;
-          } else if (!settingsResponse.ok) {
-            ctx.log(
-              `Warning: Could not configure index ${indexConfig.name}: ${settingsResponse.status}`,
-            );
-          }
-
-          results.push({
-            index: indexConfig.name,
-            created: created && !alreadyExists,
-            configured,
-          });
-        }
-
-        const successCount = results.filter((r) => r.configured).length;
         ctx.log(
-          `Configured ${successCount}/${INDEXES.length} indexes successfully`,
+          `Index ${indexConfig.name} settings task: ${settingsTask.taskUid}`,
         );
+        await waitForTask(settingsTask.taskUid);
+        configured = true;
+      } else if (!settingsResponse.ok) {
+        ctx.log(
+          `Warning: Could not configure index ${indexConfig.name}: ${settingsResponse.status}`,
+        );
+      }
 
-        return {
-          success: successCount === INDEXES.length,
-          indexCount: INDEXES.length,
-          configuredCount: successCount,
-          results,
-        };
-      },
-    },
-  ],
-};
+      results.push({
+        index: indexConfig.name,
+        created: created && !alreadyExists,
+        configured,
+      });
+    }
+
+    const successCount = results.filter((r) => r.configured).length;
+    ctx.log(
+      `Configured ${successCount}/${INDEXES.length} indexes successfully`,
+    );
+
+    return {
+      success: successCount === INDEXES.length,
+      indexCount: INDEXES.length,
+      configuredCount: successCount,
+      results,
+    };
+  },
+});

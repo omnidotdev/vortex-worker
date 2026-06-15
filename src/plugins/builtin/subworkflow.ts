@@ -4,12 +4,12 @@
  * Execute another workflow as a step.
  */
 
-import Hatchet from "@hatchet-dev/typescript-sdk";
 import { eq } from "drizzle-orm";
 
 import { getDb } from "../../db";
 import { createWorkflowRun } from "../../db/runLogger";
 import { workflowRunTable, workflowTable } from "../../db/schema";
+import { getHatchet } from "../../lib/hatchet";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
@@ -80,7 +80,7 @@ const executeSubworkflow = async (
     });
 
     // Initialize Hatchet client and trigger the child workflow
-    const hatchet = Hatchet.init();
+    const hatchet = getHatchet();
     await hatchet.event.push("workflow:execute", {
       workflowId,
       runId: childRunId,
