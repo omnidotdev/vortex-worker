@@ -37,6 +37,7 @@ import { validateEventData } from "./schema-validator";
 import { resolveSchemaVersion } from "./schema-version-resolver";
 import * as subscriptionCache from "./subscription-cache";
 import { deliverToSubscriptions } from "./subscription-delivery";
+import { withTimeout } from "./withTimeout";
 
 import type { Redis } from "iovalkey";
 import type { Enforcement } from "./schema-validator";
@@ -56,6 +57,25 @@ const TIER_SYNC_EVENT_TYPES = new Set([
   "platform.plan_feature.updated",
   "platform.plan_feature.deleted",
 ]);
+
+// Hard ceiling on a single dispatch to Hatchet. The Hatchet client has no
+// client-side timeout, so a wedged engine connection makes `event.push` hang
+// forever inside the synchronous event consumer's handler, freezing the whole
+// poll loop (the 2026-06-12 incident). Time-bounding the push lets a hung
+// dispatch reject so the surrounding retry/DLQ handling runs and the consumer
+// keeps draining instead of stalling.
+const DISPATCH_TIMEOUT_MS = 15_000;
+
+/** Push a `workflow:execute` dispatch to Hatchet, bounded by a timeout. */
+const pushExecute = (
+  hatchet: ReturnType<typeof getHatchet>,
+  payload: Record<string, unknown>,
+): Promise<unknown> =>
+  withTimeout(
+    hatchet.event.push("workflow:execute", payload),
+    DISPATCH_TIMEOUT_MS,
+    "dispatch:workflow:execute",
+  );
 
 /**
  * Bridge plan mutation CloudEvents to the `tier:sync` Hatchet event.
@@ -606,7 +626,7 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
 
                       const traceCtx = injectTraceContext();
 
-                      await hatchet.event.push("workflow:execute", {
+                      await pushExecute(hatchet, {
                         workflowId: engineWorkflowId,
                         runId: inserted.id,
                         organizationId,
@@ -681,7 +701,7 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
             // Inject trace context so downstream workflow execution continues the trace
             const traceCtx = injectTraceContext();
 
-            await hatchet.event.push("workflow:execute", {
+            await pushExecute(hatchet, {
               workflowId: engineWorkflowId,
               runId: inserted.id,
               organizationId: event.organizationId,
@@ -789,7 +809,7 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
 
           const traceCtx = injectTraceContext();
 
-          await hatchet.event.push("workflow:execute", {
+          await pushExecute(hatchet, {
             workflowId: `collect-resume-${completed.workflowRunId}`,
             runId: completed.workflowRunId,
             organizationId: event.organizationId,
@@ -813,7 +833,7 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
 
           const traceCtx = injectTraceContext();
 
-          await hatchet.event.push("workflow:execute", {
+          await pushExecute(hatchet, {
             workflowId: `collect-timeout-${timedOut.workflowRunId}`,
             runId: timedOut.workflowRunId,
             organizationId: event.organizationId,
