@@ -624,7 +624,7 @@
         "@iggy.rs/sdk": "^1.0.6",
         "@ironclad/rivet-core": "^1.25.0",
         "@modelcontextprotocol/sdk": "^1.29.0",
-        "@omnidotdev/providers": "github:omnidotdev/providers#ee0cda8",
+        "@omnidotdev/providers": "github:omnidotdev/providers#b991cc2",
         "@opentelemetry/api": "^1.9.1",
         "@opentelemetry/auto-instrumentations-node": "^0.72.0",
         "@opentelemetry/exporter-logs-otlp-http": "^0.214.0",
@@ -2601,7 +2601,7 @@
 
     "@notionhq/client": ["@notionhq/client@2.2.14", "", { "dependencies": { "@types/node-fetch": "^2.5.10", "node-fetch": "^2.6.1" } }, "sha512-oqUefZtCiJPCX+74A1Os9OVTef3fSnVWe2eVQtU1HJSD+nsfxfhwvDKnzJTh2Tw1ZHKLxpieHB/nzGdY+Uo12A=="],
 
-    "@omnidotdev/providers": ["@omnidotdev/providers@github:omnidotdev/providers#ee0cda8", { "dependencies": { "ajv": "^8.18.0", "jose": "^6.1.3" }, "peerDependencies": { "@aws-sdk/client-s3": ">=3.0.0", "@aws-sdk/s3-request-presigner": ">=3.0.0", "@envelop/types": ">=5.0.0", "@escape.tech/graphql-armor": ">=3.0.0", "@iggy.rs/sdk": ">=1.0.0", "@tanstack/query-core": ">=5.0.0", "ajv": ">=8.0.0", "graphile-export": ">=1.0.0-rc.0", "postgraphile": ">=5.0.0-rc.0", "react": ">=19.0.0", "resend": ">=4.0.0", "unleash-client": ">=6.0.0" }, "optionalPeers": ["@aws-sdk/client-s3", "@aws-sdk/s3-request-presigner", "@envelop/types", "@escape.tech/graphql-armor", "@iggy.rs/sdk", "@tanstack/query-core", "ajv", "graphile-export", "postgraphile", "react", "resend", "unleash-client"] }, "omnidotdev-providers-ee0cda8", "sha512-0JFOh2S7nExetUuWBbSok11lsyAqu79Z5f3kinSiXqh2FADNcdBO7bsJPjckRcrilVKrKP/6Gy+i3ciJnk3lHw=="],
+    "@omnidotdev/providers": ["@omnidotdev/providers@github:omnidotdev/providers#b991cc2", { "dependencies": { "ajv": "^8.18.0", "jose": "^6.1.3" }, "peerDependencies": { "@aws-sdk/client-s3": ">=3.0.0", "@aws-sdk/s3-request-presigner": ">=3.0.0", "@envelop/types": ">=5.0.0", "@escape.tech/graphql-armor": ">=3.0.0", "@iggy.rs/sdk": ">=1.0.0", "@tanstack/query-core": ">=5.0.0", "ajv": ">=8.0.0", "graphile-export": ">=1.0.0-rc.0", "postgraphile": ">=5.0.0-rc.0", "react": ">=19.0.0", "resend": ">=4.0.0", "unleash-client": ">=6.0.0" }, "optionalPeers": ["@aws-sdk/client-s3", "@aws-sdk/s3-request-presigner", "@envelop/types", "@escape.tech/graphql-armor", "@iggy.rs/sdk", "@tanstack/query-core", "ajv", "graphile-export", "postgraphile", "react", "resend", "unleash-client"] }, "omnidotdev-providers-b991cc2", "sha512-IEaDBdodn+P5L0FIksSzEcg5B9WgrLLEdByxO7oPkqcVuNUpAbqLMbrvTo+8W6VPWEF2uMEJetfXU2RBCzRyfQ=="],
 
     "@onfleet/node-onfleet": ["@onfleet/node-onfleet@1.3.3", "", { "dependencies": { "bottleneck": "^2.19.5", "node-fetch": "^2.6.7" } }, "sha512-0pcg+J9pdNEMAt/GYq96l4rmBsrsDwnTCWrjZhRCKmTlZq0QHBN/8u8smR7RPubg+DsMc5MOSPXXoLsfn03YIg=="],
 
@@ -4727,8 +4727,6 @@
 
     "possible-typed-array-names": ["possible-typed-array-names@1.1.0", "", {}, "sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg=="],
 
-    "postal-mime": ["postal-mime@2.7.4", "", {}, "sha512-0WdnFQYUrPGGTFu1uOqD2s7omwua8xaeYGdO6rb88oD5yJ/4pPHDA4sdWqfD8wQVfCny563n/HQS7zTFft+f/g=="],
-
     "postgres-array": ["postgres-array@2.0.0", "", {}, "sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA=="],
 
     "postgres-bytea": ["postgres-bytea@1.0.1", "", {}, "sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ=="],
@@ -4860,8 +4858,6 @@
     "require-main-filename": ["require-main-filename@2.0.0", "", {}, "sha512-NKN5kMDylKuldxYLSUfrbo5Tuzh4hd+2E8NPPX02mZtn1VuREQToYe/ZdlJy+J3uCpfaiGF05e7B8W0iXbQHmg=="],
 
     "requires-port": ["requires-port@1.0.0", "", {}, "sha512-KigOCHcocU3XODJxsu8i/j8T9tzT4adHiecwORRQ0ZZFcp7ahwXuRU1m+yuO90C5ZUyGeGfocHDI14M3L3yDAQ=="],
-
-    "resend": ["resend@6.12.0", "", { "dependencies": { "postal-mime": "2.7.4", "svix": "1.90.0" }, "peerDependencies": { "@react-email/render": "*" }, "optionalPeers": ["@react-email/render"] }, "sha512-CaxEvX1z+/MGbgnhsM/bvmkbnZd1v1sEXELAjBNSDBQNMaB7MgqOyrBgI27CYikEgdaDnBrXghAXYWTBs/h5Bw=="],
 
     "resolve-from": ["resolve-from@5.0.0", "", {}, "sha512-qYg9KP24dD5qka9J47d0aVky0N+b4fTU89LN9iDnjB5waksiC49rvMB0PrUJQGoTmH50XPiqOvAjDfaijGxYZw=="],
 
@@ -11979,8 +11975,6 @@
 
     "require-in-the-middle/debug": ["debug@4.4.3", "", { "dependencies": { "ms": "^2.1.3" } }, "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA=="],
 
-    "resend/svix": ["svix@1.90.0", "", { "dependencies": { "standardwebhooks": "1.0.0", "uuid": "^10.0.0" } }, "sha512-ljkZuyy2+IBEoESkIpn8sLM+sxJHQcPxlZFxU+nVDhltNfUMisMBzWX/UR8SjEnzoI28ZjCzMbmYAPwSTucoMw=="],
-
     "rimraf/glob": ["glob@10.5.0", "", { "dependencies": { "foreground-child": "^3.1.0", "jackspeak": "^3.1.2", "minimatch": "^9.0.4", "minipass": "^7.1.2", "package-json-from-dist": "^1.0.0", "path-scurry": "^1.11.1" }, "bin": { "glob": "dist/esm/bin.mjs" } }, "sha512-DfXN8DfhJ7NH3Oe7cFmu3NCu1wKbkReJ8TorzSAFbSKrlNaQSKfIzqYqVY8zlbs2NLBbWpRiU52GX2PbaBVNkg=="],
 
     "rolldown/@oxc-project/types": ["@oxc-project/types@0.70.0", "", {}, "sha512-ngyLUpUjO3dpqygSRQDx7nMx8+BmXbWOU4oIwTJFV2MVIDG7knIZwgdwXlQWLg3C3oxg1lS7ppMtPKqKFb7wzw=="],
@@ -14478,8 +14472,6 @@
     "remark-stringify/mdast-util-to-markdown/mdast-util-to-string": ["mdast-util-to-string@2.0.0", "", {}, "sha512-AW4DRS3QbBayY/jJmD8437V1Gombjf8RSOUCMFBuo5iHi58AGEgVCKQ+ezHkZZDpAQS75hcBMpLqjpJTjtUL7w=="],
 
     "remark-stringify/mdast-util-to-markdown/zwitch": ["zwitch@1.0.5", "", {}, "sha512-V50KMwwzqJV0NpZIZFwfOD5/lyny3WlSzRiXgA0G7VUnRlqttta1L6UQIHzd6EuBY/cHGfwTIck7w1yH6Q5zUw=="],
-
-    "resend/svix/uuid": ["uuid@10.0.0", "", { "bin": { "uuid": "dist/bin/uuid" } }, "sha512-8XkAphELsDnEGrDxUOHB3RGvXz6TeuYSGEZBOjtTtPm2lwhGBjLgOzLHB63IUWfBpNucQjND6d3AOudO+H3RWQ=="],
 
     "rimraf/glob/minipass": ["minipass@7.1.2", "", {}, "sha512-qOOzS1cBTWYF4BH8fVePDBOO9iptMnGUEZwNc/cMWnTV2nVLZ7VoNWEPHkYczZA0pdoA7dl6e7FL659nX9S2aw=="],
 
