@@ -6,7 +6,7 @@
  * groups (kind 2) so multiple worker instances can share the load.
  */
 
-import { Client, Partitioning } from "@iggy.rs/sdk";
+import { Client, Partitioning, PollingStrategy } from "@iggy.rs/sdk";
 import { CompressionAlgorithmKind } from "@iggy.rs/sdk/dist/wire/topic/topic.utils.js";
 
 import logger from "lib/logger";
@@ -42,6 +42,12 @@ class EventsConsumer {
   #client: Client | null = null;
   #timer: ReturnType<typeof setTimeout> | null = null;
   #running = false;
+  // Next offset to poll per `${topicId}:${partitionId}`. We poll by explicit
+  // offset rather than the SDK's `Next` strategy: against our server version
+  // `Next` + autocommit stops returning messages after the first batch, leaving
+  // the consumer permanently stalled mid-backlog. Seeded from the server-stored
+  // offset on first poll, then advanced locally past each processed batch.
+  #partitionOffsets = new Map<string, bigint>();
   // Track which DLQ topics have been created
   #dlqTopics = new Set<string>();
   // Token bucket for rate limiting — null means unlimited
@@ -263,30 +269,63 @@ class EventsConsumer {
    * Poll a single topic and dispatch each message to the handler.
    */
   async #pollTopic(client: Client, topicId: string): Promise<void> {
-    // The experimental Iggy node SDK's consumer-group auto-rotation
-    // (`consumer: group`, `partitionId: 0`) stops returning messages after the
-    // first batch on our server. Poll each partition explicitly as a single
-    // named consumer instead; the shared consumer id keeps the two worker
-    // replicas' per-partition offsets coordinated server-side, and `Next` +
-    // autocommit advance each partition independently.
+    // Poll each partition explicitly by offset as a single named consumer. The
+    // SDK's `Next` strategy stalls after the first batch on our server version,
+    // so we track the next offset per partition ourselves: seed it from the
+    // server-stored offset on first poll, then advance past each batch. The two
+    // worker replicas may both poll the same offset; routeEvent's correlationId
+    // dedup makes a re-delivered event a no-op, so each event dispatches once.
+    const consumer = { kind: 1 as const, id: CONSUMER_ID };
+
     for (
       let partitionId = 1;
       partitionId <= DEFAULT_PARTITIONS;
       partitionId++
     ) {
+      const key = `${topicId}:${partitionId}`;
+
+      if (!this.#partitionOffsets.has(key)) {
+        try {
+          const stored = await withTimeout(
+            client.offset.get({
+              streamId: STREAM_ID,
+              topicId,
+              consumer,
+              partitionId,
+            }),
+            IGGY_OP_TIMEOUT_MS,
+            `offset.get:${topicId}:${partitionId}`,
+          );
+          // Resume just after the last committed offset
+          this.#partitionOffsets.set(key, stored.storedOffset + 1n);
+        } catch {
+          // No stored offset for this partition yet; start from the beginning
+          this.#partitionOffsets.set(key, 0n);
+        }
+      }
+
+      const fromOffset = this.#partitionOffsets.get(key) ?? 0n;
+
       const response = await withTimeout(
         client.message.poll({
           streamId: STREAM_ID,
           topicId,
-          consumer: { kind: 1, id: CONSUMER_ID },
+          consumer,
           partitionId,
-          pollingStrategy: { kind: 5, value: 0n },
+          pollingStrategy: PollingStrategy.Offset(fromOffset),
           count: BATCH_SIZE,
           autocommit: true,
         }),
         IGGY_OP_TIMEOUT_MS,
         `message.poll:${topicId}:${partitionId}`,
       );
+
+      // Advance our local cursor past the batch so the next poll moves forward
+      // even when the server's `Next` tracking does not
+      if (response.messages.length > 0) {
+        const last = response.messages[response.messages.length - 1];
+        this.#partitionOffsets.set(key, last.offset + 1n);
+      }
 
       for (const message of response.messages) {
         let event: OmniEvent;
