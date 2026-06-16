@@ -23,6 +23,11 @@ const POLL_INTERVAL_MS = 100;
 // so a half-open connection makes `topic.list` / `message.poll` hang forever,
 // freezing the sequential poll loop. On timeout we reconnect and carry on.
 const IGGY_OP_TIMEOUT_MS = 5000;
+// Hard ceiling on a single event handler. The poll loop awaits the handler
+// synchronously, so any hang inside routeEvent (a wedged Redis dedup, a slow
+// subscription delivery, a stuck dispatch) would freeze the whole consumer.
+// On timeout the event is sent to the DLQ and the loop moves on.
+const HANDLER_TIMEOUT_MS = 20_000;
 const BATCH_SIZE = 10;
 const DEFAULT_PARTITIONS = 3;
 // 90-day retention
@@ -342,7 +347,11 @@ class EventsConsumer {
 
         try {
           await this.#consumeToken();
-          await this.#handler(event);
+          await withTimeout(
+            this.#handler(event),
+            HANDLER_TIMEOUT_MS,
+            `handler:${event.type}`,
+          );
         } catch (err) {
           logger.error("Event handler failed", {
             eventId: event.id,
