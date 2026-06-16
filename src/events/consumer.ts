@@ -15,9 +15,12 @@ import { withTimeout } from "./withTimeout";
 import type { DlqEvent, EventHandler, EventsConfig, OmniEvent } from "./types";
 
 const STREAM_ID = 1;
-// Shared named consumer. Both worker replicas use the same id so the server
-// coordinates their per-partition offsets (each message is delivered once).
-const CONSUMER_ID = "vortex-worker";
+// Per-pod named consumer id. Each worker replica MUST use a distinct id: two
+// clients polling the same single (kind 1) consumer id concurrently deadlock on
+// our server version (every poll hangs forever). With distinct ids each replica
+// drains independently and routeEvent's correlationId dedup keeps each event a
+// single dispatch across replicas.
+const CONSUMER_ID = `vortex-worker-${process.env.HOSTNAME ?? crypto.randomUUID()}`;
 const POLL_INTERVAL_MS = 100;
 // Hard ceiling on any single Iggy request. The SDK has no client-side timeout,
 // so a half-open connection makes `topic.list` / `message.poll` hang forever,
@@ -30,6 +33,9 @@ const IGGY_OP_TIMEOUT_MS = 5000;
 const HANDLER_TIMEOUT_MS = 20_000;
 const BATCH_SIZE = 10;
 const DEFAULT_PARTITIONS = 3;
+// Forget the "missing topic" set roughly every minute (cycles run ~every 100ms)
+// so a topic created after startup is retried instead of skipped forever.
+const MISSING_TOPIC_RETRY_CYCLES = 600;
 // 90-day retention
 const RETENTION_SECONDS = 90 * 24 * 60 * 60;
 
@@ -53,6 +59,12 @@ class EventsConsumer {
   // the consumer permanently stalled mid-backlog. Seeded from the server-stored
   // offset on first poll, then advanced locally past each processed batch.
   #partitionOffsets = new Map<string, bigint>();
+  // Topics with a routing rule/subscription but no server-side topic yet (no
+  // events ever published). Polling/seeding such a topic throws a buffer-bounds
+  // error that corrupts the connection, so we skip them. Cleared periodically so
+  // a topic created later is picked up.
+  #missingTopics = new Set<string>();
+  #pollCycles = 0;
   // Track which DLQ topics have been created
   #dlqTopics = new Set<string>();
   // Token bucket for rate limiting — null means unlimited
@@ -214,12 +226,21 @@ class EventsConsumer {
       return;
     }
 
+    // Periodically forget which topics were missing so one created after the
+    // consumer started (an org's first event) gets picked up again.
+    this.#pollCycles += 1;
+    if (this.#pollCycles % MISSING_TOPIC_RETRY_CYCLES === 0) {
+      this.#missingTopics.clear();
+    }
+
     for (const topicName of topicNames) {
-      // Skip dead-letter topics
+      // Skip dead-letter topics and topics with no server-side topic yet
       if (topicName.endsWith("-dlq")) continue;
+      if (this.#missingTopics.has(topicName)) continue;
 
       try {
-        await this.#pollTopic(client, topicName);
+        // Always poll with the current client; a reconnect below swaps it out
+        await this.#pollTopic(this.#client ?? client, topicName);
       } catch (err) {
         const error = err instanceof Error ? err.message : String(err);
 
@@ -234,15 +255,22 @@ class EventsConsumer {
           return;
         }
 
-        // A topic with a routing rule or subscription but no published events
-        // yet has no server-side topic; that is expected, not an error
-        if (error.includes("topic_name_not_found")) {
-          logger.debug("Topic not yet created, skipping", {
-            topic: topicName,
-          });
-        } else {
-          logger.error("Error polling topic", { topic: topicName, error });
+        // A topic with a routing rule/subscription but no published events yet
+        // has no server-side topic. `topic_name_not_found` is the clean error;
+        // `offset.get` against it instead throws a buffer-bounds error that
+        // misaligns the TCP stream. Either way, mark it missing (skip it) and
+        // reconnect so the corrupted stream does not break the next topic.
+        if (
+          error.includes("topic_name_not_found") ||
+          error.includes("outside buffer bounds")
+        ) {
+          logger.debug("Topic not yet created, skipping", { topic: topicName });
+          this.#missingTopics.add(topicName);
+          this.#reconnect();
+          return;
         }
+
+        logger.error("Error polling topic", { topic: topicName, error });
       }
     }
   }
@@ -299,41 +327,54 @@ class EventsConsumer {
       partitionId++
     ) {
       const key = `${topicId}:${partitionId}`;
-      const tracked = this.#partitionOffsets.get(key);
 
-      // First poll for a partition uses `Next` (resume from the committed
-      // offset); afterwards we poll by explicit offset. We deliberately do NOT
-      // call `offset.get` to seed: against a topic that has a routing rule but
-      // no published events yet (so no server-side topic), `offset.get` throws
-      // an "access memory outside buffer bounds" deserialization error that
-      // leaves the shared TCP stream misaligned and silently breaks every later
-      // poll on this connection. A `poll` against a missing topic errors
-      // cleanly (`topic_name_not_found`) without corrupting the stream.
+      // Seed the per-partition cursor at the partition's current end on the first
+      // poll, then poll by explicit offset. We poll ONLY with explicit `Offset`:
+      // `Next`, `Last`, and `offset.get` all hang against this server for a fresh
+      // per-pod consumer (no committed offset). A 1-message probe poll reveals
+      // the partition end (`currentOffset`) without those strategies; we skip the
+      // probed message and start from the next offset. A probe against a topic
+      // with no server-side topic errors cleanly (`topic_name_not_found`), which
+      // #poll turns into a skip.
+      if (!this.#partitionOffsets.has(key)) {
+        const probe = await withTimeout(
+          client.message.poll({
+            streamId: STREAM_ID,
+            topicId,
+            consumer,
+            partitionId,
+            pollingStrategy: PollingStrategy.Offset(0n),
+            count: 1,
+            autocommit: false,
+          }),
+          IGGY_OP_TIMEOUT_MS,
+          `seed:${topicId}:${partitionId}`,
+        );
+        this.#partitionOffsets.set(key, probe.currentOffset + 1n);
+        continue;
+      }
+
+      const fromOffset = this.#partitionOffsets.get(key) ?? 0n;
+
       const response = await withTimeout(
         client.message.poll({
           streamId: STREAM_ID,
           topicId,
           consumer,
           partitionId,
-          pollingStrategy:
-            tracked === undefined
-              ? PollingStrategy.Next
-              : PollingStrategy.Offset(tracked),
+          pollingStrategy: PollingStrategy.Offset(fromOffset),
           count: BATCH_SIZE,
-          autocommit: true,
+          autocommit: false,
         }),
         IGGY_OP_TIMEOUT_MS,
         `message.poll:${topicId}:${partitionId}`,
       );
 
       // Advance our local cursor past the batch so the next poll moves forward
-      // even when the server's `Next` tracking does not. On an empty first poll
-      // continue from the current end so we never re-issue `Next`.
+      // even when the server's autocommit tracking does not.
       if (response.messages.length > 0) {
         const last = response.messages[response.messages.length - 1];
         this.#partitionOffsets.set(key, last.offset + 1n);
-      } else if (tracked === undefined) {
-        this.#partitionOffsets.set(key, response.currentOffset + 1n);
       }
 
       for (const message of response.messages) {
