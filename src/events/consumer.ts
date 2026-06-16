@@ -221,16 +221,27 @@ class EventsConsumer {
       try {
         await this.#pollTopic(client, topicName);
       } catch (err) {
-        logger.error("Error polling topic", {
-          topic: topicName,
-          error: err instanceof Error ? err.message : String(err),
-        });
+        const error = err instanceof Error ? err.message : String(err);
 
         // A wedged connection fails for every topic, so don't grind through the
         // rest on a dead client; reconnect and resume cleanly next cycle.
         if (this.#isTimeout(err)) {
+          logger.warn("Iggy topic poll stalled, reconnecting", {
+            topic: topicName,
+            error,
+          });
           this.#reconnect();
           return;
+        }
+
+        // A topic with a routing rule or subscription but no published events
+        // yet has no server-side topic; that is expected, not an error
+        if (error.includes("topic_name_not_found")) {
+          logger.debug("Topic not yet created, skipping", {
+            topic: topicName,
+          });
+        } else {
+          logger.error("Error polling topic", { topic: topicName, error });
         }
       }
     }
@@ -288,36 +299,26 @@ class EventsConsumer {
       partitionId++
     ) {
       const key = `${topicId}:${partitionId}`;
+      const tracked = this.#partitionOffsets.get(key);
 
-      if (!this.#partitionOffsets.has(key)) {
-        try {
-          const stored = await withTimeout(
-            client.offset.get({
-              streamId: STREAM_ID,
-              topicId,
-              consumer,
-              partitionId,
-            }),
-            IGGY_OP_TIMEOUT_MS,
-            `offset.get:${topicId}:${partitionId}`,
-          );
-          // Resume just after the last committed offset
-          this.#partitionOffsets.set(key, stored.storedOffset + 1n);
-        } catch {
-          // No stored offset for this partition yet; start from the beginning
-          this.#partitionOffsets.set(key, 0n);
-        }
-      }
-
-      const fromOffset = this.#partitionOffsets.get(key) ?? 0n;
-
+      // First poll for a partition uses `Next` (resume from the committed
+      // offset); afterwards we poll by explicit offset. We deliberately do NOT
+      // call `offset.get` to seed: against a topic that has a routing rule but
+      // no published events yet (so no server-side topic), `offset.get` throws
+      // an "access memory outside buffer bounds" deserialization error that
+      // leaves the shared TCP stream misaligned and silently breaks every later
+      // poll on this connection. A `poll` against a missing topic errors
+      // cleanly (`topic_name_not_found`) without corrupting the stream.
       const response = await withTimeout(
         client.message.poll({
           streamId: STREAM_ID,
           topicId,
           consumer,
           partitionId,
-          pollingStrategy: PollingStrategy.Offset(fromOffset),
+          pollingStrategy:
+            tracked === undefined
+              ? PollingStrategy.Next
+              : PollingStrategy.Offset(tracked),
           count: BATCH_SIZE,
           autocommit: true,
         }),
@@ -326,10 +327,13 @@ class EventsConsumer {
       );
 
       // Advance our local cursor past the batch so the next poll moves forward
-      // even when the server's `Next` tracking does not
+      // even when the server's `Next` tracking does not. On an empty first poll
+      // continue from the current end so we never re-issue `Next`.
       if (response.messages.length > 0) {
         const last = response.messages[response.messages.length - 1];
         this.#partitionOffsets.set(key, last.offset + 1n);
+      } else if (tracked === undefined) {
+        this.#partitionOffsets.set(key, response.currentOffset + 1n);
       }
 
       for (const message of response.messages) {
