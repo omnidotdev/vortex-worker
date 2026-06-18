@@ -658,7 +658,7 @@
     "@iggy.rs/sdk": "^1.0.6",
     "@ironclad/rivet-core": "^1.25.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@omnidotdev/providers": "github:omnidotdev/providers#b991cc2",
+    "@omnidotdev/providers": "github:omnidotdev/providers#49f2fc4",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.72.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.214.0",
