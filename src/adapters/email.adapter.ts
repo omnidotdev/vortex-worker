@@ -1,7 +1,7 @@
 /**
  * Email trigger adapter.
  *
- * Webhook-style (push) adapter for inbound email via Resend.
+ * Webhook-style (push) adapter for inbound email via Herald.
  * Unlike polling adapters, this adapter does not actively poll.
  * Instead, events are injected from the webhook endpoint via `ingest()`.
  */
@@ -13,7 +13,7 @@ import type { EventAdapter, NormalizedEvent } from "./types";
 
 type EmailAdapterConfig = {
   address: string;
-  provider?: "resend";
+  provider?: "herald";
   filters?: {
     from?: string;
     subject?: string;
@@ -45,7 +45,7 @@ export class EmailAdapter implements EventAdapter {
 
   #config: {
     address: string;
-    provider: "resend";
+    provider: "herald";
     filters?: {
       from?: string;
       subject?: string;
@@ -55,7 +55,7 @@ export class EmailAdapter implements EventAdapter {
   constructor(config: EmailAdapterConfig) {
     this.#config = {
       address: config.address,
-      provider: config.provider ?? "resend",
+      provider: config.provider ?? "herald",
       filters: config.filters,
     };
 
