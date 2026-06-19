@@ -219,6 +219,46 @@ describe("runSandboxedCode", () => {
     });
   });
 
+  // --- Outbound fetch (SSRF-guarded) ---
+
+  describe("outbound fetch", () => {
+    it("should expose fetch as a function to user code", async () => {
+      const { output } = await runSandboxedCode({
+        source: "return { type: typeof fetch };",
+        inputs: {},
+        limits: DEFAULT_LIMITS,
+      });
+
+      expect(output.type).toBe("function");
+    });
+
+    it("should block fetch to private/internal addresses", async () => {
+      try {
+        await runSandboxedCode({
+          source: `await fetch("http://169.254.169.254/latest/meta-data"); return { ok: true };`,
+          inputs: {},
+          limits: DEFAULT_LIMITS,
+        });
+        expect(true).toBe(false);
+      } catch (err) {
+        expect((err as Error).message).toContain("private/internal");
+      }
+    });
+
+    it("should block fetch to in-cluster service hostnames", async () => {
+      try {
+        await runSandboxedCode({
+          source: `await fetch("http://herald-api.fractal-herald.svc.cluster.local:4000/"); return { ok: true };`,
+          inputs: {},
+          limits: DEFAULT_LIMITS,
+        });
+        expect(true).toBe(false);
+      } catch (err) {
+        expect((err as Error).message).toContain("private/internal");
+      }
+    });
+  });
+
   // --- Error handling ---
 
   describe("error handling", () => {
