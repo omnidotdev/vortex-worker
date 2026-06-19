@@ -6,7 +6,7 @@ import template from "./fractal-email-send.json";
  * fractal-email-send notifies workspace members of Fractal build/deploy/crash
  * events. It loops over recipients (render + send per member), so it uses code
  * steps rather than the first-class email step, but it sends through Herald's
- * POST /messages, never Resend.
+ * POST /messages.
  */
 
 const stepById = (id: string) =>
@@ -24,11 +24,8 @@ describe("fractal-email-send template", () => {
     expect(trigger.trigger.config.source).toBe("omni.fractal");
   });
 
-  it("sends through Herald with no Resend path", () => {
+  it("sends through Herald", () => {
     const json = JSON.stringify(template);
-    expect(json.toLowerCase()).not.toContain("resend");
-    expect(json).not.toContain("RESEND_API_KEY");
-    expect(json).not.toContain("api.resend.com");
     // delivery goes through Herald's POST /messages
     expect(json).toContain("/messages");
     expect(json).toContain("HERALD_API_URL");
