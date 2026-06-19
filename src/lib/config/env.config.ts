@@ -11,7 +11,6 @@
 const NODE_ENV = process.env.NODE_ENV;
 const DATABASE_URL = process.env.DATABASE_URL;
 const HATCHET_CLIENT_TOKEN = process.env.HATCHET_CLIENT_TOKEN;
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const VORTEX_EXECUTOR = process.env.VORTEX_EXECUTOR ?? "hatchet";
 // Temporal (optional, only if using temporal executor)
 const TEMPORAL_ADDRESS = process.env.TEMPORAL_ADDRESS;
@@ -123,7 +122,6 @@ export {
   MEILISEARCH_MASTER_KEY,
   MEILISEARCH_URL,
   NODE_ENV,
-  RESEND_API_KEY,
   RUNA_API_URL,
   SLACK_OAUTH_CLIENT_ID,
   SLACK_OAUTH_CLIENT_SECRET,
@@ -137,8 +135,6 @@ export {
 };
 
 // Startup warnings for optional integrations
-if (!RESEND_API_KEY)
-  console.warn("RESEND_API_KEY not set, email delivery disabled");
 if (!AUTHZ_API_URL)
   console.warn("AUTHZ_API_URL not set, authorization disabled");
 if (!BILLING_API_URL) console.warn("BILLING_API_URL not set, billing disabled");

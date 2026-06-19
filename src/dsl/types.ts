@@ -136,7 +136,7 @@ export const EmailTriggerConfig = z.object({
   /** Email address to receive on (e.g., workflows@omni.dev) */
   address: z.string().email(),
   /** Email provider for inbound processing */
-  provider: z.enum(["resend"]).default("resend"),
+  provider: z.enum(["herald"]).default("herald"),
   /** Optional filters to narrow which emails trigger the workflow */
   filters: z
     .object({
