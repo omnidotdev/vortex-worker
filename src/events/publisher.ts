@@ -111,10 +111,9 @@ export function closePublisher(): void {
 async function ensureStream(): Promise<void> {
   if (!client) return;
 
-  try {
-    await client.stream.get({ streamId: STREAM_ID });
-  } catch {
-    // streamId is server-assigned (the SDK does not serialize a requested id)
+  // stream.get returns null (does not throw) when the stream is absent.
+  // streamId is server-assigned (the SDK does not serialize a requested id).
+  if (!(await client.stream.get({ streamId: STREAM_ID }))) {
     await client.stream.create({ name: STREAM_NAME });
     logger.info("Created stream", { name: STREAM_NAME });
   }
@@ -127,9 +126,8 @@ async function ensureTopic(name: string): Promise<void> {
   if (knownTopics.has(name)) return;
   if (!client) return;
 
-  try {
-    await client.topic.get({ streamId: STREAM_ID, topicId: name });
-  } catch {
+  // topic.get returns null (does not throw) when the topic is absent
+  if (!(await client.topic.get({ streamId: STREAM_ID, topicId: name }))) {
     await client.topic.create({
       streamId: STREAM_ID,
       name,

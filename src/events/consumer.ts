@@ -461,9 +461,8 @@ class EventsConsumer {
     const client = this.#client;
     if (!client) return;
 
-    try {
-      await client.topic.get({ streamId: STREAM_ID, topicId: name });
-    } catch {
+    // topic.get returns null (does not throw) when the topic is absent
+    if (!(await client.topic.get({ streamId: STREAM_ID, topicId: name }))) {
       await client.topic.create({
         streamId: STREAM_ID,
         name,
