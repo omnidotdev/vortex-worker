@@ -7,7 +7,7 @@
  * - Iggy-backed DLQ inspection and management (list, stats, replay, discard)
  */
 
-import { Client, Partitioning } from "@iggy.rs/sdk";
+import { Client, Partitioning } from "apache-iggy";
 import { getDb } from "db";
 import { deadLetterEventTable } from "db/schema";
 
@@ -160,7 +160,6 @@ async function ensureConsumerGroup(
     await client.group.create({
       streamId: STREAM_ID,
       topicId,
-      groupId: 0,
       name: DLQ_CONSUMER_GROUP,
     });
   } catch {
@@ -268,9 +267,11 @@ async function getDlqStats(
     });
 
     // Extract message count from topic partitions metadata
-    const totalMessages = Number(
-      topicInfo.partitions.reduce((sum, p) => sum + p.messagesCount, 0n),
-    );
+    const totalMessages = topicInfo
+      ? Number(
+          topicInfo.partitions.reduce((sum, p) => sum + p.messagesCount, 0n),
+        )
+      : 0;
 
     // Read first and last messages to get timestamp boundaries
     let oldestMessage: string | undefined;
@@ -283,7 +284,7 @@ async function getDlqStats(
           streamId: STREAM_ID,
           topicId: dlqTopic,
           consumer: { kind: 1, id: 0 },
-          partitionId: 1,
+          partitionId: 0,
           pollingStrategy: { kind: 1, value: 0n },
           count: 1,
           autocommit: false,
@@ -301,7 +302,7 @@ async function getDlqStats(
           streamId: STREAM_ID,
           topicId: dlqTopic,
           consumer: { kind: 1, id: 0 },
-          partitionId: 1,
+          partitionId: 0,
           pollingStrategy: { kind: 2, value: 0n },
           count: 1,
           autocommit: false,

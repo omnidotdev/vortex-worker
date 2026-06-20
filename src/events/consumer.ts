@@ -6,8 +6,8 @@
  * groups (kind 2) so multiple worker instances can share the load.
  */
 
-import { Client, Partitioning, PollingStrategy } from "@iggy.rs/sdk";
-import { CompressionAlgorithmKind } from "@iggy.rs/sdk/dist/wire/topic/topic.utils.js";
+import { Client, Partitioning, PollingStrategy } from "apache-iggy";
+import { CompressionAlgorithm } from "apache-iggy/dist/wire/topic/topic.utils.js";
 
 import logger from "lib/logger";
 import { withTimeout } from "./withTimeout";
@@ -321,11 +321,7 @@ class EventsConsumer {
     // dedup makes a re-delivered event a no-op, so each event dispatches once.
     const consumer = { kind: 1 as const, id: CONSUMER_ID };
 
-    for (
-      let partitionId = 1;
-      partitionId <= DEFAULT_PARTITIONS;
-      partitionId++
-    ) {
+    for (let partitionId = 0; partitionId < DEFAULT_PARTITIONS; partitionId++) {
       const key = `${topicId}:${partitionId}`;
 
       // Seed the per-partition cursor at the partition's current end on the first
@@ -374,7 +370,7 @@ class EventsConsumer {
       // even when the server's autocommit tracking does not.
       if (response.messages.length > 0) {
         const last = response.messages[response.messages.length - 1];
-        this.#partitionOffsets.set(key, last.offset + 1n);
+        this.#partitionOffsets.set(key, last.headers.offset + 1n);
       }
 
       for (const message of response.messages) {
@@ -468,10 +464,9 @@ class EventsConsumer {
     } catch {
       await client.topic.create({
         streamId: STREAM_ID,
-        topicId: 0,
         name,
         partitionCount: DEFAULT_PARTITIONS,
-        compressionAlgorithm: CompressionAlgorithmKind.None,
+        compressionAlgorithm: CompressionAlgorithm.None,
         messageExpiry: BigInt(RETENTION_SECONDS),
       });
       logger.info("Created DLQ topic", { streamId: STREAM_ID, topic: name });
