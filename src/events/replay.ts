@@ -6,7 +6,7 @@
  * glob-based source/type matching, and configurable rate limiting.
  */
 
-import { Client } from "@iggy.rs/sdk";
+import { Client } from "apache-iggy";
 
 import logger from "lib/logger";
 import { publish } from "./publisher";
@@ -88,7 +88,6 @@ async function ensureConsumerGroup(
     await client.group.create({
       streamId: STREAM_ID,
       topicId,
-      groupId: 0,
       name: REPLAY_CONSUMER_GROUP,
     });
   } catch {

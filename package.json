@@ -655,7 +655,6 @@
     "@grpc/grpc-js": "^1.14.3",
     "@grpc/proto-loader": "^0.8.0",
     "@hatchet-dev/typescript-sdk": "^1.22.3",
-    "@iggy.rs/sdk": "^1.0.6",
     "@ironclad/rivet-core": "^1.25.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@omnidotdev/providers": "github:omnidotdev/providers#49f2fc4",
@@ -676,6 +675,7 @@
     "@types/papaparse": "^5.5.2",
     "ajv": "^8.18.0",
     "amqplib": "^1.0.3",
+    "apache-iggy": "0.8.0",
     "cel-js": "^0.8.2",
     "drizzle-orm": "^0.45.2",
     "graphql-ws": "^6.0.8",
@@ -693,8 +693,5 @@
     "ts-pattern": "^5.9.0",
     "xlsx": "^0.18.5",
     "zod": "^4.3.6"
-  },
-  "patchedDependencies": {
-    "@iggy.rs/sdk@1.0.6": "patches/@iggy.rs%2Fsdk@1.0.6.patch"
   }
 }

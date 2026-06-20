@@ -8,8 +8,8 @@
 
 import { randomUUID } from "node:crypto";
 
-import { Client, Partitioning } from "@iggy.rs/sdk";
-import { CompressionAlgorithmKind } from "@iggy.rs/sdk/dist/wire/topic/topic.utils.js";
+import { Client, Partitioning } from "apache-iggy";
+import { CompressionAlgorithm } from "apache-iggy/dist/wire/topic/topic.utils.js";
 
 import logger from "lib/logger";
 import { RETENTION_MICROSECONDS } from "./retention";
@@ -129,10 +129,9 @@ async function ensureTopic(name: string): Promise<void> {
   } catch {
     await client.topic.create({
       streamId: STREAM_ID,
-      topicId: 0,
       name,
       partitionCount: DEFAULT_PARTITIONS,
-      compressionAlgorithm: CompressionAlgorithmKind.None,
+      compressionAlgorithm: CompressionAlgorithm.None,
       messageExpiry: RETENTION_MICROSECONDS,
     });
     logger.info("Created topic", { streamId: STREAM_ID, topic: name });
