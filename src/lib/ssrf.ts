@@ -58,7 +58,9 @@ export const isBlockedUrl = (url: URL): boolean => {
   const ip = ipToInt(hostname);
   if (ip !== null) {
     for (const { base, mask } of BLOCKED_CIDRS) {
-      if ((ip & mask) === base) return true;
+      // Coerce to unsigned: bitwise `&` yields a signed int32, but the CIDR
+      // bases above 2^31 (172.16/12, 192.168/16, 169.254/16) are unsigned
+      if ((ip & mask) >>> 0 === base) return true;
     }
   }
 
