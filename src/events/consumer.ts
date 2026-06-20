@@ -14,7 +14,9 @@ import { withTimeout } from "./withTimeout";
 
 import type { DlqEvent, EventHandler, EventsConfig, OmniEvent } from "./types";
 
-const STREAM_ID = 1;
+// Reference the stream by name: apache-iggy/iggy 0.8.x ignores the requested
+// numeric id on create and server-assigns one, so the name is the stable id
+const STREAM_ID = "omni-events";
 // Per-pod named consumer id. Each worker replica MUST use a distinct id: two
 // clients polling the same single (kind 1) consumer id concurrently deadlock on
 // our server version (every poll hangs forever). With distinct ids each replica
