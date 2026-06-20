@@ -116,7 +116,8 @@ async function writeToDlq(
   }
 }
 
-const STREAM_ID = 1;
+// Stream referenced by name (apache-iggy server-assigns numeric ids)
+const STREAM_ID = "omni-events";
 const DLQ_CONSUMER_GROUP = "vortex-dlq-reader";
 const DLQ_CONSUMER_ID = 200;
 

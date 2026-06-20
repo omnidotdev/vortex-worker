@@ -13,7 +13,8 @@ import { publish } from "./publisher";
 
 import type { EventsConfig, OmniEvent } from "./types";
 
-const STREAM_ID = 1;
+// Stream referenced by name (apache-iggy server-assigns numeric ids)
+const STREAM_ID = "omni-events";
 const REPLAY_CONSUMER_GROUP = "vortex-replay";
 const REPLAY_CONSUMER_ID = 100;
 const DEFAULT_MAX_RATE = 100;

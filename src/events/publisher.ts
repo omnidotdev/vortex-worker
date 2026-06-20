@@ -17,7 +17,9 @@ import { RETENTION_MICROSECONDS } from "./retention";
 import type { EventInput, EventsConfig, OmniEvent } from "./types";
 
 const STREAM_NAME = "omni-events";
-const STREAM_ID = 1;
+// Reference the stream by name: apache-iggy server-assigns numeric ids, so the
+// requested numeric id is not honored; the name is the stable identifier
+const STREAM_ID = STREAM_NAME;
 const DEFAULT_PARTITIONS = 3;
 
 let client: Client | null = null;
@@ -112,8 +114,9 @@ async function ensureStream(): Promise<void> {
   try {
     await client.stream.get({ streamId: STREAM_ID });
   } catch {
-    await client.stream.create({ streamId: STREAM_ID, name: STREAM_NAME });
-    logger.info("Created stream", { streamId: STREAM_ID, name: STREAM_NAME });
+    // streamId is server-assigned (the SDK does not serialize a requested id)
+    await client.stream.create({ name: STREAM_NAME });
+    logger.info("Created stream", { name: STREAM_NAME });
   }
 }
 
