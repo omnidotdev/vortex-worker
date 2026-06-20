@@ -6,10 +6,6 @@
  * all errors are swallowed and logged so metering never blocks execution.
  */
 
-import {
-  BILLING_API_URL,
-  BILLING_SERVICE_API_KEY,
-} from "lib/config/env.config";
 import logger from "lib/logger";
 
 const APP_ID = "vortex";
@@ -25,21 +21,27 @@ type UsageRecordResponse = {
 /**
  * Make an authenticated request to the Aether billing API.
  * Returns null on any error for graceful degradation.
+ *
+ * Reads the billing config from the environment at call time (not a
+ * module-load snapshot) so the request reflects the current environment.
  */
 async function aetherFetch<T>(
   path: string,
   options?: RequestInit,
 ): Promise<T | null> {
-  if (!BILLING_API_URL || !BILLING_SERVICE_API_KEY) {
+  const billingApiUrl = process.env.BILLING_API_URL;
+  const billingServiceApiKey = process.env.BILLING_SERVICE_API_KEY;
+
+  if (!billingApiUrl || !billingServiceApiKey) {
     return null;
   }
 
   try {
-    const response = await fetch(`${BILLING_API_URL}${path}`, {
+    const response = await fetch(`${billingApiUrl}${path}`, {
       ...options,
       headers: {
         "content-type": "application/json",
-        "x-service-api-key": BILLING_SERVICE_API_KEY,
+        "x-service-api-key": billingServiceApiKey,
         ...options?.headers,
       },
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

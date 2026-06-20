@@ -10,4 +10,5 @@ declare global {
     [Symbol.iterator](): ArrayIterator<number>;
   }
 }
+
 export {};

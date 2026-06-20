@@ -49,6 +49,7 @@ function mapHatchetStatus(status: string): RunStatus {
 export class HatchetExecutor implements WorkflowExecutor {
   readonly name = "hatchet";
 
+  // biome-ignore lint/complexity/noUselessConstructor: matches the uniform executor construction signature; the factory passes config.options to every adapter, and Hatchet currently ignores them
   constructor(_options?: Record<string, unknown>) {}
 
   async execute(
