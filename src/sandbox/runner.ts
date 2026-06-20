@@ -17,9 +17,13 @@
  *
  * - Code runs in a separate Worker thread (V8 isolate)
  * - Dangerous globals are explicitly shadowed to `undefined`
+ * - `fetch` is exposed but wrapped in an SSRF guard (see `guardedFetch.ts`)
+ *   that rejects private/internal addresses and non-http(s) schemes
  * - Worker is terminated on timeout to prevent infinite loops
  * - Output size is capped to prevent memory exhaustion on the host
  */
+
+import { createGuardedFetch } from "./guardedFetch";
 
 /** Input for the sandboxed code runner */
 type SandboxInput = {
@@ -68,7 +72,6 @@ const BLOCKED_GLOBALS = [
   "__dirname",
   "__filename",
   "importScripts",
-  "fetch",
   "globalThis",
   "self",
 ] as const;
@@ -95,8 +98,16 @@ const buildWorkerSource = (
     .replace(/`/g, "\\`")
     .replace(/\$/g, "\\$");
 
-  // Build parameter list: "input, trigger, steps, process, require, Bun, ..."
-  const params = ["input", "trigger", "steps", ...BLOCKED_GLOBALS].join(", ");
+  // Build parameter list: "input, trigger, steps, fetch, process, require, ..."
+  // `fetch` is bound to an SSRF-guarded wrapper (below); the blocked globals
+  // are bound to `undefined`
+  const params = [
+    "input",
+    "trigger",
+    "steps",
+    "fetch",
+    ...BLOCKED_GLOBALS,
+  ].join(", ");
 
   return `
 (async () => {
@@ -109,11 +120,16 @@ const buildWorkerSource = (
       ${escapedSource}
     \`);
 
-    // Call with input, trigger, steps + undefined for every blocked global
+    // Wrap the worker's real fetch in the SSRF guard before exposing it
+    const __guardedFetch = (${createGuardedFetch.toString()})(fetch);
+
+    // Call with input, trigger, steps, guarded fetch + undefined for every
+    // blocked global
     const __result = await __userFn(
       ${JSON.stringify(inputs)},
       ${JSON.stringify(trigger)},
       ${JSON.stringify(steps)},
+      __guardedFetch,
       ${BLOCKED_GLOBALS.map(() => "undefined").join(", ")}
     );
 
