@@ -104,7 +104,7 @@ class EventsConsumer {
    * Connect to Iggy and begin the polling loop.
    */
   async start(): Promise<void> {
-    this.#connect();
+    await this.#connect();
     this.#running = true;
 
     logger.info("Events consumer started", {
@@ -115,8 +115,17 @@ class EventsConsumer {
     this.#schedulePoll();
   }
 
-  /** Open a fresh Iggy client. The SDK connects lazily on the first request. */
-  #connect(): void {
+  /**
+   * Open a fresh Iggy client and warm its pooled connection.
+   *
+   * apache-iggy opens its pooled TCP connection eagerly on construction but
+   * lets it go stale if the first request does not follow promptly; the next
+   * call then hangs forever (the consumer creates the client, then defers the
+   * first poll by `POLL_INTERVAL_MS`, which is long enough to hit this). A
+   * lightweight request right after construction establishes the connection so
+   * the deferred poll loop runs against a live, logged-in socket.
+   */
+  async #connect(): Promise<void> {
     this.#client = new Client({
       transport: "TCP",
       options: { host: this.#config.host, port: this.#config.port },
@@ -124,6 +133,12 @@ class EventsConsumer {
         username: this.#config.username,
         password: this.#config.password,
       },
+    });
+
+    await this.#client.system.getStats().catch((err) => {
+      logger.debug("Iggy connection warmup failed", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     });
   }
 
@@ -133,7 +148,7 @@ class EventsConsumer {
    * Called when an Iggy request times out or errors. The DLQ topic cache is
    * cleared so the fresh connection re-creates any DLQ topics it needs.
    */
-  #reconnect(): void {
+  async #reconnect(): Promise<void> {
     try {
       this.#client?.destroy();
     } catch (err) {
@@ -143,7 +158,7 @@ class EventsConsumer {
     }
 
     this.#dlqTopics.clear();
-    this.#connect();
+    await this.#connect();
 
     logger.warn("Reconnected Iggy consumer after a stalled request");
   }
@@ -221,7 +236,7 @@ class EventsConsumer {
         logger.warn("Iggy topic discovery stalled, reconnecting", {
           error: message,
         });
-        this.#reconnect();
+        await this.#reconnect();
       } else {
         logger.debug("Failed to list topics", { error: message });
       }
@@ -253,7 +268,7 @@ class EventsConsumer {
             topic: topicName,
             error,
           });
-          this.#reconnect();
+          await this.#reconnect();
           return;
         }
 
@@ -268,7 +283,7 @@ class EventsConsumer {
         ) {
           logger.debug("Topic not yet created, skipping", { topic: topicName });
           this.#missingTopics.add(topicName);
-          this.#reconnect();
+          await this.#reconnect();
           return;
         }
 
