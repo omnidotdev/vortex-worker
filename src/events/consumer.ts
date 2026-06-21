@@ -273,18 +273,14 @@ class EventsConsumer {
         }
 
         // A topic with a routing rule/subscription but no published events yet
-        // has no server-side topic. `topic_name_not_found` is the clean error;
-        // `offset.get` against it instead throws a buffer-bounds error that
-        // misaligns the TCP stream. Either way, mark it missing (skip it) and
-        // reconnect so the corrupted stream does not break the next topic.
-        if (
-          error.includes("topic_name_not_found") ||
-          error.includes("outside buffer bounds")
-        ) {
+        // has no server-side topic; apache-iggy returns a clean "... was not
+        // found" error (no stream corruption). Mark it missing and skip to the
+        // next topic; it is retried after #missingTopics is cleared every
+        // MISSING_TOPIC_RETRY_CYCLES.
+        if (error.includes("was not found")) {
           logger.debug("Topic not yet created, skipping", { topic: topicName });
           this.#missingTopics.add(topicName);
-          await this.#reconnect();
-          return;
+          continue;
         }
 
         logger.error("Error polling topic", { topic: topicName, error });
