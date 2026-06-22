@@ -303,11 +303,95 @@ const runSandboxedCode = (input: SandboxInput): Promise<SandboxResult> => {
   });
 };
 
-export type { SandboxInput, SandboxResult };
+/** Code-step sandbox modes, including the in-process `"native"` mode. */
+type SandboxMode = "mcp" | "worker" | "wasm" | "native";
+
+/**
+ * Resolve the effective sandbox for a code step, enforcing the trust gate.
+ *
+ * The in-process `"native"` mode is granted ONLY to workflows owned by the
+ * platform organization. Any other org (or a missing org / unconfigured
+ * platform org) that requests `"native"` is transparently downgraded to the
+ * isolated `"worker"` sandbox, so untrusted user code can never opt into
+ * in-process execution. All other sandbox values pass through unchanged.
+ */
+const resolveSandboxMode = (
+  sandbox: SandboxMode,
+  organizationId: string | undefined,
+  platformOrgId: string | undefined,
+): SandboxMode => {
+  if (sandbox !== "native") return sandbox;
+  if (platformOrgId && organizationId === platformOrgId) return "native";
+  return "worker";
+};
+
+/**
+ * Execute trusted, platform-authored code in-process (no Bun Worker).
+ *
+ * Reserved for platform-org system workflows via {@link resolveSandboxMode}.
+ * This avoids the per-execution Worker spawn/terminate churn that
+ * {@link runSandboxedCode} incurs (the churn that segfaults Bun under load).
+ * The code runs with the real `fetch` and the same `input`/`trigger`/`steps`
+ * interface; isolation is intentionally NOT applied because the code is
+ * platform-authored and trusted.
+ *
+ * The timeout bounds asynchronous work via `Promise.race`; a runaway
+ * synchronous loop cannot be interrupted in-process, so this path must only
+ * ever run trusted code.
+ */
+const runTrustedCode = (input: SandboxInput): Promise<SandboxResult> => {
+  const { source, inputs, trigger, steps, limits } = input;
+  const startTime = performance.now();
+
+  const AsyncFunction = Object.getPrototypeOf(async () => {})
+    .constructor as new (
+    ...args: string[]
+  ) => (...args: unknown[]) => Promise<unknown>;
+
+  const userFn = new AsyncFunction(
+    "input",
+    "trigger",
+    "steps",
+    "fetch",
+    `"use strict";\n${source}`,
+  );
+
+  const execution = Promise.resolve()
+    .then(() => userFn(inputs, trigger ?? { data: {} }, steps ?? {}, fetch))
+    .then((result) => {
+      const output =
+        result !== null &&
+        result !== undefined &&
+        typeof result === "object" &&
+        !Array.isArray(result)
+          ? (result as Record<string, unknown>)
+          : { result };
+      return { output, durationMs: performance.now() - startTime };
+    })
+    .catch((err) => {
+      throw new SandboxExecutionError(
+        err instanceof Error ? err.message : String(err),
+      );
+    });
+
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new SandboxTimeoutError(limits.timeoutMs)),
+      limits.timeoutMs,
+    );
+  });
+
+  return Promise.race([execution, timeout]).finally(() => clearTimeout(timer));
+};
+
+export type { SandboxInput, SandboxMode, SandboxResult };
 export {
   SandboxExecutionError,
   SandboxMemoryError,
   SandboxOutputError,
   SandboxTimeoutError,
+  resolveSandboxMode,
   runSandboxedCode,
+  runTrustedCode,
 };

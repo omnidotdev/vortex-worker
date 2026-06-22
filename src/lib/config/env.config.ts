@@ -50,6 +50,11 @@ const VORTEX_PUBLIC_URL =
   process.env.VORTEX_PUBLIC_URL ?? "http://localhost:3001";
 const VORTEX_CALLBACK_BASE_URL =
   process.env.VORTEX_CALLBACK_BASE_URL ?? "http://localhost:3000";
+// Platform (system) organization. Only its workflows may use the in-process
+// "native" code sandbox; any other org is downgraded to the isolated Worker
+// sandbox. Defaults to the seeded platform org so it works without extra config.
+const VORTEX_PLATFORM_ORG_ID =
+  process.env.VORTEX_PLATFORM_ORG_ID ?? "33880602-cf32-4d8d-8db3-a4a9994c5d45";
 // Logging
 const LOG_LEVEL_RAW = process.env.LOG_LEVEL;
 
@@ -131,6 +136,7 @@ export {
   VORTEX_API_URL,
   VORTEX_CALLBACK_BASE_URL,
   VORTEX_EXECUTOR,
+  VORTEX_PLATFORM_ORG_ID,
   VORTEX_PUBLIC_URL,
 };
 

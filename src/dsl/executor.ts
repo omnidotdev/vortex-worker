@@ -20,6 +20,7 @@ import { createWorkflowRun } from "../db/runLogger";
 import { rivetGraphTable, workflowRunTable, workflowTable } from "../db/schema";
 import { isInitialized, publish } from "../events/publisher";
 import { getIntegrationCredentials } from "../integrations/credentials";
+import { VORTEX_PLATFORM_ORG_ID } from "../lib/config/env.config";
 import { connectMCPServer, getMCPClient } from "../mcp";
 import {
   executeBuiltinAction,
@@ -28,7 +29,11 @@ import {
 } from "../plugins";
 import { getPluginRegistry } from "../plugins/registry";
 import { runExtismSandbox } from "../sandbox/extism";
-import { runSandboxedCode } from "../sandbox/runner";
+import {
+  resolveSandboxMode,
+  runSandboxedCode,
+  runTrustedCode,
+} from "../sandbox/runner";
 import { stateStore } from "../state";
 import { endSpan, startStepSpan } from "../tracing/propagation";
 import { registerCollect } from "./collect-state";
@@ -1654,14 +1659,49 @@ const executeCode = async (
   ctx: ExecutionContext,
 ): Promise<unknown> => {
   const { code } = step;
-  const sandbox = code.sandbox ?? "mcp";
+  // Apply the trust gate: "native" (in-process) is honored only for
+  // platform-org workflows; everything else is downgraded to the Worker sandbox.
+  const sandbox = resolveSandboxMode(
+    code.sandbox ?? "mcp",
+    ctx.organizationId,
+    VORTEX_PLATFORM_ORG_ID,
+  );
 
-  // Resolve input mappings (shared by both paths)
+  // Resolve input mappings (shared by all paths)
   const inputData: Record<string, unknown> = {};
   if (code.inputs) {
     for (const [varName, expression] of Object.entries(code.inputs)) {
       inputData[varName] = resolveValue(expression, ctx);
     }
+  }
+
+  // --- Native (in-process) path: trusted platform-org code only ---
+  if (sandbox === "native") {
+    const timeoutMs = code.timeout ?? 30_000;
+    const memoryMb = code.memoryMb ?? 128;
+
+    const { output, durationMs } = await runTrustedCode({
+      source: code.source,
+      inputs: inputData,
+      trigger: { data: ctx.triggerData },
+      steps: ctx.stepResults,
+      limits: { memoryMb, timeoutMs },
+    });
+
+    // Map outputs to context variables
+    if (code.outputs) {
+      for (const [outputKey, variableName] of Object.entries(code.outputs)) {
+        ctx.variables[String(variableName)] = output[outputKey];
+      }
+    }
+
+    return {
+      sandbox: "native",
+      executedAt: new Date().toISOString(),
+      durationMs,
+      inputs: inputData,
+      output,
+    };
   }
 
   // --- Worker sandbox path ---

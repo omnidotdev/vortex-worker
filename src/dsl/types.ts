@@ -380,8 +380,11 @@ export type LLMStep = z.infer<typeof LLMStep>;
 export const CodeStep = BaseStep.extend({
   type: z.literal("code"),
   code: z.object({
-    /** Execution sandbox: "mcp" (default) routes to MCP server, "worker" runs in an isolated Bun Worker, "wasm" runs in QuickJS via Extism */
-    sandbox: z.enum(["mcp", "worker", "wasm"]).default("mcp").optional(),
+    /** Execution sandbox: "mcp" (default) routes to MCP server, "worker" runs in an isolated Bun Worker, "wasm" runs in QuickJS via Extism, "native" runs in-process (platform-org system workflows only; downgraded to "worker" otherwise) */
+    sandbox: z
+      .enum(["mcp", "worker", "wasm", "native"])
+      .default("mcp")
+      .optional(),
     /** MCP server ID for the code sandbox (required when sandbox is "mcp") */
     serverId: z.string().optional(),
     /** JavaScript code to execute */
