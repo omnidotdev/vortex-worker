@@ -35,9 +35,10 @@
         "sandbox": "worker",
         "inputs": {
           "owner": "{{ steps['trigger'].output.event.data.owner }}",
-          "gatekeeperApiUrl": "{{ env.AUTH_API_URL }}"
+          "gatekeeperApiUrl": "{{ env.AUTH_API_URL }}",
+          "orgSyncServiceToken": "{{ env.ORG_SYNC_SERVICE_TOKEN }}"
         },
-        "source": "const { owner, gatekeeperApiUrl } = input;\nconst orgRes = await fetch(`${gatekeeperApiUrl}/api/organization/by-slug/${owner}`, {\n  headers: { 'Content-Type': 'application/json' }\n});\nif (!orgRes.ok) {\n  console.error(`[fractal-email] org lookup failed for ${owner}: ${orgRes.status}`);\n  return { recipients: [] };\n}\nconst org = await orgRes.json();\nconst membersRes = await fetch(`${gatekeeperApiUrl}/api/organization/members?orgId=${org.id}`, {\n  headers: { 'Content-Type': 'application/json' }\n});\nif (!membersRes.ok) {\n  console.error(`[fractal-email] members lookup failed for org ${org.id}: ${membersRes.status}`);\n  return { recipients: [] };\n}\nconst { data: members } = await membersRes.json();\nconsole.log(`[fractal-email] resolved ${members.length} recipients for ${owner}`);\nreturn { recipients: members.map(m => m.user.email) };"
+        "source": "const { owner, gatekeeperApiUrl, orgSyncServiceToken } = input;\nconst orgRes = await fetch(`${gatekeeperApiUrl}/api/organization/by-slug/${owner}`, {\n  headers: { 'Content-Type': 'application/json' }\n});\nif (!orgRes.ok) {\n  console.error(`[fractal-email] org lookup failed for ${owner}: ${orgRes.status}`);\n  return { recipients: [] };\n}\nconst org = await orgRes.json();\nconst membersRes = await fetch(`${gatekeeperApiUrl}/api/organization/members?orgId=${org.id}`, {\n  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${orgSyncServiceToken}` }\n});\nif (!membersRes.ok) {\n  console.error(`[fractal-email] members lookup failed for org ${org.id}: ${membersRes.status}`);\n  return { recipients: [] };\n}\nconst { data: members } = await membersRes.json();\nconsole.log(`[fractal-email] resolved ${members.length} recipients for ${owner}`);\nreturn { recipients: members.map(m => m.user.email) };"
       },
       "next": "send-emails"
     },
