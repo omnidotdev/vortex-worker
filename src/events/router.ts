@@ -362,16 +362,9 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
         matchingRules.length,
       );
 
-      if (matchingRules.length === 0) {
-        logger.debug("No routing rules matched", {
-          eventId: event.id,
-          type: event.type,
-          organizationId: event.organizationId,
-        });
-        return;
-      }
-
-      // Skip if this correlationId has already been routed (idempotency)
+      // Skip if this correlationId has already been processed (idempotency).
+      // Runs before subscription delivery and workflow routing so a redelivered
+      // event neither double-delivers webhooks nor re-dispatches workflows.
       if (
         await isDuplicate(
           cacheClient,
@@ -379,10 +372,69 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
           event.correlationId,
         )
       ) {
-        logger.info("Skipping duplicate event (already routed)", {
+        logger.info("Skipping duplicate event (already processed)", {
           eventId: event.id,
           correlationId: event.correlationId,
           matchedRuleCount: matchingRules.length,
+        });
+        return;
+      }
+
+      // Deliver to matching webhook subscriptions. This is independent of
+      // workflow routing, so it must run for every event, including those that
+      // match no routing rule (e.g. audit forwarding to Chronicle).
+      try {
+        const cacheKey = `subs:${event.organizationId}`;
+        let subscriptions =
+          subscriptionCache.get<(typeof eventSubscriptionTable.$inferSelect)[]>(
+            cacheKey,
+          );
+
+        if (!subscriptions) {
+          subscriptions = await db
+            .select()
+            .from(eventSubscriptionTable)
+            .where(
+              and(
+                eq(eventSubscriptionTable.organizationId, event.organizationId),
+                eq(eventSubscriptionTable.enabled, true),
+              ),
+            );
+          subscriptionCache.set(cacheKey, subscriptions);
+        }
+
+        const matchingSubs = subscriptions.filter((sub) => {
+          if (!matchGlobPattern(sub.typePattern, event.type)) return false;
+          if (
+            sub.sourcePattern &&
+            !matchGlobPattern(sub.sourcePattern, event.source)
+          )
+            return false;
+          return true;
+        });
+
+        if (matchingSubs.length > 0) {
+          // Fire-and-forget, delivery has its own retry/DLQ
+          deliverToSubscriptions(event, matchingSubs).catch((err) => {
+            logger.error("Subscription delivery failed", {
+              eventId: event.id,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          });
+        }
+      } catch (err) {
+        logger.warn("Failed to match event subscriptions", {
+          eventId: event.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      // No workflow routing beyond this point if no rules matched
+      if (matchingRules.length === 0) {
+        logger.debug("No routing rules matched", {
+          eventId: event.id,
+          type: event.type,
+          organizationId: event.organizationId,
         });
         return;
       }
@@ -744,53 +796,6 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
 
           await writeToDlq(event, rule.id, err, "DISPATCH_ERROR", 3);
         }
-      }
-
-      // Match subscriptions for webhook delivery
-      try {
-        const cacheKey = `subs:${event.organizationId}`;
-        let subscriptions =
-          subscriptionCache.get<(typeof eventSubscriptionTable.$inferSelect)[]>(
-            cacheKey,
-          );
-
-        if (!subscriptions) {
-          subscriptions = await db
-            .select()
-            .from(eventSubscriptionTable)
-            .where(
-              and(
-                eq(eventSubscriptionTable.organizationId, event.organizationId),
-                eq(eventSubscriptionTable.enabled, true),
-              ),
-            );
-          subscriptionCache.set(cacheKey, subscriptions);
-        }
-
-        const matchingSubs = subscriptions.filter((sub) => {
-          if (!matchGlobPattern(sub.typePattern, event.type)) return false;
-          if (
-            sub.sourcePattern &&
-            !matchGlobPattern(sub.sourcePattern, event.source)
-          )
-            return false;
-          return true;
-        });
-
-        if (matchingSubs.length > 0) {
-          // Fire-and-forget, delivery has its own retry/DLQ
-          deliverToSubscriptions(event, matchingSubs).catch((err) => {
-            logger.error("Subscription delivery failed", {
-              eventId: event.id,
-              error: err instanceof Error ? err.message : String(err),
-            });
-          });
-        }
-      } catch (err) {
-        logger.warn("Failed to match event subscriptions", {
-          eventId: event.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
       }
 
       // Check if this event completes or times out any pending collect steps
