@@ -1239,6 +1239,10 @@ export const WebhookVerifyStep = BaseStep.extend({
     tolerance: z.number().default(300),
     algorithm: z.enum(["sha256", "sha1", "sha512"]).optional(),
     outputVariable: z.string().optional(),
+    // Fail CLOSED by default: an invalid/forged signature throws and halts the
+    // workflow. Opt in to inspect-only when the author wants to branch on the
+    // `valid` output without the step throwing (mirrors validate's soft path).
+    inspectOnly: z.boolean().default(false),
   }),
 });
 export type WebhookVerifyStep = z.infer<typeof WebhookVerifyStep>;

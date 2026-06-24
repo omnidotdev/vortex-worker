@@ -3216,8 +3216,22 @@ async function executeWebhookVerify(
     buildPluginContext(step, ctx),
   );
 
-  if (webhookVerify.outputVariable && result.success && result.output) {
+  // Populate the output variable even on failure so inspect-only workflows can
+  // branch on `valid`; failure now throws below, so this no longer gates on
+  // result.success (which would leave the var unset in inspect-only mode).
+  if (webhookVerify.outputVariable && result.output) {
     ctx.variables[webhookVerify.outputVariable] = result.output;
+  }
+
+  // Fail CLOSED on an invalid/forged signature (mirrors executeValidate) unless
+  // the author explicitly opted into inspect-only. A workflow must not silently
+  // proceed past a webhook whose signature did not verify.
+  const output = result.output as Record<string, unknown> | undefined;
+  if (!webhookVerify.inspectOnly && (!result.success || !output?.valid)) {
+    throw new ValidationError("Webhook signature verification failed", {
+      provider: webhookVerify.provider,
+      error: result.error ?? output?.error,
+    });
   }
 
   return result.output;

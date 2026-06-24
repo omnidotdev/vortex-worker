@@ -398,8 +398,13 @@ const verify = async (
         };
     }
 
+    // A signature mismatch is a FAILED step, not a successful one: surface the
+    // real verdict in `success` so a forged webhook cannot sail past a workflow
+    // step-success gate (e.g. a spoofed Stripe/Paddle payment_intent.succeeded).
+    // Every provider funnels through this single return, so the fix holds for all.
     return {
-      success: true,
+      success: result.valid,
+      error: result.valid ? undefined : (result.error ?? "Signature mismatch"),
       output: {
         valid: result.valid,
         error: result.error,

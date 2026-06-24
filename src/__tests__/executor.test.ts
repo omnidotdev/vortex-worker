@@ -530,3 +530,77 @@ describe("WorkflowDefinition executor field", () => {
     expect(result.success).toBe(false);
   });
 });
+
+// Compute the same hex HMAC-SHA256 the `custom` provider verifies against, so a
+// test can produce a genuinely valid signature (and tamper it for the failure).
+async function customSignature(
+  secret: string,
+  payload: string,
+): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
+  return Array.from(new Uint8Array(sig))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+describe("webhookVerify step", () => {
+  const secret = "whsec_test";
+  const payload = '{"event":"payment_intent.succeeded"}';
+
+  const step = (signature: string, inspectOnly = false): Step =>
+    ({
+      id: "verify-1",
+      type: "webhookVerify",
+      name: "Verify webhook",
+      position: { x: 0, y: 0 },
+      webhookVerify: {
+        provider: "custom",
+        payload,
+        signature,
+        secret,
+        tolerance: 300,
+        outputVariable: "verified",
+        inspectOnly,
+      },
+    }) as Step;
+
+  it("passes and exposes valid=true for a genuine signature", async () => {
+    const sig = await customSignature(secret, payload);
+    const def = createWorkflow([step(sig)]);
+    const ctx = createExecutionContext("wf-1", "run-1", {});
+
+    const { result } = await executeStep(def, step(sig), ctx);
+
+    expect((result as { valid: boolean }).valid).toBe(true);
+    expect((ctx.variables.verified as { valid: boolean }).valid).toBe(true);
+  });
+
+  it("THROWS on a forged/tampered signature (fails closed)", async () => {
+    const forged = "deadbeef".repeat(8); // wrong HMAC for this secret/payload
+    const def = createWorkflow([step(forged)]);
+    const ctx = createExecutionContext("wf-1", "run-1", {});
+
+    await expect(executeStep(def, step(forged), ctx)).rejects.toThrow(
+      /signature verification failed/i,
+    );
+  });
+
+  it("inspectOnly does not throw, but reports valid=false for a forgery", async () => {
+    const forged = "deadbeef".repeat(8);
+    const def = createWorkflow([step(forged, true)]);
+    const ctx = createExecutionContext("wf-1", "run-1", {});
+
+    const { result } = await executeStep(def, step(forged, true), ctx);
+
+    expect((result as { valid: boolean }).valid).toBe(false);
+    expect((ctx.variables.verified as { valid: boolean }).valid).toBe(false);
+  });
+});
