@@ -6,12 +6,12 @@
  * dispatched via Hatchet's event bus.
  */
 
-import Hatchet from "@hatchet-dev/typescript-sdk";
 import { SseAdapter } from "adapters/sse.adapter";
 import { getDb } from "db";
 import { workflowRunTable, workflowTable } from "db/schema";
 import { eq } from "drizzle-orm";
 
+import { getHatchet } from "lib/hatchet";
 import logger from "lib/logger";
 import { applyScheduleFilter, extractSchedule } from "./schedule-filter";
 
@@ -23,15 +23,6 @@ const activeAdapters = new Map<string, SseAdapter>();
 const connectingSet = new Set<string>();
 
 let scanInterval: ReturnType<typeof setInterval> | null = null;
-
-let hatchet: ReturnType<typeof Hatchet.init> | null = null;
-
-function getHatchet(): ReturnType<typeof Hatchet.init> {
-  if (!hatchet) {
-    hatchet = Hatchet.init();
-  }
-  return hatchet;
-}
 
 type SseTriggerConfig = {
   url: string;

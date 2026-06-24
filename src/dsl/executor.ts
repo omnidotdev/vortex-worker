@@ -1,4 +1,3 @@
-import Hatchet from "@hatchet-dev/typescript-sdk";
 import { eq } from "drizzle-orm";
 import { match } from "ts-pattern";
 
@@ -13,6 +12,7 @@ import {
   TimeoutError,
   ValidationError,
 } from "lib/errors";
+import { getHatchet } from "lib/hatchet";
 import logger from "lib/logger";
 import { executeConnectorAction } from "../connectors/executor";
 import { getDb } from "../db";
@@ -1989,8 +1989,8 @@ async function executeSubworkflow(
     input: resolvedInputs,
   });
 
-  // Initialize Hatchet client and trigger the child workflow
-  const hatchet = Hatchet.init();
+  // Trigger the child workflow via the shared Hatchet client
+  const hatchet = getHatchet();
   await hatchet.event.push("workflow:execute", {
     workflowId,
     runId: childRunId,

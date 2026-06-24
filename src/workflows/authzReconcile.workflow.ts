@@ -13,7 +13,7 @@
  * TODO: Add Backfeed, Gaia when they have reconcile endpoints
  */
 
-import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk";
+import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk/v1";
 
 import {
   AUTHZ_SERVICE_KEY,

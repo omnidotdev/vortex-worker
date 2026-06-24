@@ -11,7 +11,7 @@
  * @see https://www.meilisearch.com/docs/learn/security/tenant_token_reference
  */
 
-import { CreateWorkflow } from "@hatchet-dev/typescript-sdk";
+import { CreateWorkflow } from "@hatchet-dev/typescript-sdk/v1";
 
 import {
   MEILISEARCH_MASTER_KEY,

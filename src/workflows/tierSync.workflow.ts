@@ -12,7 +12,7 @@
  * 4. Aether reseeds entitlements for all affected subscriptions
  */
 
-import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk";
+import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk/v1";
 
 import {
   BILLING_API_URL,

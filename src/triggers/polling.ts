@@ -6,12 +6,12 @@
  * is dispatched via Hatchet's event bus.
  */
 
-import Hatchet from "@hatchet-dev/typescript-sdk";
 import { PollingAdapter } from "adapters/polling.adapter";
 import { getDb } from "db";
 import { workflowRunTable, workflowTable } from "db/schema";
 import { eq } from "drizzle-orm";
 
+import { getHatchet } from "lib/hatchet";
 import logger from "lib/logger";
 import { isBlockedUrl } from "lib/ssrf";
 import { applyScheduleFilter, extractSchedule } from "./schedule-filter";
@@ -23,15 +23,6 @@ const SCAN_INTERVAL_MS = 60 * 1_000;
 const activeAdapters = new Map<string, PollingAdapter>();
 
 let scanInterval: ReturnType<typeof setInterval> | null = null;
-
-let hatchet: ReturnType<typeof Hatchet.init> | null = null;
-
-function getHatchet(): ReturnType<typeof Hatchet.init> {
-  if (!hatchet) {
-    hatchet = Hatchet.init();
-  }
-  return hatchet;
-}
 
 type PollingTriggerConfig = {
   url: string;

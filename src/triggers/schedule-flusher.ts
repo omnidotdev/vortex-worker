@@ -6,11 +6,11 @@
  * flushed and dispatched.
  */
 
-import Hatchet from "@hatchet-dev/typescript-sdk";
 import { getDb } from "db";
 import { workflowRunTable, workflowTable } from "db/schema";
 import { eq } from "drizzle-orm";
 
+import { getHatchet } from "lib/hatchet";
 import logger from "lib/logger";
 import {
   extractSchedule,
@@ -21,15 +21,6 @@ import {
 const FLUSH_INTERVAL_MS = 60 * 1_000;
 
 let flushInterval: ReturnType<typeof setInterval> | null = null;
-
-let hatchet: ReturnType<typeof Hatchet.init> | null = null;
-
-function getHatchet(): ReturnType<typeof Hatchet.init> {
-  if (!hatchet) {
-    hatchet = Hatchet.init();
-  }
-  return hatchet;
-}
 
 /**
  * Scan workflows for schedule-constrained triggers with queued events,

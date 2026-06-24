@@ -6,12 +6,12 @@
  * workflow is dispatched via Hatchet's event bus.
  */
 
-import Hatchet from "@hatchet-dev/typescript-sdk";
 import { getDb } from "db";
 import { workflowRunTable, workflowTable } from "db/schema";
 import { eq } from "drizzle-orm";
 import { createClient } from "graphql-ws";
 
+import { getHatchet } from "lib/hatchet";
 import logger from "lib/logger";
 import { applyScheduleFilter, extractSchedule } from "./schedule-filter";
 
@@ -24,15 +24,6 @@ const SCAN_INTERVAL_MS = 60 * 1_000;
 const activeSubscriptions = new Map<string, () => void>();
 
 let scanInterval: ReturnType<typeof setInterval> | null = null;
-
-let hatchet: ReturnType<typeof Hatchet.init> | null = null;
-
-function getHatchet(): ReturnType<typeof Hatchet.init> {
-  if (!hatchet) {
-    hatchet = Hatchet.init();
-  }
-  return hatchet;
-}
 
 type GraphQLSubscriptionTriggerConfig = {
   endpoint: string;
