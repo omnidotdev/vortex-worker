@@ -10,7 +10,7 @@
  * - **spinkube / WASM** -- deploys + invokes via SpinApp CRD on Kubernetes
  */
 
-import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk";
+import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk/v1";
 
 import { SpinKubeExecutor } from "../executor/adapters/spinkube";
 import { getPluginHost } from "../plugins/host";

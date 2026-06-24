@@ -11,7 +11,7 @@
  * 4. Tuples are forwarded to Warden API
  */
 
-import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk";
+import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk/v1";
 
 import { AUTHZ_API_URL, AUTHZ_SERVICE_KEY } from "../lib/config/env.config";
 

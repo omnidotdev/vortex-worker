@@ -10,7 +10,7 @@
  * 3. Update token in database or mark as expired
  */
 
-import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk";
+import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk/v1";
 import { and, eq, isNotNull, lt } from "drizzle-orm";
 
 import { db } from "../db";

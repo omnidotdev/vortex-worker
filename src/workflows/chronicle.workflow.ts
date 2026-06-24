@@ -17,7 +17,7 @@
  * - Custom product-specific events
  */
 
-import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk";
+import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk/v1";
 
 import { CHRONICLE_API_URL } from "../lib/config/env.config";
 
