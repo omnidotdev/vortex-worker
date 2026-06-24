@@ -8,6 +8,8 @@
  * and turning variables into bare references (ReferenceError at runtime)
  */
 
+import { inspectHatchetToken } from "lib/hatchetToken";
+
 const NODE_ENV = process.env.NODE_ENV;
 const DATABASE_URL = process.env.DATABASE_URL;
 const HATCHET_CLIENT_TOKEN = process.env.HATCHET_CLIENT_TOKEN;
@@ -92,6 +94,25 @@ export function validateEnv(): void {
   assertEnv("DATABASE_URL", DATABASE_URL);
   // Hatchet is always required, it runs platform workflows (authz, chronicle, tokenRefresh, etc.)
   assertEnv("HATCHET_CLIENT_TOKEN", HATCHET_CLIENT_TOKEN);
+  // The Hatchet token is a JWT with a finite exp. An expired token makes the
+  // worker fail Hatchet auth (UNAUTHENTICATED) and silently stop executing
+  // event-triggered workflows, so surface it loudly at boot instead of leaving
+  // a cryptic dispatch-time failure. Do NOT throw: booting lets /ready report
+  // the condition and keeps the pod inspectable.
+  const tokenInfo = inspectHatchetToken(HATCHET_CLIENT_TOKEN, Date.now());
+  if (tokenInfo.status === "expired") {
+    console.error(
+      `HATCHET_CLIENT_TOKEN EXPIRED at ${new Date(tokenInfo.expiresAtMs ?? 0).toISOString()}; worker cannot authenticate to Hatchet and will not execute workflows. Rotate it: hatchet-admin token create, then update vortex-secrets/hatchet-client-token`,
+    );
+  } else if (tokenInfo.status === "expiring") {
+    console.warn(
+      `HATCHET_CLIENT_TOKEN expires soon (${new Date(tokenInfo.expiresAtMs ?? 0).toISOString()}); rotate it before it lapses to avoid a workflow-execution outage`,
+    );
+  } else if (tokenInfo.status === "unparseable") {
+    console.warn(
+      "HATCHET_CLIENT_TOKEN is not a decodable JWT; cannot verify its expiry",
+    );
+  }
   // Temporal is opt-in, validate only if configured
   if (TEMPORAL_ADDRESS) {
     assertEnv("TEMPORAL_ADDRESS", TEMPORAL_ADDRESS);

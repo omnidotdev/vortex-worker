@@ -15,7 +15,9 @@ import { eventRoutingRuleTable, eventSubscriptionTable } from "db/schema";
 import { eq } from "drizzle-orm";
 
 import { closeCache, initCache } from "lib/cache";
+import { HATCHET_CLIENT_TOKEN } from "lib/config/env.config";
 import { getHatchet } from "lib/hatchet";
+import { inspectHatchetToken } from "lib/hatchetToken";
 import logger from "lib/logger";
 import { executeStep } from "./dsl/executor";
 import EventsConsumer from "./events/consumer";
@@ -168,6 +170,16 @@ async function main() {
 
   const postHealthState = (patch: Record<string, unknown>) =>
     healthWorker.postMessage(patch);
+
+  // Reflect an expired Hatchet token in readiness so the pod goes unready and
+  // alerts fire, instead of silently dead-lettering every dispatched event.
+  // validateEnv() already logged the details at boot.
+  if (
+    HATCHET_CLIENT_TOKEN &&
+    inspectHatchetToken(HATCHET_CLIENT_TOKEN, Date.now()).status === "expired"
+  ) {
+    postHealthState({ hatchetTokenExpired: true });
+  }
 
   // Start API server on API_PORT (8081) for push-event and execute-step.
   // Health probes hit the worker on 8080 instead.

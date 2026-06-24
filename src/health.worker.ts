@@ -16,6 +16,10 @@ let state = {
   executorEverReady: false,
   executorInitFailed: false,
   hasExecutor: false,
+  // Set when HATCHET_CLIENT_TOKEN is decodably expired at boot. Forces /ready to
+  // fail so the pod is marked unready and alerts fire, rather than silently
+  // dead-lettering every dispatched event.
+  hatchetTokenExpired: false,
 };
 
 Bun.serve({
@@ -27,9 +31,14 @@ Bun.serve({
     if (url.pathname === "/health") {
       return Response.json({
         status:
-          state.executorEverReady && state.hatchetReady ? "ok" : "degraded",
+          state.executorEverReady &&
+          state.hatchetReady &&
+          !state.hatchetTokenExpired
+            ? "ok"
+            : "degraded",
         timestamp: Date.now(),
         service: "vortex-worker",
+        hatchetToken: state.hatchetTokenExpired ? "expired" : "ok",
         hatchet: state.hatchetReady ? "connected" : "initializing",
         executor: state.hasExecutor
           ? state.executorEverReady
@@ -42,12 +51,16 @@ Bun.serve({
     }
 
     if (url.pathname === "/ready") {
-      const isReady = state.hatchetReady && state.executorEverReady;
+      const isReady =
+        state.hatchetReady &&
+        state.executorEverReady &&
+        !state.hatchetTokenExpired;
       return Response.json(
         {
           ready: isReady,
           timestamp: Date.now(),
           service: "vortex-worker",
+          hatchetToken: state.hatchetTokenExpired ? "expired" : "ok",
           hatchet: state.hatchetReady ? "connected" : "initializing",
           executor: state.hasExecutor
             ? state.executorEverReady
