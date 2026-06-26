@@ -14,6 +14,13 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --ignore-scripts
 COPY . .
 RUN bun run postinstall && bun run build
+# Guard: bun's bundler can emit an undefined __promiseAll helper for concurrent
+# async-module init, crash-looping the worker on boot (the 2026-06 aether
+# incident). Fail the build before a broken bundle can deploy.
+RUN if grep -q '__promiseAll' build/index.js && \
+      ! grep -qE '(function|var|let|const) +__promiseAll' build/index.js; then \
+      echo 'FATAL: bundle references undefined __promiseAll (bun bundler bug); aborting build'; exit 1; \
+    fi
 
 # Run
 FROM base AS runner
