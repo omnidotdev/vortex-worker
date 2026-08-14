@@ -64,8 +64,8 @@
           "emailRenderSecret": "{{ env.EMAIL_RENDER_SECRET }}",
           "heraldUrl": "{{ env.HERALD_API_URL }}",
           "heraldKey": "{{ env.HERALD_API_KEY }}",
-          "heraldSender": "{{ env.HERALD_SENDER_EMAIL_ADDRESS }}",
-          "senderAddress": "{{ env.SENDER_EMAIL_ADDRESS }}",
+          "heraldSender": "{{ env.FRACTAL_SENDER_EMAIL_ADDRESS }}",
+          "senderAddress": "fractal@send.omni.dev",
           "vortexApiUrl": "{{ env.VORTEX_API_URL }}",
           "vortexApiKey": "{{ env.VORTEX_API_KEY }}"
         },
