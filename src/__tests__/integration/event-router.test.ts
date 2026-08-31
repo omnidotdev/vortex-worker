@@ -2,7 +2,7 @@
  * Event Router Integration Tests
  *
  * Test the event routing pipeline components: glob pattern matching,
- * CEL condition evaluation, dedup via correlationId, and data transforms.
+ * CEL condition evaluation, dedup via idempotency key, and data transforms.
  *
  * These tests exercise the exported pure functions from the router and
  * CEL evaluator modules, composing them into pipeline-level scenarios
@@ -230,7 +230,10 @@ describe("event routing pipeline", () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Dedup via correlationId
+  // Dedup via idempotency key (idempotencyKey, falling back to event id).
+  // NOTE: the dedup key is deliberately NOT the correlationId, which is shared
+  // across related events; keying on it would drop every related event but the
+  // first. `isDuplicate` takes whatever dedup key the caller resolves.
   // ---------------------------------------------------------------------------
 
   describe("duplicate event detection", () => {
@@ -247,9 +250,9 @@ describe("event routing pipeline", () => {
       } as unknown as Redis;
 
       // First delivery - new event
-      expect(await isDuplicate(mockCache, "org-1", "corr-abc")).toBe(false);
+      expect(await isDuplicate(mockCache, "org-1", "idem-abc")).toBe(false);
       // Second delivery - duplicate
-      expect(await isDuplicate(mockCache, "org-1", "corr-abc")).toBe(true);
+      expect(await isDuplicate(mockCache, "org-1", "idem-abc")).toBe(true);
     });
 
     it("should scope dedup by organizationId", async () => {
@@ -268,28 +271,28 @@ describe("event routing pipeline", () => {
         },
       } as unknown as Redis;
 
-      // Same correlationId, different orgs -> both are new
-      expect(await isDuplicate(mockCache, "org-A", "corr-1")).toBe(false);
-      expect(await isDuplicate(mockCache, "org-B", "corr-1")).toBe(false);
+      // Same dedup key, different orgs -> both are new
+      expect(await isDuplicate(mockCache, "org-A", "idem-1")).toBe(false);
+      expect(await isDuplicate(mockCache, "org-B", "idem-1")).toBe(false);
 
-      // Same org + same correlationId -> duplicate
-      expect(await isDuplicate(mockCache, "org-A", "corr-1")).toBe(true);
+      // Same org + same dedup key -> duplicate
+      expect(await isDuplicate(mockCache, "org-A", "idem-1")).toBe(true);
     });
 
-    it("should not dedup when correlationId is absent", async () => {
+    it("should not dedup when dedup key is absent", async () => {
       const mockCache = {
         set: async () => {
           throw new Error("should not be called");
         },
       } as unknown as Redis;
 
-      // No correlationId -> always proceed (no dedup check)
+      // No dedup key -> always proceed (no dedup check)
       expect(await isDuplicate(mockCache, "org-1", undefined)).toBe(false);
     });
 
     it("should not dedup when cache is unavailable", async () => {
       // null cache -> always proceed
-      expect(await isDuplicate(null, "org-1", "corr-1")).toBe(false);
+      expect(await isDuplicate(null, "org-1", "idem-1")).toBe(false);
     });
 
     it("should fail open when Redis errors", async () => {
@@ -300,7 +303,7 @@ describe("event routing pipeline", () => {
       } as unknown as Redis;
 
       // Redis down -> fail open, proceed with routing
-      expect(await isDuplicate(mockCache, "org-1", "corr-1")).toBe(false);
+      expect(await isDuplicate(mockCache, "org-1", "idem-1")).toBe(false);
     });
   });
 
@@ -415,7 +418,7 @@ describe("event routing pipeline", () => {
       } as unknown as Redis;
 
       // First delivery: not a duplicate, proceed with transform
-      const firstIsDup = await isDuplicate(mockCache, "org-1", "corr-xyz");
+      const firstIsDup = await isDuplicate(mockCache, "org-1", "idem-xyz");
       expect(firstIsDup).toBe(false);
 
       const transformed = await applyTransform("{ 'processed': true }", {
@@ -424,7 +427,7 @@ describe("event routing pipeline", () => {
       expect(transformed).toEqual({ processed: true });
 
       // Second delivery: duplicate, transform would be skipped
-      const secondIsDup = await isDuplicate(mockCache, "org-1", "corr-xyz");
+      const secondIsDup = await isDuplicate(mockCache, "org-1", "idem-xyz");
       expect(secondIsDup).toBe(true);
     });
 

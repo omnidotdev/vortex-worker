@@ -24,6 +24,13 @@ export type OmniEvent = {
   timestamp: string;
   organizationId: string;
   correlationId?: string;
+  /**
+   * Idempotency key identifying a single logical delivery. Used for
+   * deduplication; unlike `correlationId` it is NOT shared across related
+   * events. Absent for producers that do not set one (dedup then falls back
+   * to the unique event `id`).
+   */
+  idempotencyKey?: string;
   /** @deprecated Use `dataschema` instead */
   schemaId?: string;
   /** W3C Trace Context for distributed tracing */

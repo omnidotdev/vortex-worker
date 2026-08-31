@@ -58,6 +58,19 @@ const TIER_SYNC_EVENT_TYPES = new Set([
   "platform.plan_feature.deleted",
 ]);
 
+/**
+ * The only event source trusted to trigger a tier sync.
+ *
+ * `tier:sync` calls Aether's admin reseed endpoint, which reseeds entitlements
+ * across every affected subscription (a platform-wide side effect). Genuine
+ * plan mutations are emitted by the Omni API under the `omni.platform` source.
+ * Without this gate a tenant could POST a `platform.plan.updated` event to the
+ * ingest API and amplify it into an admin-endpoint reseed across the
+ * tenant/platform boundary, so the bridge fires only for platform-sourced
+ * events.
+ */
+const PLATFORM_EVENT_SOURCE = "omni.platform";
+
 // Hard ceiling on a single dispatch to Hatchet. The Hatchet client has no
 // client-side timeout, so a wedged engine connection makes `event.push` hang
 // forever inside the synchronous event consumer's handler, freezing the whole
@@ -87,11 +100,23 @@ const pushExecute = (
  * Follows the same pattern as the authz:sync webhook in vortex-api:
  * receive an event, push a Hatchet event, let the workflow handle it.
  */
-async function bridgeTierSyncEvent(
+export async function bridgeTierSyncEvent(
   event: OmniEvent,
   hatchet: ReturnType<typeof getHatchet>,
 ): Promise<void> {
   if (!TIER_SYNC_EVENT_TYPES.has(event.type)) return;
+
+  // Trust boundary: only genuine platform events may trigger the reseed.
+  // A tenant-forged `platform.plan.*` event carries a different source and is
+  // ignored here even if it slips past the ingest-time source check.
+  if (event.source !== PLATFORM_EVENT_SOURCE) {
+    logger.warn("Ignoring tier-sync event from untrusted source", {
+      eventId: event.id,
+      type: event.type,
+      source: event.source,
+    });
+    return;
+  }
 
   try {
     const data = event.data as {
@@ -204,7 +229,7 @@ export const applyTransform = async (
   }
 };
 
-/** Deduplication window for correlationId-based idempotency (24 hours). */
+/** Deduplication window for idempotency-key-based dedup (24 hours). */
 const DEDUP_TTL_SECONDS = 86_400;
 
 /** Zod schema for validating `batch` JSONB column from `event_routing_rule` */
@@ -233,11 +258,16 @@ export async function shutdownAccumulators(): Promise<void> {
 /**
  * Check and mark an event as seen for idempotency.
  *
- * Uses Redis SET NX to atomically check-and-set a deduplication key
- * keyed on `correlationId`. Returns `true` if this `correlationId` has
- * been seen before within the 24-hour TTL (skip routing). Returns `false`
- * if it is new (proceed), or when Redis is unavailable or `correlationId`
- * is absent (fail open).
+ * Uses Redis SET NX to atomically check-and-set a deduplication key keyed on
+ * `dedupKey`. Callers pass the event's `idempotencyKey` (falling back to the
+ * unique event `id`), NOT its `correlationId`: `correlationId` is intentionally
+ * SHARED across related events for tracing, so keying dedup on it silently drops
+ * every related event after the first. `idempotencyKey` (or the per-event `id`)
+ * identifies a single delivery, so only a true redelivery is dropped.
+ *
+ * Returns `true` if this `dedupKey` has been seen before within the 24-hour TTL
+ * (skip routing). Returns `false` if it is new (proceed), or when Redis is
+ * unavailable or `dedupKey` is absent (fail open).
  *
  * Note: the dedup key is written before the workflow run is persisted.
  * In the event of a crash between the SET NX and a successful DB insert,
@@ -248,19 +278,19 @@ export async function shutdownAccumulators(): Promise<void> {
 export const isDuplicate = async (
   cache: Redis | null,
   organizationId: string,
-  correlationId: string | undefined,
+  dedupKey: string | undefined,
 ): Promise<boolean> => {
-  if (!cache || !correlationId) return false;
+  if (!cache || !dedupKey) return false;
 
   try {
-    const key = `dedup:${organizationId}:${correlationId}`;
+    const key = `dedup:${organizationId}:${dedupKey}`;
     // SET NX: returns "OK" on first write, null if key already existed
     const result = await cache.set(key, "1", "EX", DEDUP_TTL_SECONDS, "NX");
     return result === null; // null = already existed = duplicate
   } catch (err) {
     logger.warn("Dedup check failed, proceeding without deduplication", {
       organizationId,
-      correlationId,
+      dedupKey,
       error: err instanceof Error ? err.message : String(err),
     });
     return false;
@@ -362,18 +392,16 @@ async function routeEvent(rawEvent: OmniEvent): Promise<void> {
         matchingRules.length,
       );
 
-      // Skip if this correlationId has already been processed (idempotency).
-      // Runs before subscription delivery and workflow routing so a redelivered
-      // event neither double-delivers webhooks nor re-dispatches workflows.
-      if (
-        await isDuplicate(
-          cacheClient,
-          event.organizationId,
-          event.correlationId,
-        )
-      ) {
+      // Skip if this exact delivery has already been processed (idempotency).
+      // Dedup on `idempotencyKey`, falling back to the unique event `id`, NOT
+      // `correlationId` (which is shared across related events). Runs before
+      // subscription delivery and workflow routing so a redelivered event
+      // neither double-delivers webhooks nor re-dispatches workflows.
+      const dedupKey = event.idempotencyKey ?? event.id;
+      if (await isDuplicate(cacheClient, event.organizationId, dedupKey)) {
         logger.info("Skipping duplicate event (already processed)", {
           eventId: event.id,
+          idempotencyKey: event.idempotencyKey,
           correlationId: event.correlationId,
           matchedRuleCount: matchingRules.length,
         });
