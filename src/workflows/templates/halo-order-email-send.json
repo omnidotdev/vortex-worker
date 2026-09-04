@@ -1,0 +1,67 @@
+{
+  "version": "1.0",
+  "executor": "temporal",
+  "settings": {
+    "timeout": "2m",
+    "retryPolicy": {
+      "maxAttempts": 3,
+      "backoffCoefficient": 2,
+      "initialInterval": "1s",
+      "maxInterval": "30s"
+    }
+  },
+  "edges": [],
+  "steps": [
+    {
+      "id": "trigger",
+      "type": "trigger",
+      "name": "Halo Order Confirmed",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "trigger": {
+        "type": "event",
+        "config": {
+          "pattern": "halo.order.confirmed",
+          "source": "omni.halo"
+        }
+      },
+      "next": "send-order-emails"
+    },
+    {
+      "id": "send-order-emails",
+      "type": "code",
+      "name": "Render and Send Order Emails",
+      "position": {
+        "x": 0,
+        "y": 100
+      },
+      "code": {
+        "sandbox": "worker",
+        "inputs": {
+          "event": "{{ steps['trigger'].output.event }}",
+          "haloApiUrl": "{{ env.HALO_API_URL }}",
+          "haloServiceKey": "{{ env.HALO_INTERNAL_SERVICE_KEY }}",
+          "heraldUrl": "{{ env.HERALD_API_URL }}",
+          "heraldKey": "{{ env.HERALD_API_KEY }}"
+        },
+        "source": "const { event, haloApiUrl, haloServiceKey, heraldUrl, heraldKey } = input;\nconst p = event && event.data;\nif (!p || !p.orderId) return { sent: 0, reason: 'no-payload' };\nif (!haloApiUrl || !haloServiceKey || !heraldUrl || !heraldKey) {\n  console.error('[halo-order-email] not configured');\n  return { sent: 0, reason: 'not-configured' };\n}\nconst renderRes = await fetch(`${haloApiUrl}/internal/commerce/render-order-emails`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${haloServiceKey}` },\n  body: JSON.stringify(p)\n});\nif (!renderRes.ok) {\n  console.error(`[halo-order-email] render failed: ${renderRes.status}`);\n  return { sent: 0, reason: 'render-failed' };\n}\nconst { buyer, seller } = await renderRes.json();\nconst from = `${p.storeName} <orders@send.omni.dev>`;\nconst targets = [[p.buyerEmail, buyer]];\nif (p.sellerEmail && seller) targets.push([p.sellerEmail, seller]);\nlet sent = 0;\nfor (const [to, tpl] of targets) {\n  if (!to || !tpl) continue;\n  const res = await fetch(`${heraldUrl}/messages`, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${heraldKey}` },\n    body: JSON.stringify({ to, from, subject: tpl.subject, html: tpl.html, idempotencyKey: `halo.order.confirmed:${p.orderId}:${to}` })\n  });\n  if (!res.ok) { console.error(`[halo-order-email] herald failed for ${to}: ${res.status}`); continue; }\n  sent++;\n}\nreturn { sent };"
+      },
+      "next": "end"
+    },
+    {
+      "id": "end",
+      "type": "stop",
+      "name": "Workflow Complete",
+      "position": {
+        "x": 0,
+        "y": 200
+      },
+      "stop": {
+        "status": "success",
+        "reason": "Halo order emails processed"
+      }
+    }
+  ]
+}
