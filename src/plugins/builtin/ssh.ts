@@ -5,6 +5,8 @@
  * Uses native Bun/Node SSH capabilities.
  */
 
+import { assertSafeHost } from "lib/ssrf";
+
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
@@ -82,6 +84,9 @@ const execSsh = async (
   command: string,
   timeout = 30000,
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+  // SSRF protection: reject connections to private/internal hosts
+  await assertSafeHost(config.host);
+
   const port = config.port ?? 22;
   const sshArgs: string[] = [];
 
@@ -179,6 +184,10 @@ const upload = async (
 
   try {
     const input = inputs as unknown as UploadInput;
+
+    // SSRF protection: reject connections to private/internal hosts
+    await assertSafeHost(input.host);
+
     const port = input.port ?? 22;
 
     const scpArgs: string[] = [];
@@ -243,6 +252,10 @@ const download = async (
 
   try {
     const input = inputs as unknown as DownloadInput;
+
+    // SSRF protection: reject connections to private/internal hosts
+    await assertSafeHost(input.host);
+
     const port = input.port ?? 22;
 
     const scpArgs: string[] = [];

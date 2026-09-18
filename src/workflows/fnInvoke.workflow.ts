@@ -5,7 +5,7 @@
  * vortex-api via Hatchet `function:invoke` events. Routes to the
  * appropriate runtime and executor:
  *
- * - **local / JS** -- executes inline source in the sandboxed Bun Worker
+ * - **local / JS** -- executes inline source in the WASM/QuickJS isolate
  * - **local / WASM** -- loads a WASM module via ExtismPluginHost and calls "run"
  * - **spinkube / WASM** -- deploys + invokes via SpinApp CRD on Kubernetes
  */
@@ -14,7 +14,7 @@ import { CreateTaskWorkflow } from "@hatchet-dev/typescript-sdk/v1";
 
 import { SpinKubeExecutor } from "../executor/adapters/spinkube";
 import { getPluginHost } from "../plugins/host";
-import { runSandboxedCode } from "../sandbox/runner";
+import { runExtismSandbox } from "../sandbox/extism";
 
 import type { JsonObject } from "@hatchet-dev/typescript-sdk/v1/types";
 
@@ -149,7 +149,9 @@ export const fnInvokeWorkflow = CreateTaskWorkflow({
         );
       }
 
-      const result = await runSandboxedCode({
+      // Untrusted inline source runs in the WASM/QuickJS isolate, never
+      // in-process or in a Bun Worker (both reach host globals)
+      const result = await runExtismSandbox({
         source,
         inputs: input,
         limits,

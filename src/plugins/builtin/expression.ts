@@ -1,30 +1,47 @@
 /**
  * Built-in Expression Plugin
  *
- * JavaScript expression evaluation and script execution.
- * Provides a sandboxed environment for running expressions.
+ * Evaluates workflow-authored expressions in a genuinely locked-down
+ * interpreter (CEL, via cel-js). CEL is a non-Turing-complete expression
+ * language with no host bindings: `process`, `require`, dynamic `import()`,
+ * the `Function` constructor, and `globalThis` are simply not part of its
+ * grammar or runtime, so an expression can never reach host state or execute
+ * arbitrary code. This replaces the previous in-process `new Function(...)`
+ * evaluator, which exposed all of the above (RCE + secret exfiltration).
+ *
+ * The same CEL engine backs event routing (see `events/cel-evaluator.ts`), so
+ * expression semantics are consistent across the product. Note this is a
+ * deliberate security narrowing: the `execute` action no longer runs arbitrary
+ * multi-statement JavaScript, only a single CEL expression. Use a `code` step
+ * (isolated sandbox) for real scripting.
  */
 
+import { evaluate as celEvaluate, parse as celParse } from "cel-js";
+
+import type { Success as CelParseSuccess } from "cel-js";
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
+/** Parsed CEL expression tree (the `cst` of a successful parse) */
+type CelCst = CelParseSuccess["cst"];
+
 /** Evaluate expression input */
 interface EvalInput {
-  /** JavaScript expression to evaluate */
+  /** CEL expression to evaluate */
   expression: string;
   /** Context variables available in the expression */
   context?: Record<string, unknown>;
-  /** Timeout in ms */
+  /** Timeout in ms (accepted for compatibility; CEL evaluation is bounded) */
   timeout?: number;
 }
 
 /** Execute script input */
 interface ScriptInput {
-  /** JavaScript code to execute */
+  /** CEL expression to evaluate (multi-statement JS is no longer supported) */
   code: string;
   /** Context variables */
   context?: Record<string, unknown>;
-  /** Timeout in ms */
+  /** Timeout in ms (accepted for compatibility) */
   timeout?: number;
 }
 
@@ -77,44 +94,80 @@ interface MathInput {
 }
 
 /**
- * Create a sandboxed evaluation context.
+ * Helper functions available to every expression. These are host-defined and
+ * pure; user input can only reference them by name, never redefine them.
  */
-const createSandbox = (
-  context: Record<string, unknown> = {},
-): Record<string, unknown> => {
-  // Safe built-ins
-  const sandbox: Record<string, unknown> = {
-    // Math functions
-    Math,
-    Number,
-    String,
-    Boolean,
-    Array,
-    Object,
-    JSON,
-    Date,
-    RegExp,
-    parseInt,
-    parseFloat,
-    isNaN,
-    isFinite,
+const EXPRESSION_FUNCTIONS: Record<string, CallableFunction> = {
+  // String helpers (mirror events/cel-evaluator so semantics match routing)
+  startsWith: (str: string, prefix: string) =>
+    typeof str === "string" && str.startsWith(prefix),
+  endsWith: (str: string, suffix: string) =>
+    typeof str === "string" && str.endsWith(suffix),
+  contains: (str: string, sub: string) =>
+    typeof str === "string" && str.includes(sub),
+  matches: (str: string, pattern: string) => {
+    if (typeof str !== "string") return false;
+    try {
+      return new RegExp(pattern).test(str);
+    } catch {
+      return false;
+    }
+  },
+  // Numeric helpers (CEL has no Math namespace)
+  pow: (base: number, exp: number) => base ** exp,
+  sqrt: (x: number) => Math.sqrt(x),
+  abs: (x: number) => Math.abs(x),
+  round: (x: number) => Math.round(x),
+  floor: (x: number) => Math.floor(x),
+  ceil: (x: number) => Math.ceil(x),
+  min: (...xs: number[]) => Math.min(...xs),
+  max: (...xs: number[]) => Math.max(...xs),
+  sin: (x: number) => Math.sin(x),
+  cos: (x: number) => Math.cos(x),
+  tan: (x: number) => Math.tan(x),
+  log: (x: number) => Math.log(x),
+  log10: (x: number) => Math.log10(x),
+  exp: (x: number) => Math.exp(x),
+};
 
-    // Utility functions
-    console: {
-      log: (...args: unknown[]) => args,
-      warn: (...args: unknown[]) => args,
-      error: (...args: unknown[]) => args,
-    },
+/** Math constants exposed to expressions as context values */
+const MATH_CONSTANTS: Record<string, number> = {
+  PI: Math.PI,
+  E: Math.E,
+};
 
-    // Spread context
-    ...context,
-  };
+/** Cache of parsed CEL expression trees, keyed by expression string */
+const cstCache = new Map<string, CelCst>();
 
-  return sandbox;
+/**
+ * Evaluate a single CEL expression against a context. Throws on parse or
+ * evaluation errors so callers can surface a safe failure. There is no path
+ * from here to host globals: CEL only sees the provided context and the
+ * host-defined helper functions.
+ */
+const evaluateExpression = (
+  expression: string,
+  context: Record<string, unknown>,
+): unknown => {
+  let cst = cstCache.get(expression);
+  if (!cst) {
+    const parseResult = celParse(expression);
+    if (!parseResult.isSuccess) {
+      throw new Error(`Failed to parse expression: ${expression}`);
+    }
+    cst = parseResult.cst;
+    cstCache.set(expression, cst);
+  }
+
+  return celEvaluate(
+    cst,
+    { ...MATH_CONSTANTS, ...context },
+    EXPRESSION_FUNCTIONS,
+  );
 };
 
 /**
- * Evaluate a JavaScript expression.
+ * Evaluate a CEL expression.
  */
 const evaluate = async (
   inputs: Record<string, unknown>,
@@ -124,27 +177,7 @@ const evaluate = async (
 
   try {
     const input = inputs as unknown as EvalInput;
-    const sandbox = createSandbox(input.context);
-
-    // Create function from expression
-    const keys = Object.keys(sandbox);
-    const values = Object.values(sandbox);
-
-    // Wrap in async to support await
-    const asyncFn = new Function(
-      ...keys,
-      `"use strict"; return (async () => (${input.expression}))();`,
-    );
-
-    // Execute with timeout
-    const timeout = input.timeout ?? 5000;
-
-    const result = await Promise.race([
-      asyncFn(...values),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Expression timeout")), timeout),
-      ),
-    ]);
+    const result = evaluateExpression(input.expression, input.context ?? {});
 
     return {
       success: true,
@@ -161,7 +194,9 @@ const evaluate = async (
 };
 
 /**
- * Execute a JavaScript script (multiple statements).
+ * Evaluate a CEL expression (retained for compatibility with the previous
+ * "execute a script" action). Arbitrary multi-statement JavaScript is no
+ * longer supported; the input is treated as a single CEL expression.
  */
 const execute = async (
   inputs: Record<string, unknown>,
@@ -171,31 +206,7 @@ const execute = async (
 
   try {
     const input = inputs as unknown as ScriptInput;
-    const sandbox = createSandbox(input.context);
-
-    const keys = Object.keys(sandbox);
-    const values = Object.values(sandbox);
-
-    // Script wrapper that captures return value
-    const wrappedCode = `
-      "use strict";
-      return (async () => {
-        let __result__;
-        ${input.code}
-        return __result__;
-      })();
-    `;
-
-    const asyncFn = new Function(...keys, wrappedCode);
-
-    const timeout = input.timeout ?? 5000;
-
-    const result = await Promise.race([
-      asyncFn(...values),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Script timeout")), timeout),
-      ),
-    ]);
+    const result = evaluateExpression(input.code, input.context ?? {});
 
     return {
       success: true,
@@ -226,16 +237,10 @@ const template = async (
     // Replace ${...} with evaluated expressions
     const result = input.template.replace(/\$\{([^}]+)\}/g, (_, expr) => {
       try {
-        const sandbox = createSandbox(input.context);
-        const keys = Object.keys(sandbox);
-        const values = Object.values(sandbox);
-
-        const fn = new Function(...keys, `"use strict"; return (${expr});`);
-        const value = fn(...values);
-
+        const value = evaluateExpression(expr, input.context ?? {});
         return String(value ?? "");
       } catch {
-        return `\${${expr}}`; // Keep original if evaluation fails.
+        return `\${${expr}}`; // Keep original if evaluation fails
       }
     });
 
@@ -264,16 +269,9 @@ const conditional = async (
 
   try {
     const input = inputs as unknown as ConditionalInput;
-    const sandbox = createSandbox(input.context);
-
-    const keys = Object.keys(sandbox);
-    const values = Object.values(sandbox);
-
-    const fn = new Function(
-      ...keys,
-      `"use strict"; return Boolean(${input.condition});`,
+    const conditionResult = Boolean(
+      evaluateExpression(input.condition, input.context ?? {}),
     );
-    const conditionResult = fn(...values);
 
     const result = conditionResult ? input.ifTrue : input.ifFalse;
 
@@ -309,21 +307,13 @@ const mapExpr = async (
     const results: unknown[] = [];
 
     for (let i = 0; i < input.array.length; i++) {
-      const sandbox = createSandbox({
+      const value = evaluateExpression(input.expression, {
         ...input.context,
         item: input.array[i],
         index: i,
         array: input.array,
       });
-
-      const keys = Object.keys(sandbox);
-      const values = Object.values(sandbox);
-
-      const fn = new Function(
-        ...keys,
-        `"use strict"; return (${input.expression});`,
-      );
-      results.push(fn(...values));
+      results.push(value);
     }
 
     return {
@@ -355,22 +345,16 @@ const filterExpr = async (
     const results: unknown[] = [];
 
     for (let i = 0; i < input.array.length; i++) {
-      const sandbox = createSandbox({
-        ...input.context,
-        item: input.array[i],
-        index: i,
-        array: input.array,
-      });
-
-      const keys = Object.keys(sandbox);
-      const values = Object.values(sandbox);
-
-      const fn = new Function(
-        ...keys,
-        `"use strict"; return Boolean(${input.predicate});`,
+      const keep = Boolean(
+        evaluateExpression(input.predicate, {
+          ...input.context,
+          item: input.array[i],
+          index: i,
+          array: input.array,
+        }),
       );
 
-      if (fn(...values)) {
+      if (keep) {
         results.push(input.array[i]);
       }
     }
@@ -405,36 +389,15 @@ const math = async (
   try {
     const input = inputs as unknown as MathInput;
 
-    // Only allow math operations
-    const safeExpr = input.expression.replace(/[^0-9+\-*/%().^a-zA-Z_\s]/g, "");
+    // Restrict to math-shaped characters before evaluation
+    const safeExpr = input.expression.replace(
+      /[^0-9+\-*/%().^a-zA-Z_,\s]/g,
+      "",
+    );
 
-    const sandbox: Record<string, unknown> = {
-      ...Math,
-      ...input.variables,
-      // Additional math helpers
-      pow: Math.pow,
-      sqrt: Math.sqrt,
-      abs: Math.abs,
-      round: Math.round,
-      floor: Math.floor,
-      ceil: Math.ceil,
-      min: Math.min,
-      max: Math.max,
-      sin: Math.sin,
-      cos: Math.cos,
-      tan: Math.tan,
-      log: Math.log,
-      log10: Math.log10,
-      exp: Math.exp,
-      PI: Math.PI,
-      E: Math.E,
-    };
-
-    const keys = Object.keys(sandbox);
-    const values = Object.values(sandbox);
-
-    const fn = new Function(...keys, `"use strict"; return (${safeExpr});`);
-    const result = fn(...values);
+    const result = evaluateExpression(safeExpr, {
+      ...(input.variables ?? {}),
+    });
 
     if (typeof result !== "number" || Number.isNaN(result)) {
       return {
@@ -512,16 +475,16 @@ const get = async (
 export const expressionPlugin: BuiltinPlugin = {
   id: "builtin:expression",
   name: "Expression",
-  description: "JavaScript expression evaluation and script execution",
+  description: "CEL expression evaluation (sandboxed, no host access)",
   actions: {
     evaluate: {
       name: "evaluate",
-      description: "Evaluate a JavaScript expression",
+      description: "Evaluate a CEL expression",
       handler: evaluate,
     },
     execute: {
       name: "execute",
-      description: "Execute a JavaScript script",
+      description: "Evaluate a CEL expression (single expression only)",
       handler: execute,
     },
     template: {

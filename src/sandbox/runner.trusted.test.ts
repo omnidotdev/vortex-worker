@@ -11,30 +11,42 @@ describe("resolveSandboxMode (security gate)", () => {
     );
   });
 
-  test("downgrades native to worker for a non-platform org", () => {
+  test("downgrades native to wasm for a non-platform org", () => {
     expect(resolveSandboxMode("native", "some-user-org", PLATFORM_ORG)).toBe(
-      "worker",
+      "wasm",
     );
   });
 
-  test("downgrades native to worker when the org is missing", () => {
-    expect(resolveSandboxMode("native", undefined, PLATFORM_ORG)).toBe(
-      "worker",
-    );
+  test("downgrades native to wasm when the org is missing", () => {
+    expect(resolveSandboxMode("native", undefined, PLATFORM_ORG)).toBe("wasm");
   });
 
-  test("downgrades native to worker when no platform org is configured", () => {
-    expect(resolveSandboxMode("native", PLATFORM_ORG, undefined)).toBe(
-      "worker",
-    );
+  test("downgrades native to wasm when no platform org is configured", () => {
+    expect(resolveSandboxMode("native", PLATFORM_ORG, undefined)).toBe("wasm");
   });
 
-  test("passes through worker/wasm/mcp unchanged regardless of org", () => {
+  test("always downgrades the escapable worker mode to wasm", () => {
+    // worker is never a selectable execution mode, even for the platform org
     expect(resolveSandboxMode("worker", PLATFORM_ORG, PLATFORM_ORG)).toBe(
-      "worker",
+      "wasm",
     );
+    expect(resolveSandboxMode("worker", "some-user-org", PLATFORM_ORG)).toBe(
+      "wasm",
+    );
+    expect(resolveSandboxMode("worker", undefined, undefined)).toBe("wasm");
+  });
+
+  test("passes through wasm/mcp unchanged regardless of org", () => {
     expect(resolveSandboxMode("wasm", "x", PLATFORM_ORG)).toBe("wasm");
     expect(resolveSandboxMode("mcp", "x", PLATFORM_ORG)).toBe("mcp");
+  });
+
+  test("never yields an in-process mode for an untrusted org", () => {
+    for (const mode of ["native", "worker", "wasm", "mcp"] as const) {
+      const resolved = resolveSandboxMode(mode, "untrusted-org", PLATFORM_ORG);
+      expect(resolved).not.toBe("native");
+      expect(resolved).not.toBe("worker");
+    }
   });
 });
 

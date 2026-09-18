@@ -665,8 +665,8 @@ describe("DSL executor integration", () => {
     });
   });
 
-  describe("worker sandbox code step", () => {
-    it("should execute code in worker sandbox and return output", async () => {
+  describe("worker sandbox code step (downgraded to wasm isolate)", () => {
+    it("should downgrade a worker-mode code step to the wasm isolate and return output", async () => {
       const def: WorkflowDefinition = {
         version: "1.0",
         steps: [
@@ -715,7 +715,7 @@ describe("DSL executor integration", () => {
         output: Record<string, unknown>;
         durationMs: number;
       };
-      expect(output.sandbox).toBe("worker");
+      expect(output.sandbox).toBe("wasm");
       expect(output.output).toEqual({ sum: 42 });
       expect(output.durationMs).toBeGreaterThan(0);
 
@@ -723,7 +723,7 @@ describe("DSL executor integration", () => {
       expect(ctx.variables.computedSum).toBe(42);
     });
 
-    it("should handle worker sandbox with no inputs or outputs", async () => {
+    it("should downgrade a worker-mode code step with no inputs or outputs", async () => {
       const def: WorkflowDefinition = {
         version: "1.0",
         steps: [
@@ -766,7 +766,7 @@ describe("DSL executor integration", () => {
         sandbox: string;
         output: Record<string, unknown>;
       };
-      expect(output.sandbox).toBe("worker");
+      expect(output.sandbox).toBe("wasm");
       expect(output.output).toEqual({ message: "hello" });
     });
 

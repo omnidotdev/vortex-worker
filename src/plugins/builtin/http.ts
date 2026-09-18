@@ -5,10 +5,13 @@
  * Supports GET, POST, PUT, PATCH, DELETE with headers, body, and auth.
  */
 
-import { assertSafeUrl } from "lib/ssrf";
+import { assertSafeResolvedUrl } from "lib/ssrf";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
+
+/** Maximum number of redirect hops to follow, each re-validated for SSRF */
+const MAX_REDIRECTS = 5;
 
 /** HTTP request input parameters */
 export interface HttpRequestInput {
@@ -91,9 +94,10 @@ const executeRequest = async (
       };
     }
 
-    // SSRF protection: validate URL before making request
+    // SSRF protection: validate the RESOLVED address (DNS) before requesting,
+    // so a public hostname that resolves to an internal IP is rejected
     try {
-      assertSafeUrl(url);
+      await assertSafeResolvedUrl(url);
     } catch (err) {
       return {
         success: false,
@@ -133,13 +137,41 @@ const executeRequest = async (
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
-      const response = await fetch(url, {
+      // Follow redirects manually so every hop is re-validated for SSRF. The
+      // browser "follow" mode would chase a 3xx Location to an internal IP
+      // without any further check, defeating the initial validation
+      let currentUrl = url;
+      let redirectsLeft = followRedirects ? MAX_REDIRECTS : 0;
+      let response = await fetch(currentUrl, {
         method,
         headers: requestHeaders,
         body: requestBody,
         signal: controller.signal,
-        redirect: followRedirects ? "follow" : "manual",
+        redirect: "manual",
       });
+
+      while (
+        redirectsLeft > 0 &&
+        response.status >= 300 &&
+        response.status < 400 &&
+        response.headers.get("location")
+      ) {
+        const location = response.headers.get("location") as string;
+        const nextUrl = new URL(location, currentUrl).href;
+
+        // Re-validate the resolved target of every redirect hop
+        await assertSafeResolvedUrl(nextUrl);
+
+        currentUrl = nextUrl;
+        redirectsLeft -= 1;
+        response = await fetch(currentUrl, {
+          method,
+          headers: requestHeaders,
+          body: requestBody,
+          signal: controller.signal,
+          redirect: "manual",
+        });
+      }
 
       clearTimeout(timeoutId);
 

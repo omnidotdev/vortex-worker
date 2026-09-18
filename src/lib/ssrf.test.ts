@@ -8,7 +8,12 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { assertSafeUrl, isBlockedUrl } from "./ssrf";
+import {
+  assertSafeHost,
+  assertSafeResolvedUrl,
+  assertSafeUrl,
+  isBlockedUrl,
+} from "./ssrf";
 
 describe("isBlockedUrl", () => {
   const blocked = [
@@ -55,5 +60,79 @@ describe("assertSafeUrl", () => {
 
   it("throws for an unsupported scheme", () => {
     expect(() => assertSafeUrl("file:///etc/passwd")).toThrow(/scheme/);
+  });
+});
+
+describe("isBlockedUrl IPv6 and mapped bypasses", () => {
+  const blocked = [
+    "http://[::1]/",
+    "http://[::ffff:169.254.169.254]/latest/meta-data",
+    "http://[::ffff:a9fe:a9fe]/",
+    "http://[fd00::1]/",
+    "http://[fc00::1]/",
+    "http://[fe80::1]/",
+    "http://0.0.0.0/",
+    "http://100.64.1.1/",
+  ];
+  for (const url of blocked) {
+    it(`blocks ${url}`, () => {
+      expect(isBlockedUrl(new URL(url))).toBe(true);
+    });
+  }
+
+  const allowed = [
+    "http://[2606:4700:4700::1111]/",
+    "https://[2001:4860:4860::8888]/",
+  ];
+  for (const url of allowed) {
+    it(`allows public IPv6 ${url}`, () => {
+      expect(isBlockedUrl(new URL(url))).toBe(false);
+    });
+  }
+});
+
+describe("assertSafeResolvedUrl (DNS rebinding)", () => {
+  it("rejects a public hostname that resolves to loopback", async () => {
+    // localtest.me is a real public DNS name that resolves to 127.0.0.1
+    await expect(assertSafeResolvedUrl("http://localtest.me/")).rejects.toThrow(
+      /private\/internal/,
+    );
+  });
+
+  it("rejects an IPv4-mapped IPv6 metadata literal without DNS", async () => {
+    await expect(
+      assertSafeResolvedUrl("http://[::ffff:169.254.169.254]/"),
+    ).rejects.toThrow(/private\/internal/);
+  });
+
+  it("allows a public host that resolves to a public IP", async () => {
+    const url = await assertSafeResolvedUrl("https://example.com/");
+    expect(url.hostname).toBe("example.com");
+  });
+});
+
+describe("assertSafeHost (non-HTTP egress)", () => {
+  it("rejects a literal private IPv4", async () => {
+    await expect(assertSafeHost("10.0.0.5")).rejects.toThrow(
+      /private\/internal/,
+    );
+  });
+
+  it("rejects localhost", async () => {
+    await expect(assertSafeHost("localhost")).rejects.toThrow(
+      /private\/internal/,
+    );
+  });
+
+  it("rejects a public host that resolves to loopback", async () => {
+    await expect(assertSafeHost("localtest.me")).rejects.toThrow(
+      /private\/internal/,
+    );
+  });
+
+  it("rejects an IPv4-mapped IPv6 metadata literal", async () => {
+    await expect(assertSafeHost("::ffff:169.254.169.254")).rejects.toThrow(
+      /private\/internal/,
+    );
   });
 });
