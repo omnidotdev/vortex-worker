@@ -18,19 +18,29 @@ bun i
 bun dev
 ```
 
-Or run `tilt up` from the [metarepo](https://github.com/omnidotdev/vortex). The worker connects to the configured execution backend (`EXECUTOR_ADAPTER`) and begins processing workflow events.
+Or run `tilt up` from the [metarepo](https://github.com/omnidotdev/vortex). The worker connects to the configured execution backend (`VORTEX_EXECUTOR`, defaults to `hatchet`) and begins processing workflow events. Only `DATABASE_URL` plus the backend token are required; every other integration in `.env.local.template` degrades gracefully when unset.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `bun dev` | Start dev server |
+| `bun dev` | Start dev server (watch mode) |
 | `bun build` | Build for production |
-| `bun test` | Run tests |
+| `bun start` | Run the production build |
+| `bun test` | Run all tests |
+| `bun test:integration` | Run integration tests only |
 | `bun test:watch` | Run tests in watch mode |
 | `bun test:coverage` | Run tests with coverage |
-| `bun lint` | Lint with Biome |
-| `bun format` | Format with Biome |
+| `bun check` | Lint and format check with Biome |
+| `bun format` | Auto-format with Biome |
+| `bun knip` | Detect dead code and unused dependencies |
+
+## Diagnostics
+
+- **Executor backend**: `VORTEX_EXECUTOR` selects `hatchet` (default), `temporal`, or `local`. `local` runs in-process, useful for tests and offline development.
+- **Health probes**: the health worker listens on `HEALTH_PORT` (default `8080`) and serves `GET /health` (liveness) and `GET /ready` (readiness); the internal API server runs on `HEALTH_PORT + 1` (`8081`) for `/push-event` and `/execute-step`.
+- **Code steps**: expression and code nodes run in a QuickJS/Extism WASM isolate (`src/sandbox/extism.ts`). That isolate needs WASI, which Bun does not provide, so the real evaluator cannot load under Bun today; integration tests mock the Extism runtime (see `src/__tests__/integration/setup.ts`).
+- **Logging**: set `LOG_LEVEL` (e.g. `debug`) for verbose output. Optional Sentry (`SENTRY_DSN`) and OpenTelemetry (`OTEL_EXPORTER_OTLP_ENDPOINT`) exporters activate only when configured.
 
 ## Documentation
 

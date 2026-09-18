@@ -4,6 +4,8 @@
  * File transfer operations via FTP and SFTP protocols.
  */
 
+import { assertSafeHost } from "lib/ssrf";
+
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
@@ -84,6 +86,9 @@ const execSftp = async (
   config: FtpConfig,
   commands: string[],
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
+  // SSRF protection: reject connections to private/internal hosts
+  await assertSafeHost(config.host);
+
   const port = config.port ?? (config.secure ? 22 : 21);
 
   if (config.secure || port === 22) {
@@ -184,6 +189,9 @@ const upload = async (
   try {
     const input = inputs as unknown as UploadInput;
 
+    // SSRF protection: reject connections to private/internal hosts
+    await assertSafeHost(input.host);
+
     if (input.secure || (input.port ?? 22) === 22) {
       // Use SCP for SFTP
       const port = input.port ?? 22;
@@ -249,6 +257,9 @@ const download = async (
 
   try {
     const input = inputs as unknown as DownloadInput;
+
+    // SSRF protection: reject connections to private/internal hosts
+    await assertSafeHost(input.host);
 
     if (input.secure || (input.port ?? 22) === 22) {
       // Use SCP for SFTP

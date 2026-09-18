@@ -7,6 +7,7 @@
  */
 
 import { cacheClient } from "lib/cache";
+import { assertSafeHost } from "lib/ssrf";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
@@ -260,6 +261,13 @@ async function getCacheForQueue(config: ValkeyConfig | undefined): Promise<{
   // Use centralized client when no explicit config is provided
   if (!config?.url && !config?.host && !config?.password && cacheClient) {
     return { client: cacheClient, needsCleanup: false };
+  }
+
+  // SSRF protection: reject connections to private/internal hosts for
+  // caller-supplied config before opening the connection
+  const targetHost = config?.url ? new URL(config.url).hostname : config?.host;
+  if (targetHost) {
+    await assertSafeHost(targetHost);
   }
 
   // Create per-operation connection for explicit config

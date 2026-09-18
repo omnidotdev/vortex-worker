@@ -29,11 +29,7 @@ import {
 } from "../plugins";
 import { getPluginRegistry } from "../plugins/registry";
 import { runExtismSandbox } from "../sandbox/extism";
-import {
-  resolveSandboxMode,
-  runSandboxedCode,
-  runTrustedCode,
-} from "../sandbox/runner";
+import { resolveSandboxMode, runTrustedCode } from "../sandbox/runner";
 import { stateStore } from "../state";
 import { endSpan, startStepSpan } from "../tracing/propagation";
 import { registerCollect } from "./collect-state";
@@ -1648,11 +1644,13 @@ const executeLLM = async (
 };
 
 /**
- * Execute a Code step via either an isolated Bun Worker or an MCP sandbox server.
+ * Execute a Code step.
  *
- * When `sandbox` is `"worker"`, user code runs locally in a Bun Worker with
- * configurable timeout and memory limits. When `"mcp"` (the default), code is
- * sent to an external MCP code-sandbox server (e.g. node-code-sandbox-mcp).
+ * The requested sandbox is resolved through {@link resolveSandboxMode}, which
+ * enforces the trust gate: untrusted code can only reach the WASM/Extism
+ * isolate (`"wasm"`) or an external MCP sandbox server (`"mcp"`, the default).
+ * In-process `"native"` execution is reserved for platform-org workflows, and
+ * the legacy escapable `"worker"` mode is always downgraded to `"wasm"`.
  */
 const executeCode = async (
   step: CodeStep,
@@ -1697,35 +1695,6 @@ const executeCode = async (
 
     return {
       sandbox: "native",
-      executedAt: new Date().toISOString(),
-      durationMs,
-      inputs: inputData,
-      output,
-    };
-  }
-
-  // --- Worker sandbox path ---
-  if (sandbox === "worker") {
-    const timeoutMs = code.timeout ?? 30_000;
-    const memoryMb = code.memoryMb ?? 128;
-
-    const { output, durationMs } = await runSandboxedCode({
-      source: code.source,
-      inputs: inputData,
-      trigger: { data: ctx.triggerData },
-      steps: ctx.stepResults,
-      limits: { memoryMb, timeoutMs },
-    });
-
-    // Map outputs to context variables
-    if (code.outputs) {
-      for (const [outputKey, variableName] of Object.entries(code.outputs)) {
-        ctx.variables[String(variableName)] = output[outputKey];
-      }
-    }
-
-    return {
-      sandbox: "worker",
       executedAt: new Date().toISOString(),
       durationMs,
       inputs: inputData,

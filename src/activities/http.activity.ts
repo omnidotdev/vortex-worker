@@ -1,4 +1,7 @@
-import { assertSafeUrl } from "lib/ssrf";
+import { assertSafeResolvedUrl } from "lib/ssrf";
+
+/** Maximum number of redirect hops to follow, each re-validated for SSRF */
+const MAX_REDIRECTS = 5;
 
 export interface HttpActivityInput {
   url: string;
@@ -37,16 +40,40 @@ export async function executeHttpActivity(
     );
   }
 
-  // SSRF protection: validate URL before making request
-  assertSafeUrl(input.url);
+  // SSRF protection: validate the RESOLVED address (DNS) before requesting
+  await assertSafeResolvedUrl(input.url);
 
   try {
-    const response = await fetch(input.url, {
+    // Follow redirects manually so every hop is re-validated for SSRF
+    let currentUrl = input.url;
+    let redirectsLeft = MAX_REDIRECTS;
+    let response = await fetch(currentUrl, {
       method: input.method,
       headers: input.headers,
       body: input.body,
       signal: controller.signal,
+      redirect: "manual",
     });
+
+    while (
+      redirectsLeft > 0 &&
+      response.status >= 300 &&
+      response.status < 400 &&
+      response.headers.get("location")
+    ) {
+      const location = response.headers.get("location") as string;
+      const nextUrl = new URL(location, currentUrl).href;
+      await assertSafeResolvedUrl(nextUrl);
+      currentUrl = nextUrl;
+      redirectsLeft -= 1;
+      response = await fetch(currentUrl, {
+        method: input.method,
+        headers: input.headers,
+        body: input.body,
+        signal: controller.signal,
+        redirect: "manual",
+      });
+    }
 
     const headers: Record<string, string> = {};
     response.headers.forEach((value, key) => {

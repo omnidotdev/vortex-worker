@@ -4,6 +4,8 @@
  * GraphQL client operations for querying and mutating GraphQL APIs.
  */
 
+import { assertSafeResolvedUrl } from "lib/ssrf";
+
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
@@ -165,6 +167,9 @@ const query = async (
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
+      // SSRF protection: validate the resolved endpoint before requesting
+      await assertSafeResolvedUrl(input.endpoint);
+
       const response = await fetch(input.endpoint, {
         method: "POST",
         headers,
@@ -245,6 +250,9 @@ const introspect = async (
     if (input.bearerToken) {
       headers.Authorization = `Bearer ${input.bearerToken}`;
     }
+
+    // SSRF protection: validate the resolved endpoint before requesting
+    await assertSafeResolvedUrl(input.endpoint);
 
     const response = await fetch(input.endpoint, {
       method: "POST",
@@ -341,6 +349,9 @@ const batch = async (
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
+      // SSRF protection: validate the resolved endpoint before requesting
+      await assertSafeResolvedUrl(input.endpoint);
+
       const response = await fetch(input.endpoint, {
         method: "POST",
         headers,
