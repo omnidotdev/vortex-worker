@@ -615,7 +615,7 @@
         "@aws-sdk/client-sqs": "^3.1086.0",
         "@aws-sdk/s3-request-presigner": "^3.1086.0",
         "@azure/storage-blob": "^12.33.0",
-        "@electric-sql/pglite": "^0.4.4",
+        "@electric-sql/pglite": "^0.5.0",
         "@extism/extism": "^2.0.0-rc13",
         "@google-cloud/storage": "^7.21.0",
         "@grpc/grpc-js": "^1.14.4",
@@ -2228,7 +2228,7 @@
 
     "@dust-tt/client": ["@dust-tt/client@1.0.57", "", { "dependencies": { "@modelcontextprotocol/sdk": "git://github.com/dust-tt/typescript-sdk.git#bca26e405d6db2cf71fd7211234a72ecc46d0215", "@types/json-schema": "^7.0.15", "event-source-polyfill": "^1.0.31", "eventsource-parser": "^1.1.1", "moment-timezone": "^0.5.46", "zod": "^3.23.8" } }, "sha512-S48OrRsaSPI2fFhKJythZfRM+ijdmC8JviPMg5nW7k+Nlj/dLcG7c12ZUICeQlToKtpZteDbkTHo245usLua/A=="],
 
-    "@electric-sql/pglite": ["@electric-sql/pglite@0.4.4", "", {}, "sha512-g/6CWAJ4XOkObWCWAQ2IReZD8VvsDy3poRHSKvpRR2F96F8WJ3HVbjpso3gN7l0q6QPPgvxSSpl/qo5k8a7mkQ=="],
+    "@electric-sql/pglite": ["@electric-sql/pglite@0.5.8", "", {}, "sha512-n9tsbUOhwx2epK1V0ZG9Ar4SHWUju04dhmzZXiSBXwBoleOvIfals33NAaWgagQVAL4Rbvx/Ptsu3P+pA09f6Q=="],
 
     "@elevenlabs/elevenlabs-js": ["@elevenlabs/elevenlabs-js@2.4.1", "", { "dependencies": { "command-exists": "^1.2.9", "form-data": "^4.0.0", "form-data-encoder": "^4.0.2", "formdata-node": "^6.0.3", "node-fetch": "^2.7.0", "qs": "^6.13.1", "url-join": "4.0.1" } }, "sha512-4EnytSPC0z+cZ6E+eze8um3KgiD3Rk3D5BRsHHeaqD9GjB38ZjD64SfZmj5itWcZVkl8Bx+0xdM/I4n1SO7E5g=="],
 
