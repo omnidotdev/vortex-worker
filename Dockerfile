@@ -12,6 +12,14 @@ RUN bun install --frozen-lockfile --ignore-scripts --production
 FROM base AS builder
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --ignore-scripts
+# Bust the COPY cache per commit. The Fractal operator always builds with
+# --cache-from <name>:buildcache and always injects GIT_SHA as a build-arg;
+# importing that registry cache can false-hit "COPY . ." so a new commit reuses
+# a stale source layer and ships old code (the 2026-09 vortex-worker and
+# gatekeeper stale-build incidents). Consuming GIT_SHA before the copy forces
+# COPY to re-copy real source on every commit
+ARG GIT_SHA=unknown
+RUN echo "source-cache-bust ${GIT_SHA}"
 COPY . .
 RUN bun run postinstall && bun run build
 # Guard: bun's bundler can emit an undefined __promiseAll helper for concurrent
@@ -25,6 +33,10 @@ RUN if grep -q '__promiseAll' build/index.js && \
 # Run
 FROM base AS runner
 ENV NODE_ENV=production
+# Bake the built commit into the image so the running commit is observable and a
+# stale build is detectable (compare BUILD_SHA against the expected commit)
+ARG GIT_SHA=unknown
+ENV BUILD_SHA=${GIT_SHA}
 USER bun
 
 COPY --from=deps /app/node_modules ./node_modules
