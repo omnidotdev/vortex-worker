@@ -6,6 +6,7 @@
  * Uses an instance pool so concurrent callers can run the same plugin in parallel.
  */
 
+import { assertSafeUrl } from "lib/ssrf";
 import { stateStore } from "../state/store";
 import {
   PluginFunctionNotFoundError,
@@ -40,7 +41,12 @@ class ExtismLoadedPlugin implements LoadedPlugin {
   private closed = false;
   private pool: PluginPool;
   private extismManifest: {
-    wasm: Array<{ url?: string; path?: string; data?: Uint8Array }>;
+    wasm: Array<{
+      url?: string;
+      path?: string;
+      data?: Uint8Array;
+      hash?: string;
+    }>;
   };
   private pluginOptions: CreatePluginOptions;
 
@@ -464,10 +470,16 @@ export class ExtismPluginHost implements PluginHost {
           }
 
           try {
+            // SSRF guard: a plugin-supplied URL must not reach internal/private
+            // addresses (cloud metadata, RFC1918, cluster hostnames). Mirrors
+            // the `http` builtin. Throws -> handled by the catch below.
+            assertSafeUrl(request.url);
+
             const response = await fetch(request.url, {
               method: request.method ?? "GET",
               headers: request.headers,
               body: request.body,
+              redirect: "error",
             });
 
             const responseBody = await response.text();
@@ -494,16 +506,37 @@ export class ExtismPluginHost implements PluginHost {
    * Build Extism manifest from Vortex plugin manifest.
    */
   private async buildExtismManifest(manifest: PluginManifest): Promise<{
-    wasm: Array<{ url?: string; path?: string; data?: Uint8Array }>;
+    wasm: Array<{
+      url?: string;
+      path?: string;
+      data?: Uint8Array;
+      hash?: string;
+    }>;
   }> {
     const wasmSource = manifest.wasm as WasmSource;
 
     if ("url" in wasmSource) {
-      return { wasm: [{ url: wasmSource.url }] };
+      // Pass the expected hash through so Extism verifies the fetched module.
+      // A url source without a hash is an unverified remote fetch
+      return {
+        wasm: [
+          {
+            url: wasmSource.url,
+            ...(wasmSource.hash && { hash: wasmSource.hash }),
+          },
+        ],
+      };
     }
 
     if ("path" in wasmSource) {
-      return { wasm: [{ path: wasmSource.path }] };
+      return {
+        wasm: [
+          {
+            path: wasmSource.path,
+            ...(wasmSource.hash && { hash: wasmSource.hash }),
+          },
+        ],
+      };
     }
 
     if ("bytes" in wasmSource) {
@@ -524,6 +557,11 @@ export class ExtismPluginHost implements PluginHost {
     }
 
     if (network === true) {
+      // Blanket egress reaches internal/cluster addresses too, so this is only
+      // safe for trusted plugins. Surface it; prefer an explicit host list
+      this.logger.warn(
+        `Plugin granted blanket network access (network: true); prefer an explicit host list`,
+      );
       return ["*"];
     }
 
@@ -547,8 +585,13 @@ export class ExtismPluginHost implements PluginHost {
     }
 
     if (filesystem === true) {
-      // Dangerous - allow all paths
-      return { "/": "/" };
+      // Refuse to mount the whole host filesystem into the sandbox: it would
+      // expose worker secrets and let a plugin read/write anywhere. A plugin
+      // that needs files must enumerate explicit paths
+      this.logger.warn(
+        `Plugin requested blanket filesystem access (filesystem: true); refusing. List explicit paths instead`,
+      );
+      return undefined;
     }
 
     if (Array.isArray(filesystem)) {
