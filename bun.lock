@@ -549,7 +549,7 @@
         "@activepieces/piece-totalcms": "*",
         "@activepieces/piece-trello": "*",
         "@activepieces/piece-truelayer": "*",
-        "@activepieces/piece-twilio": "^0.4.9",
+        "@activepieces/piece-twilio": "^0.5.0",
         "@activepieces/piece-twin-labs": "*",
         "@activepieces/piece-twitch": "*",
         "@activepieces/piece-twitter": "*",
@@ -1765,7 +1765,7 @@
 
     "@activepieces/piece-truelayer": ["@activepieces/piece-truelayer@0.2.0", "", {}, "sha512-y2E2Uk0T3rGISkMRWVEziLzjgtlka/73LBilFOU9CFrG5sOQRQgCLDaNuCDVHJxDmBP+iza3Z89PJ56p4sCJag=="],
 
-    "@activepieces/piece-twilio": ["@activepieces/piece-twilio@0.4.9", "", {}, "sha512-or2BkxQM4iI06wgie658tXAxDpE5r+srak2dq9IfPw0EU/aR6qpa05go+8doX501jPWkH5dnANBes5PmUlyqkw=="],
+    "@activepieces/piece-twilio": ["@activepieces/piece-twilio@0.5.0", "", {}, "sha512-lYSPHzkkFjcCBLbqhZ5WuXH/UBHH/9aCDNFC7Xu4miFGQKZPKYTHuglbYPvk+RdM+VKLR3kddmWQkQbVNnbV6Q=="],
 
     "@activepieces/piece-twin-labs": ["@activepieces/piece-twin-labs@0.1.6", "", {}, "sha512-D7P6Wx+MG3xWW+5JQ5VyrUwEY6sd9knSqGZMw276iAM7T8n/x/WxXQn3324wyJiiED6vqwb+amRyL2u+1E0g8g=="],
 

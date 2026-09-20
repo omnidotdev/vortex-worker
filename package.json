@@ -583,7 +583,7 @@
     "@activepieces/piece-totalcms": "*",
     "@activepieces/piece-trello": "*",
     "@activepieces/piece-truelayer": "*",
-    "@activepieces/piece-twilio": "^0.4.9",
+    "@activepieces/piece-twilio": "^0.5.0",
     "@activepieces/piece-twin-labs": "*",
     "@activepieces/piece-twitch": "*",
     "@activepieces/piece-twitter": "*",
