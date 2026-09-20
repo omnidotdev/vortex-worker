@@ -72,8 +72,11 @@ export interface PluginLimits {
 
 /** WASM module source */
 export type WasmSource =
-  | { url: string } // Fetch from URL
-  | { path: string } // Load from filesystem
+  // Fetch from URL. `hash` is the expected SHA-256 hex digest; when set, Extism
+  // verifies the fetched module and refuses to load on mismatch
+  | { url: string; hash?: string }
+  // Load from filesystem, with the same optional integrity check
+  | { path: string; hash?: string }
   | { bytes: Uint8Array }; // In-memory bytes
 
 /** Complete plugin manifest */
