@@ -674,7 +674,7 @@
     "@types/papaparse": "^5.5.2",
     "ajv": "^8.20.0",
     "amqplib": "^2.0.1",
-    "apache-iggy": "0.8.0",
+    "apache-iggy": "0.10.0",
     "cel-js": "^0.8.2",
     "drizzle-orm": "^0.45.2",
     "graphql-ws": "^6.2.2",
