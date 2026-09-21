@@ -657,7 +657,7 @@
     "@hatchet-dev/typescript-sdk": "^1.33.1",
     "@ironclad/rivet-core": "^1.25.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@omnidotdev/providers": "github:omnidotdev/providers#49f2fc4",
+    "@omnidotdev/providers": "github:omnidotdev/providers#b89fdaf",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.80.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.222.0",
