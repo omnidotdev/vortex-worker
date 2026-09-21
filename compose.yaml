@@ -13,7 +13,7 @@ services:
 
   hatchet:
     container_name: hatchet
-    image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:latest
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:latest@sha256:db8fb8e009a5c892859e52e4aa50b17aa11ab1dd23801cd320492f2942db30d7
     network_mode: host
     depends_on:
       hatchet-db:
@@ -39,7 +39,7 @@ services:
 
   hatchet-db:
     container_name: hatchet-db
-    image: postgres:15
+    image: postgres:15@sha256:dfbbb0ad8cab91d41e99123664e37a9b25d0413426d4fb3154e4d668e5d35246
     command: postgres -c 'max_connections=200' -p 5433
     network_mode: host
     environment:
