@@ -110,9 +110,9 @@ interface HeadInput extends StorageConfig {
  * Get S3 client (dynamic import to avoid bundling when not used).
  */
 const getS3Client = async (config: StorageConfig) => {
-  const { S3Client } = await import("@aws-sdk/client-s3");
+  const { createResilientS3Client } = await import("lib/storage/s3Client");
 
-  return new S3Client({
+  return createResilientS3Client({
     region: config.region ?? "us-east-1",
     endpoint: config.endpoint,
     credentials: config.accessKeyId

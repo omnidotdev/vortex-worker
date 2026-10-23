@@ -1,7 +1,9 @@
-import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
+import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 
 import logger from "lib/logger";
+import { createResilientS3Client } from "lib/storage/s3Client";
 
+import type { S3Client } from "@aws-sdk/client-s3";
 import type { EventAdapter, NormalizedEvent } from "./types";
 
 type S3EventType = "created" | "modified" | "deleted";
@@ -45,7 +47,7 @@ export class S3Adapter implements EventAdapter {
       intervalMs: config.intervalMs ?? 30_000,
     };
 
-    this.client = new S3Client({
+    this.client = createResilientS3Client({
       region: this.#config.region,
       endpoint: this.#config.endpoint,
       credentials: {

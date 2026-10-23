@@ -199,8 +199,9 @@ const s3Provider: FileProviderImpl = {
         };
       }
 
-      const { S3Client, GetObjectCommand } = await import("@aws-sdk/client-s3");
-      const client = new S3Client({
+      const { GetObjectCommand } = await import("@aws-sdk/client-s3");
+      const { createResilientS3Client } = await import("lib/storage/s3Client");
+      const client = createResilientS3Client({
         region: config.region ?? "us-east-1",
         ...(config.endpoint && { endpoint: config.endpoint }),
         ...(config.accessKeyId &&
@@ -254,8 +255,9 @@ const s3Provider: FileProviderImpl = {
         };
       }
 
-      const { S3Client, PutObjectCommand } = await import("@aws-sdk/client-s3");
-      const client = new S3Client({
+      const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+      const { createResilientS3Client } = await import("lib/storage/s3Client");
+      const client = createResilientS3Client({
         region: config.region ?? "us-east-1",
         ...(config.endpoint && { endpoint: config.endpoint }),
         ...(config.accessKeyId &&
@@ -311,10 +313,9 @@ const s3Provider: FileProviderImpl = {
         };
       }
 
-      const { S3Client, DeleteObjectCommand } = await import(
-        "@aws-sdk/client-s3"
-      );
-      const client = new S3Client({
+      const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+      const { createResilientS3Client } = await import("lib/storage/s3Client");
+      const client = createResilientS3Client({
         region: config.region ?? "us-east-1",
         ...(config.endpoint && { endpoint: config.endpoint }),
         ...(config.accessKeyId &&
@@ -359,10 +360,9 @@ const s3Provider: FileProviderImpl = {
         };
       }
 
-      const { S3Client, ListObjectsV2Command } = await import(
-        "@aws-sdk/client-s3"
-      );
-      const client = new S3Client({
+      const { ListObjectsV2Command } = await import("@aws-sdk/client-s3");
+      const { createResilientS3Client } = await import("lib/storage/s3Client");
+      const client = createResilientS3Client({
         region: config.region ?? "us-east-1",
         ...(config.endpoint && { endpoint: config.endpoint }),
         ...(config.accessKeyId &&
@@ -420,10 +420,9 @@ const s3Provider: FileProviderImpl = {
         };
       }
 
-      const { S3Client, HeadObjectCommand } = await import(
-        "@aws-sdk/client-s3"
-      );
-      const client = new S3Client({
+      const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
+      const { createResilientS3Client } = await import("lib/storage/s3Client");
+      const client = createResilientS3Client({
         region: config.region ?? "us-east-1",
         ...(config.endpoint && { endpoint: config.endpoint }),
         ...(config.accessKeyId &&
@@ -478,12 +477,13 @@ const s3Provider: FileProviderImpl = {
         };
       }
 
-      const { S3Client, GetObjectCommand, PutObjectCommand } = await import(
+      const { GetObjectCommand, PutObjectCommand } = await import(
         "@aws-sdk/client-s3"
       );
       const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+      const { createResilientS3Client } = await import("lib/storage/s3Client");
 
-      const client = new S3Client({
+      const client = createResilientS3Client({
         region: config.region ?? "us-east-1",
         ...(config.endpoint && { endpoint: config.endpoint }),
         ...(config.accessKeyId &&

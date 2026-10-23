@@ -667,6 +667,7 @@
     "@opentelemetry/sdk-node": "^0.220.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "@sentry/bun": "^10.65.0",
+    "@smithy/node-http-handler": "^4.9.5",
     "@temporalio/activity": "^1.16.0",
     "@temporalio/client": "^1.16.0",
     "@temporalio/worker": "^1.16.0",
