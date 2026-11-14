@@ -34,6 +34,7 @@ import { stateStore } from "../state";
 import { endSpan, startStepSpan } from "../tracing/propagation";
 import { registerCollect } from "./collect-state";
 import executeSaga from "./saga-executor";
+import { resolveTemplateEnv } from "./templateEnv";
 import WindowStateManager from "./window-state";
 
 import type { PluginCallResult } from "../plugins/types";
@@ -2816,7 +2817,10 @@ function resolveInputs(
   return resolved;
 }
 
-function resolveValue(value: unknown, ctx: ExecutionContext): unknown {
+/**
+ * Resolve `{{ path }}` templates in a step input against the execution context
+ */
+export function resolveValue(value: unknown, ctx: ExecutionContext): unknown {
   if (typeof value !== "string") {
     // Recursively resolve objects and arrays
     if (Array.isArray(value)) {
@@ -2900,8 +2904,9 @@ function getValueByPath(ctx: ExecutionContext, path: string): unknown {
     steps: {} as Record<string, unknown>,
     // Also expose stepResults directly for backwards compatibility
     stepResults: ctx.stepResults,
-    // Expose environment variables for workflow input mappings
-    env: process.env,
+    // Only platform-org system workflows see a whitelisted slice of the worker
+    // env; tenant workflows see none of it
+    env: resolveTemplateEnv(ctx.organizationId, VORTEX_PLATFORM_ORG_ID),
   };
 
   // Map step results to be accessible as steps.{stepId}.output
