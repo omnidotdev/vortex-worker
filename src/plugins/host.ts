@@ -395,10 +395,12 @@ export class ExtismPluginHost implements PluginHost {
           orgPtr: bigint,
           keyPtr: bigint,
         ): Promise<bigint> => {
-          const orgId =
-            ctx.read(orgPtr)?.text() ||
-            ctx.hostContext<{ organizationId?: string }>()?.organizationId ||
-            "";
+          // Bound to the executing workflow's org, never a plugin-supplied one
+          const orgId = resolvePluginStateOrg(
+            ctx.read(orgPtr)?.text(),
+            ctx.hostContext<{ organizationId?: string }>()?.organizationId,
+            hostLogger,
+          );
           const key = ctx.read(keyPtr)?.text() ?? "";
 
           if (!orgId || !key) {
@@ -424,10 +426,12 @@ export class ExtismPluginHost implements PluginHost {
           keyPtr: bigint,
           valuePtr: bigint,
         ): Promise<void> => {
-          const orgId =
-            ctx.read(orgPtr)?.text() ||
-            ctx.hostContext<{ organizationId?: string }>()?.organizationId ||
-            "";
+          // Bound to the executing workflow's org, never a plugin-supplied one
+          const orgId = resolvePluginStateOrg(
+            ctx.read(orgPtr)?.text(),
+            ctx.hostContext<{ organizationId?: string }>()?.organizationId,
+            hostLogger,
+          );
           const key = ctx.read(keyPtr)?.text() ?? "";
           const rawValue = ctx.read(valuePtr)?.text() ?? "null";
 
@@ -604,6 +608,32 @@ export class ExtismPluginHost implements PluginHost {
 
     return undefined;
   }
+}
+
+/**
+ * Resolve the organization a plugin's state call may touch.
+ *
+ * State is always bound to the organization of the workflow executing the
+ * plugin (the host context), never to an org id the plugin supplies: a plugin
+ * that names another org is denied, and a call with no executing org (e.g. a
+ * function invocation outside a workflow) gets no state access at all
+ */
+export function resolvePluginStateOrg(
+  requestedOrgId: string | undefined,
+  contextOrgId: string | undefined,
+  logger?: { warn: (message: string, meta?: Record<string, unknown>) => void },
+): string | null {
+  if (!contextOrgId) return null;
+
+  if (requestedOrgId && requestedOrgId !== contextOrgId) {
+    logger?.warn("Plugin state access to another organization denied", {
+      contextOrgId,
+      requestedOrgId,
+    });
+    return null;
+  }
+
+  return contextOrgId;
 }
 
 /**
