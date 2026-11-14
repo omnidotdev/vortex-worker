@@ -13,7 +13,7 @@ services:
 
   hatchet:
     container_name: hatchet
-    image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:latest
+    image: ghcr.io/hatchet-dev/hatchet/hatchet-lite:latest@sha256:a205018e4ec2c35af4df9c86cf1e36d4b74b36ebbc849c3b33ca18815cf22d6b
     network_mode: host
     depends_on:
       hatchet-db:
