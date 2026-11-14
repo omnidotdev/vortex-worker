@@ -35,8 +35,6 @@ const knipConfig: KnipConfig = {
     "src/plugins/builtin/index.ts",
     // Plugin host (exports for external consumers and testing)
     "src/plugins/host.ts",
-    // MCP client (exports for testing)
-    "src/mcp/client.ts",
     // Events consumer (wired at runtime, not yet imported from index)
     "src/events/**",
     // Distributed cron lock (consumed by cron scheduler)

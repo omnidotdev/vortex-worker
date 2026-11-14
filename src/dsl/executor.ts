@@ -21,7 +21,7 @@ import { rivetGraphTable, workflowRunTable, workflowTable } from "../db/schema";
 import { isInitialized, publish } from "../events/publisher";
 import { getIntegrationCredentials } from "../integrations/credentials";
 import { VORTEX_PLATFORM_ORG_ID } from "../lib/config/env.config";
-import { connectMCPServer, getMCPClient } from "../mcp";
+import { ensureMCPServerForOrg, getMCPClient } from "../mcp";
 import {
   executeBuiltinAction,
   getPluginHost,
@@ -620,6 +620,7 @@ const executeAction = async (
     workflowId: ctx.workflowId,
     runId: ctx.runId,
     stepId: step.id,
+    organizationId: ctx.organizationId,
     config: {},
     secrets: {},
   };
@@ -1303,6 +1304,7 @@ const executePlugin = async (
     workflowId: ctx.workflowId,
     runId: ctx.runId,
     stepId: step.id,
+    organizationId: ctx.organizationId,
     config: {},
     secrets: {},
   };
@@ -1458,10 +1460,8 @@ const executeMCP = async (
   const { mcp } = step;
   const mcpClient = getMCPClient();
 
-  // Check if server is connected
-  if (!mcpClient.isConnected(mcp.serverId)) {
-    throw new MCPError("MCP server not connected", { serverId: mcp.serverId });
-  }
+  // Authorize the workflow's org for this server and connect it if needed
+  await ensureMCPServerForOrg(mcp.serverId, ctx.organizationId);
 
   // Resolve input expressions from context
   const resolvedInputs = resolveInputs(mcp.inputs, ctx);
@@ -1527,15 +1527,8 @@ const executeLLM = async (
   const { llm } = step;
   const mcpClient = getMCPClient();
 
-  // Try to connect if not already connected
-  if (!mcpClient.isConnected(llm.serverId)) {
-    const connected = await connectMCPServer(llm.serverId);
-    if (!connected) {
-      throw new MCPError("LLM MCP server not available", {
-        serverId: llm.serverId,
-      });
-    }
-  }
+  // Authorize the workflow's org for this server and connect it if needed
+  await ensureMCPServerForOrg(llm.serverId, ctx.organizationId);
 
   // Resolve prompts with template expressions
   const systemPrompt = llm.systemPrompt
@@ -1740,15 +1733,8 @@ const executeCode = async (
 
   const mcpClient = getMCPClient();
 
-  // Try to connect if not already connected
-  if (!mcpClient.isConnected(code.serverId)) {
-    const connected = await connectMCPServer(code.serverId);
-    if (!connected) {
-      throw new MCPError("Code sandbox MCP server not available", {
-        serverId: code.serverId,
-      });
-    }
-  }
+  // Authorize the workflow's org for this server and connect it if needed
+  await ensureMCPServerForOrg(code.serverId, ctx.organizationId);
 
   // Wrap the user code to receive inputs and return output
   const wrappedCode = `
@@ -1829,15 +1815,8 @@ const executeDatabase = async (
   const { database } = step;
   const mcpClient = getMCPClient();
 
-  // Try to connect if not already connected
-  if (!mcpClient.isConnected(database.serverId)) {
-    const connected = await connectMCPServer(database.serverId);
-    if (!connected) {
-      throw new MCPError("Database MCP server not available", {
-        serverId: database.serverId,
-      });
-    }
-  }
+  // Authorize the workflow's org for this server and connect it if needed
+  await ensureMCPServerForOrg(database.serverId, ctx.organizationId);
 
   // Resolve query and parameters
   const query = String(resolveValue(database.query, ctx));
@@ -3677,7 +3656,9 @@ async function executeAiTransform(
 
   const mcpClient = getMCPClient();
 
-  // Try to find a connected LLM server
+  // The model field names the LLM MCP server; authorize the workflow's org
+  // for it and connect it if needed
+  await ensureMCPServerForOrg(aiTransform.model, ctx.organizationId);
   const toolArgs: Record<string, unknown> = {
     model: aiTransform.model,
     messages: [{ role: "user", content: userPrompt }],
