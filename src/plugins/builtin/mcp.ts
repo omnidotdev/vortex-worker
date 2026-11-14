@@ -4,7 +4,7 @@
  * Handles Model Context Protocol tool invocations.
  */
 
-import { getMCPClient } from "../../mcp";
+import { ensureMCPServerForOrg, getMCPClient } from "../../mcp";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
@@ -14,7 +14,7 @@ import type { BuiltinPlugin } from "./types";
  */
 const callTool = async (
   inputs: Record<string, unknown>,
-  _context?: PluginContext,
+  context?: PluginContext,
 ): Promise<PluginCallResult> => {
   const startTime = performance.now();
 
@@ -47,14 +47,8 @@ const callTool = async (
 
     const mcpClient = getMCPClient();
 
-    // Check if server is connected
-    if (!mcpClient.isConnected(serverId)) {
-      return {
-        success: false,
-        error: `MCP server not connected: ${serverId}`,
-        durationMs: performance.now() - startTime,
-      };
-    }
+    // Authorize the workflow's org for this server and connect it if needed
+    await ensureMCPServerForOrg(serverId, context?.organizationId);
 
     // Call the MCP tool
     const callResult = await mcpClient.callTool(serverId, tool, args);
@@ -105,7 +99,7 @@ const callTool = async (
  */
 const listTools = async (
   inputs: Record<string, unknown>,
-  _context?: PluginContext,
+  context?: PluginContext,
 ): Promise<PluginCallResult> => {
   const startTime = performance.now();
 
@@ -122,13 +116,8 @@ const listTools = async (
 
     const mcpClient = getMCPClient();
 
-    if (!mcpClient.isConnected(serverId)) {
-      return {
-        success: false,
-        error: `MCP server not connected: ${serverId}`,
-        durationMs: performance.now() - startTime,
-      };
-    }
+    // Authorize the workflow's org for this server and connect it if needed
+    await ensureMCPServerForOrg(serverId, context?.organizationId);
 
     const tools = await mcpClient.listTools(serverId);
 

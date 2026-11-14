@@ -4,7 +4,7 @@
  * Query vector databases for similarity search via MCP tool delegation.
  */
 
-import { getMCPClient } from "../../mcp";
+import { ensureMCPServerForOrg, getMCPClient } from "../../mcp";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
@@ -58,7 +58,7 @@ export type VectorSearchOutput = {
  */
 const search = async (
   inputs: Record<string, unknown>,
-  _context?: PluginContext,
+  context?: PluginContext,
 ): Promise<PluginCallResult> => {
   const startTime = performance.now();
 
@@ -100,13 +100,8 @@ const search = async (
 
     const mcpClient = getMCPClient();
 
-    if (!mcpClient.isConnected(serverId)) {
-      return {
-        success: false,
-        error: `MCP server not connected: ${serverId}`,
-        durationMs: performance.now() - startTime,
-      };
-    }
+    // Authorize the workflow's org for this server and connect it if needed
+    await ensureMCPServerForOrg(serverId, context?.organizationId);
 
     const callResult = await mcpClient.callTool(serverId, "search", {
       indexName,

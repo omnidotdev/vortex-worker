@@ -5,7 +5,7 @@
  * embed → MCP vector search → LLM generation
  */
 
-import { getMCPClient } from "../../mcp";
+import { ensureMCPServerForOrg, getMCPClient } from "../../mcp";
 import { modelRegistryPlugin } from "./modelRegistry";
 
 import type { PluginCallResult, PluginContext } from "../types";
@@ -103,13 +103,8 @@ const executeRag = async (
     // Stage 2: MCP vector search
     const mcpClient = getMCPClient();
 
-    if (!mcpClient.isConnected(input.serverId)) {
-      return {
-        success: false,
-        error: `MCP server not connected: ${input.serverId}`,
-        durationMs: performance.now() - startTime,
-      };
-    }
+    // Authorize the workflow's org for this server and connect it if needed
+    await ensureMCPServerForOrg(input.serverId, context?.organizationId);
 
     const searchResult = await mcpClient.callTool(input.serverId, "search", {
       indexName: collection,

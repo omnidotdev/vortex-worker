@@ -5,8 +5,9 @@
  * MCP-compatible tool server.
  */
 
+export { authorizeMCPServer, ensureMCPServerForOrg } from "./access";
 export { MCPIntegrationClient, getMCPClient, resetMCPClient } from "./client";
-export { connectMCPServer, initializeMCPServers } from "./init";
+export { initializeMCPServers } from "./init";
 
 export type {
   MCPContent,

@@ -4,7 +4,7 @@
  * Autonomous AI agent execution using LLM tool calling and MCP tool execution.
  */
 
-import { getMCPClient } from "../../mcp";
+import { ensureMCPServerForOrg, getMCPClient } from "../../mcp";
 import { stateStore } from "../../state/store";
 
 import type { PluginCallResult, PluginContext } from "../types";
@@ -161,13 +161,8 @@ const executeAgent = async (
 
     const mcpClient = getMCPClient();
 
-    if (!mcpClient.isConnected(serverId)) {
-      return {
-        success: false,
-        error: `MCP server not connected: ${serverId}`,
-        durationMs: performance.now() - startTime,
-      };
-    }
+    // Authorize the workflow's org for this server and connect it if needed
+    await ensureMCPServerForOrg(serverId, context?.organizationId);
 
     const allMcpTools = await mcpClient.listTools(serverId);
     const selectedTools = toolFilter.length
