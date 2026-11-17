@@ -398,5 +398,11 @@ export const agentPlugin: BuiltinPlugin = {
       description: "Execute an autonomous agent with a goal",
       handler: executeAgent,
     },
+    // The workflow editor's AI Agent node calls `run`
+    run: {
+      name: "run",
+      description: "Execute an autonomous agent with a goal",
+      handler: executeAgent,
+    },
   },
 };

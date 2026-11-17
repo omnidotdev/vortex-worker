@@ -187,3 +187,20 @@ describe("agent Synapse key containment", () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+describe("agent action names", () => {
+  it("runs the editor's AI Agent node, which calls the run action", async () => {
+    const run = agentPlugin.actions.run;
+    expect(run).toBeDefined();
+
+    const result = await run?.handler(
+      { serverId: "srv", goal: "x" },
+      ctx({ synapse: SYNAPSE_KEY }),
+    );
+
+    expect(result?.success).toBe(true);
+    expect(calls[0]?.url).toBe(
+      "https://gateway.synapse.omni.dev/v1/chat/completions",
+    );
+  });
+});
