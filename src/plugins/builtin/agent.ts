@@ -2,10 +2,19 @@
  * Built-in Agent Plugin
  *
  * Autonomous AI agent execution using LLM tool calling and MCP tool execution.
+ * Runs through Synapse (the Omni AI gateway) by default; a step can name a
+ * vendor provider to bring its own key instead
  */
 
 import { ensureMCPServerForOrg, getMCPClient } from "../../mcp";
 import { stateStore } from "../../state/store";
+import {
+  DEFAULT_SYNAPSE_MODEL,
+  SYNAPSE_PROVIDER,
+  resolveCredential,
+  resolveProvider,
+  synapseApiBaseUrl,
+} from "./aiProvider";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
@@ -50,27 +59,32 @@ const MEMORY_KEY = (orgId: string, convId: string) =>
   `agent:memory:${orgId}:${convId}`;
 const MAX_MEMORY_MESSAGES = 20;
 
-const PROVIDER_BASE_URLS: Record<string, string> = {
+/** Vendor API roots for BYOK steps (all OpenAI-compatible chat completions) */
+const VENDOR_BASE_URLS: Record<string, string> = {
   openai: "https://api.openai.com/v1",
+  anthropic: "https://api.anthropic.com/v1",
   groq: "https://api.groq.com/openai/v1",
   together: "https://api.together.xyz/v1",
   mistral: "https://api.mistral.ai/v1",
 };
 
-function getApiBaseUrl(provider: string, baseUrl?: string): string {
-  return baseUrl ?? PROVIDER_BASE_URLS[provider] ?? "https://api.openai.com/v1";
-}
+/** Legacy default model for vendor steps that name no model */
+const DEFAULT_VENDOR_MODEL = "gpt-4o-mini";
+
+const canonicalBaseUrl = (provider: string): string | undefined =>
+  provider === SYNAPSE_PROVIDER
+    ? synapseApiBaseUrl()
+    : VENDOR_BASE_URLS[provider];
 
 async function callLLMWithTools(
   provider: string,
   apiKey: string,
+  baseUrl: string,
   model: string,
   messages: OpenAIMessage[],
   tools: OpenAITool[],
-  baseUrl?: string,
 ): Promise<unknown> {
-  const base = getApiBaseUrl(provider, baseUrl);
-  const url = `${base}/chat/completions`;
+  const url = `${baseUrl}/chat/completions`;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -114,14 +128,12 @@ const executeAgent = async (
     const input = inputs as unknown as AgentInput;
     const {
       serverId,
-      model = "gpt-4o-mini",
       goal,
       tools: toolFilter = [],
       maxIterations = 10,
-      provider = "openai",
       apiKey: inputApiKey,
       connectionId,
-      baseUrl,
+      baseUrl: inputBaseUrl,
       systemPrompt,
       conversationId,
       memoryTtl,
@@ -144,20 +156,39 @@ const executeAgent = async (
       };
     }
 
-    // Resolve API key from input or connection context
-    const apiKey =
-      inputApiKey ??
-      (context?.connections?.[connectionId ?? ""]?.apiKey as
-        | string
-        | undefined);
+    // Synapse unless the step names a provider (or is a legacy BYOK step)
+    const provider = resolveProvider({
+      provider: input.provider,
+      apiKey: inputApiKey,
+      baseUrl: inputBaseUrl,
+    });
+    const model =
+      input.model ||
+      (provider === SYNAPSE_PROVIDER
+        ? DEFAULT_SYNAPSE_MODEL
+        : DEFAULT_VENDOR_MODEL);
 
-    if (!apiKey) {
+    const credential = await resolveCredential(
+      {
+        provider,
+        canonicalBaseUrl: canonicalBaseUrl(provider),
+        apiKey: inputApiKey,
+        connectionId,
+        baseUrl: inputBaseUrl,
+        requiresKey: true,
+      },
+      context,
+    );
+
+    if (!credential.ok || !credential.apiKey) {
       return {
         success: false,
-        error: "API key required - provide connectionId or apiKey",
+        error: credential.ok ? "API key required" : credential.error,
         durationMs: performance.now() - startTime,
       };
     }
+
+    const { apiKey, baseUrl } = credential;
 
     const mcpClient = getMCPClient();
 
@@ -211,10 +242,10 @@ const executeAgent = async (
       const response = await callLLMWithTools(
         provider,
         apiKey,
+        baseUrl,
         model,
         messages,
         openaiTools,
-        baseUrl,
       );
 
       const r = response as {

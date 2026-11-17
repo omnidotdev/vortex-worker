@@ -151,6 +151,11 @@ export interface PluginContext {
   secrets: Record<string, unknown>;
   /** External service connections available to the plugin */
   connections?: Record<string, Record<string, unknown>>;
+  /**
+   * Look up the executing org's stored key for an AI provider (Synapse,
+   * OpenAI, ...). Bound to the org by the worker, never by step input
+   */
+  resolveProviderKey?: (provider: string) => Promise<string | undefined>;
   /** Emit an event during execution (for SSE streaming) */
   emit?: (type: string, data: unknown) => Promise<void>;
 }

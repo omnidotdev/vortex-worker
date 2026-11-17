@@ -57,6 +57,10 @@ const VORTEX_CALLBACK_BASE_URL =
 // sandbox. Defaults to the seeded platform org so it works without extra config.
 const VORTEX_PLATFORM_ORG_ID =
   process.env.VORTEX_PLATFORM_ORG_ID ?? "33880602-cf32-4d8d-8db3-a4a9994c5d45";
+// Synapse (Omni AI gateway), the default provider for agent and model steps.
+// Override only to point a self-hosted worker at its own gateway
+const SYNAPSE_BASE_URL =
+  process.env.SYNAPSE_BASE_URL || "https://gateway.synapse.omni.dev";
 // Logging
 const LOG_LEVEL_RAW = process.env.LOG_LEVEL;
 
@@ -151,6 +155,7 @@ export {
   RUNA_API_URL,
   SLACK_OAUTH_CLIENT_ID,
   SLACK_OAUTH_CLIENT_SECRET,
+  SYNAPSE_BASE_URL,
   TEMPORAL_ADDRESS,
   TEMPORAL_NAMESPACE,
   TEMPORAL_TASK_QUEUE,

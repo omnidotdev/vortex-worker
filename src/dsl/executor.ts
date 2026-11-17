@@ -3846,6 +3846,7 @@ function buildPluginContext(
   workflowId: string;
   runId: string;
   stepId: string;
+  organizationId?: string;
   config: Record<string, unknown>;
   secrets: Record<string, unknown>;
 } {
@@ -3853,6 +3854,7 @@ function buildPluginContext(
     workflowId: ctx.workflowId,
     runId: ctx.runId,
     stepId: step.id,
+    organizationId: ctx.organizationId,
     config: {},
     secrets: {},
   };
@@ -4645,7 +4647,11 @@ async function executeAgent(
     "execute",
     {
       serverId: agent.serverId,
+      provider: agent.provider,
       model: agent.model,
+      connectionId: agent.connectionId,
+      baseUrl: agent.baseUrl,
+      systemPrompt: agent.systemPrompt,
       goal: agent.goal,
       tools: agent.tools,
       maxIterations: agent.maxIterations,
