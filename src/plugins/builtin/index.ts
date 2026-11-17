@@ -76,6 +76,7 @@ export { webhookVerifyPlugin } from "./webhookVerify";
 export { xmlPlugin } from "./xml";
 export { zipPlugin } from "./zip";
 
+import { createProviderKeyResolver } from "../../integrations/providerKeys";
 import { agentPlugin } from "./agent";
 import { aggregatePlugin } from "./aggregate";
 import { assertPlugin } from "./assert";
@@ -274,7 +275,22 @@ export const executeBuiltinAction = async (
     };
   }
 
-  return action.handler(inputs, context);
+  return action.handler(inputs, withProviderKeyResolver(context));
+};
+
+/**
+ * Bind the org-stored AI provider key lookup to the executing org. The org
+ * comes from the worker's execution context, never from step input
+ */
+const withProviderKeyResolver = (
+  context: PluginContext | undefined,
+): PluginContext | undefined => {
+  if (!context?.organizationId || context.resolveProviderKey) return context;
+
+  return {
+    ...context,
+    resolveProviderKey: createProviderKeyResolver(context.organizationId),
+  };
 };
 
 /**

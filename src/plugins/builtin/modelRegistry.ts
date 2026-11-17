@@ -1,14 +1,24 @@
 /**
  * Built-in Model Registry Plugin
  *
- * Unified AI model interface - BYOK for multiple providers.
- * Supports OpenAI, Anthropic, HuggingFace, Ollama, Replicate, Together, Groq, Mistral, Cohere.
+ * Unified AI model interface. Synapse (the Omni AI gateway) is the default
+ * provider; OpenAI, Anthropic, HuggingFace, Ollama, Replicate, Together, Groq,
+ * Mistral and Cohere stay available as BYOK for a step that names one.
  */
+
+import {
+  DEFAULT_SYNAPSE_MODEL,
+  SYNAPSE_PROVIDER,
+  resolveCredential,
+  resolveProvider,
+  synapseApiBaseUrl,
+} from "./aiProvider";
 
 import type { PluginCallResult, PluginContext } from "../types";
 import type { BuiltinPlugin } from "./types";
 
 type ModelProvider =
+  | "synapse"
   | "openai"
   | "anthropic"
   | "huggingface"
@@ -25,14 +35,14 @@ interface Message {
 }
 
 interface BaseInput {
-  /** AI provider */
-  provider: ModelProvider;
+  /** AI provider (default: synapse) */
+  provider?: string;
   /** Connection ID (for stored credentials) */
   connectionId?: string;
   /** Direct API key (alternative to connectionId) */
   apiKey?: string;
-  /** Model identifier */
-  model: string;
+  /** Model identifier (default for synapse: auto) */
+  model?: string;
   /** Custom base URL (for self-hosted or proxies) */
   baseUrl?: string;
 }
@@ -80,6 +90,17 @@ interface ProviderConfig {
 }
 
 const providerConfigs: Record<ModelProvider, ProviderConfig> = {
+  // OpenAI-compatible gateway; no legacy completions endpoint, so text
+  // completion falls back to chat
+  synapse: {
+    get baseUrl() {
+      return synapseApiBaseUrl();
+    },
+    chatEndpoint: "/chat/completions",
+    embedEndpoint: "/embeddings",
+    authHeader: "Authorization",
+    authPrefix: "Bearer ",
+  },
   openai: {
     baseUrl: "https://api.openai.com/v1",
     chatEndpoint: "/chat/completions",
@@ -229,6 +250,59 @@ const providerConfigs: Record<ModelProvider, ProviderConfig> = {
   },
 };
 
+const isModelProvider = (provider: string): provider is ModelProvider =>
+  Object.hasOwn(providerConfigs, provider);
+
+type PreparedCall =
+  | {
+      ok: true;
+      provider: ModelProvider;
+      config: ProviderConfig;
+      apiKey: string | undefined;
+      baseUrl: string;
+      model: string | undefined;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Resolve a step's provider (Synapse by default), endpoint, key and model,
+ * applying the key/host pairing rules in `aiProvider`
+ */
+async function prepareCall(
+  input: BaseInput,
+  context?: PluginContext,
+): Promise<PreparedCall> {
+  const provider = resolveProvider(input);
+  if (!isModelProvider(provider)) {
+    return { ok: false, error: `Unsupported provider: ${provider}` };
+  }
+
+  const config = providerConfigs[provider];
+  const credential = await resolveCredential(
+    {
+      provider,
+      canonicalBaseUrl: config.baseUrl,
+      apiKey: input.apiKey,
+      connectionId: input.connectionId,
+      baseUrl: input.baseUrl,
+      requiresKey: Boolean(config.authHeader),
+    },
+    context,
+  );
+  if (!credential.ok) return credential;
+
+  return {
+    ok: true,
+    provider,
+    config,
+    apiKey: credential.apiKey,
+    baseUrl: credential.baseUrl,
+    model:
+      input.model ||
+      (provider === SYNAPSE_PROVIDER ? DEFAULT_SYNAPSE_MODEL : undefined),
+  };
+}
+
 /**
  * Chat completion with any provider.
  */
@@ -240,34 +314,28 @@ const chat = async (
 
   try {
     const input = inputs as unknown as ChatInput;
-    const config = providerConfigs[input.provider];
+    const prepared = await prepareCall(input, context);
 
-    const apiKey =
-      input.apiKey ??
-      (context?.connections?.[input.connectionId ?? ""]?.apiKey as
-        | string
-        | undefined);
-
-    if (!apiKey && config.authHeader) {
+    if (!prepared.ok) {
       return {
         success: false,
-        error: "API key required - provide connectionId or apiKey",
+        error: prepared.error,
         durationMs: performance.now() - startTime,
       };
     }
 
-    const baseUrl = input.baseUrl ?? config.baseUrl;
+    const { provider, config, apiKey, baseUrl, model } = prepared;
     let endpoint = config.chatEndpoint;
 
     // For HuggingFace, append model to URL
-    if (input.provider === "huggingface") {
-      endpoint = `/${input.model}`;
+    if (provider === "huggingface") {
+      endpoint = `/${model}`;
     }
 
     const url = `${baseUrl}${endpoint}`;
 
     let body: unknown = {
-      model: input.model,
+      model,
       messages: input.messages,
       temperature: input.temperature,
       max_tokens: input.maxTokens,
@@ -288,7 +356,7 @@ const chat = async (
     }
 
     // Anthropic requires version header
-    if (input.provider === "anthropic") {
+    if (provider === "anthropic") {
       headers["anthropic-version"] = "2023-06-01";
     }
 
@@ -302,7 +370,7 @@ const chat = async (
       const error = await response.text();
       return {
         success: false,
-        error: `${input.provider} API error: ${error}`,
+        error: `${provider} API error: ${error}`,
         durationMs: performance.now() - startTime,
       };
     }
@@ -322,8 +390,8 @@ const chat = async (
       success: true,
       output: {
         content: r.choices?.[0]?.message?.content ?? "",
-        model: input.model,
-        provider: input.provider,
+        model,
+        provider,
         usage: r.usage,
       },
       durationMs: performance.now() - startTime,
@@ -348,9 +416,12 @@ const complete = async (
 
   try {
     const input = inputs as unknown as CompleteInput;
-    const config = providerConfigs[input.provider];
+    const requested = resolveProvider(input);
+    const config = isModelProvider(requested)
+      ? providerConfigs[requested]
+      : undefined;
 
-    if (!config.completeEndpoint) {
+    if (!config?.completeEndpoint) {
       // Fallback to chat with single user message
       return chat(
         {
@@ -361,25 +432,21 @@ const complete = async (
       );
     }
 
-    const apiKey =
-      input.apiKey ??
-      (context?.connections?.[input.connectionId ?? ""]?.apiKey as
-        | string
-        | undefined);
+    const prepared = await prepareCall(input, context);
 
-    if (!apiKey && config.authHeader) {
+    if (!prepared.ok) {
       return {
         success: false,
-        error: "API key required - provide connectionId or apiKey",
+        error: prepared.error,
         durationMs: performance.now() - startTime,
       };
     }
 
-    const baseUrl = input.baseUrl ?? config.baseUrl;
+    const { provider, apiKey, baseUrl, model } = prepared;
     const url = `${baseUrl}${config.completeEndpoint}`;
 
     const body = {
-      model: input.model,
+      model,
       prompt: input.prompt,
       temperature: input.temperature,
       max_tokens: input.maxTokens,
@@ -404,7 +471,7 @@ const complete = async (
       const error = await response.text();
       return {
         success: false,
-        error: `${input.provider} API error: ${error}`,
+        error: `${provider} API error: ${error}`,
         durationMs: performance.now() - startTime,
       };
     }
@@ -418,8 +485,8 @@ const complete = async (
       success: true,
       output: {
         content: result.choices?.[0]?.text ?? result.response ?? "",
-        model: input.model,
-        provider: input.provider,
+        model,
+        provider,
       },
       durationMs: performance.now() - startTime,
     };
@@ -443,56 +510,55 @@ const embed = async (
 
   try {
     const input = inputs as unknown as EmbedInput;
-    const config = providerConfigs[input.provider];
+    const requested = resolveProvider(input);
+    const embedEndpoint = isModelProvider(requested)
+      ? providerConfigs[requested].embedEndpoint
+      : undefined;
 
-    if (!config.embedEndpoint) {
+    if (embedEndpoint === undefined) {
       return {
         success: false,
-        error: `${input.provider} does not support embeddings`,
+        error: `${requested} does not support embeddings`,
         durationMs: performance.now() - startTime,
       };
     }
 
-    const apiKey =
-      input.apiKey ??
-      (context?.connections?.[input.connectionId ?? ""]?.apiKey as
-        | string
-        | undefined);
+    const prepared = await prepareCall(input, context);
 
-    if (!apiKey && config.authHeader) {
+    if (!prepared.ok) {
       return {
         success: false,
-        error: "API key required - provide connectionId or apiKey",
+        error: prepared.error,
         durationMs: performance.now() - startTime,
       };
     }
 
-    const baseUrl = input.baseUrl ?? config.baseUrl;
-    let endpoint = config.embedEndpoint;
+    const { provider, config, apiKey, baseUrl, model } = prepared;
+    let endpoint = embedEndpoint;
 
     // For HuggingFace, use model in URL
-    if (input.provider === "huggingface") {
-      endpoint = `/${input.model}`;
+    if (provider === "huggingface") {
+      endpoint = `/${model}`;
     }
 
     const url = `${baseUrl}${endpoint}`;
 
     let body: unknown;
-    if (input.provider === "cohere") {
+    if (provider === "cohere") {
       body = {
-        model: input.model,
+        model,
         texts: Array.isArray(input.input) ? input.input : [input.input],
       };
-    } else if (input.provider === "huggingface") {
+    } else if (provider === "huggingface") {
       body = { inputs: input.input };
-    } else if (input.provider === "ollama") {
+    } else if (provider === "ollama") {
       body = {
-        model: input.model,
+        model,
         prompt: Array.isArray(input.input) ? input.input[0] : input.input,
       };
     } else {
       body = {
-        model: input.model,
+        model,
         input: input.input,
       };
     }
@@ -515,7 +581,7 @@ const embed = async (
       const error = await response.text();
       return {
         success: false,
-        error: `${input.provider} API error: ${error}`,
+        error: `${provider} API error: ${error}`,
         durationMs: performance.now() - startTime,
       };
     }
@@ -542,8 +608,8 @@ const embed = async (
       success: true,
       output: {
         embeddings,
-        model: input.model,
-        provider: input.provider,
+        model,
+        provider,
         dimensions: Array.isArray(embeddings[0])
           ? embeddings[0].length
           : embeddings.length,
@@ -570,42 +636,37 @@ const listModels = async (
 
   try {
     const input = inputs as unknown as BaseInput;
-    const config = providerConfigs[input.provider];
+    const prepared = await prepareCall(input, context);
 
-    const apiKey =
-      input.apiKey ??
-      (context?.connections?.[input.connectionId ?? ""]?.apiKey as
-        | string
-        | undefined);
-
-    if (!apiKey && config.authHeader) {
+    if (!prepared.ok) {
       return {
         success: false,
-        error: "API key required - provide connectionId or apiKey",
+        error: prepared.error,
         durationMs: performance.now() - startTime,
       };
     }
 
-    const baseUrl = input.baseUrl ?? config.baseUrl;
+    const { provider, config, apiKey, baseUrl } = prepared;
 
     // Not all providers have a models endpoint
     let url: string;
     if (
-      input.provider === "openai" ||
-      input.provider === "together" ||
-      input.provider === "groq"
+      provider === "synapse" ||
+      provider === "openai" ||
+      provider === "together" ||
+      provider === "groq"
     ) {
       url = `${baseUrl}/models`;
-    } else if (input.provider === "ollama") {
+    } else if (provider === "ollama") {
       url = `${baseUrl.replace("/api", "")}/api/tags`;
-    } else if (input.provider === "mistral") {
+    } else if (provider === "mistral") {
       url = `${baseUrl}/models`;
     } else {
       return {
         success: true,
         output: {
           models: [],
-          note: `${input.provider} does not have a models listing endpoint`,
+          note: `${provider} does not have a models listing endpoint`,
         },
         durationMs: performance.now() - startTime,
       };
@@ -622,7 +683,7 @@ const listModels = async (
       const error = await response.text();
       return {
         success: false,
-        error: `${input.provider} API error: ${error}`,
+        error: `${provider} API error: ${error}`,
         durationMs: performance.now() - startTime,
       };
     }
@@ -642,7 +703,7 @@ const listModels = async (
       output: {
         models,
         count: models.length,
-        provider: input.provider,
+        provider,
       },
       durationMs: performance.now() - startTime,
     };
@@ -662,7 +723,7 @@ export const modelRegistryPlugin: BuiltinPlugin = {
   id: "builtin:modelRegistry",
   name: "Model Registry",
   description:
-    "Unified AI model interface (OpenAI, Anthropic, HuggingFace, Ollama, etc.)",
+    "Unified AI model interface (Synapse by default; OpenAI, Anthropic, HuggingFace, Ollama, etc. as BYOK)",
   actions: {
     chat: {
       name: "chat",

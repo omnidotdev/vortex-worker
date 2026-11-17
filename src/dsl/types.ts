@@ -1051,7 +1051,14 @@ export const AgentStep = BaseStep.extend({
   type: z.literal("agent"),
   agent: z.object({
     serverId: z.string(),
+    /** AI provider (default: synapse, the Omni AI gateway) */
+    provider: z.string().optional(),
+    /** Model id (default for synapse: auto) */
     model: z.string().optional(),
+    connectionId: z.string().optional(),
+    /** Custom OpenAI-compatible endpoint for a BYOK provider */
+    baseUrl: z.string().optional(),
+    systemPrompt: z.string().optional(),
     goal: z.string(),
     tools: z.array(z.string()).optional(),
     maxIterations: z.number().default(10),
@@ -1176,24 +1183,29 @@ export const GoogleSheetsStep = BaseStep.extend({
 });
 export type GoogleSheetsStep = z.infer<typeof GoogleSheetsStep>;
 
-/** Unified AI model registry - BYOK for multiple providers. */
+/** Unified AI model registry: Synapse by default, BYOK vendor providers. */
 export const ModelRegistryStep = BaseStep.extend({
   type: z.literal("modelRegistry"),
   modelRegistry: z.object({
-    provider: z.enum([
-      "openai",
-      "anthropic",
-      "huggingface",
-      "ollama",
-      "replicate",
-      "together",
-      "groq",
-      "mistral",
-      "cohere",
-    ]),
+    /** AI provider (default: synapse, the Omni AI gateway) */
+    provider: z
+      .enum([
+        "synapse",
+        "openai",
+        "anthropic",
+        "huggingface",
+        "ollama",
+        "replicate",
+        "together",
+        "groq",
+        "mistral",
+        "cohere",
+      ])
+      .optional(),
     connectionId: z.string().optional(),
     apiKey: z.string().optional(),
-    model: z.string(),
+    /** Model id (default for synapse: auto) */
+    model: z.string().optional(),
     operation: z
       .enum(["chat", "complete", "embed", "generate"])
       .default("chat"),
