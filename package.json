@@ -1,6 +1,6 @@
 {
   "name": "@omnidotdev/vortex-worker",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "author": "Omni <team@omni.dev>",
   "license": "Apache-2.0",
